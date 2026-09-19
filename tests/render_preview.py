@@ -225,3 +225,25 @@ if live is not None:
     compose(os.path.join(OUT_DIR, "preview-editor-live.png"), [editor, live])
 editor.close_preview()
 editor.close_editor()
+
+# 9. type-to-search over the real command catalog (Blender's F3 behaviour)
+from coatmenu.core import catalog  # noqa: E402
+
+every_command = [MenuItem(label=e.label, kind=COMMAND, cid=e.cid)
+                 for e in catalog.read_all_commands()[:400]]
+manager.show_menu(every_command, anchor=QPoint(80, 60), title="All commands")
+widget = manager.popup
+app.processEvents()
+real_key_down = popup.is_key_down
+for character in "smooth":
+    vk = ord(character.upper())
+    popup.is_key_down = lambda value, _vk=vk: value == _vk
+    widget._on_poll()
+    popup.is_key_down = lambda _value: False
+    widget._on_poll()
+popup.is_key_down = real_key_down
+app.processEvents()
+print(f"search preview: {len(widget._rows)} row(s) left after typing 'smooth'")
+compose(os.path.join(OUT_DIR, "preview-search.png"), [widget])
+widget.dismiss()
+app.processEvents()
