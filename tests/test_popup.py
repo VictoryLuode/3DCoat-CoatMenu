@@ -31,7 +31,15 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 app = QApplication.instance() or QApplication([])
 
 from coatmenu.ui import popup  # noqa: E402
-from coatmenu.ui.popup import MenuItem, header, separator  # noqa: E402
+from coatmenu.ui.popup import (  # noqa: E402
+    COMMAND,
+    PIE,
+    TITLE,
+    MenuItem,
+    header,
+    separator,
+    submenu,
+)
 
 failures: list[str] = []
 
@@ -145,7 +153,7 @@ app.processEvents()
 child = widget._child
 check(child is not None and child.isVisible(), "child panel opens on a branch row")
 check(child is not None and child.width() > 0, "child panel has a size")
-check(child is not None and widget._child_row == branch_row, "child is bound to its parent row")
+check(child is not None and widget._child_index == branch_row, "child is bound to its parent row")
 check(child is not None and len(child._rows) == 2, f"child shows the submenu rows ({child and len(child._rows)})")
 check(child is not None and child.x() >= widget.x(), "child sits to the right of its parent")
 check(child is not None and child.is_child, "child knows it is a child (does not run its own key poll)")
@@ -237,6 +245,59 @@ popup.system.foreground_is_current_process = lambda: False
 widget._on_poll()
 check(not widget.isVisible(), "overlay closes instead of floating over the other app")
 popup.system.foreground_is_current_process = lambda: True
+
+print("== pie layout ==")
+pie_items = [
+    MenuItem(label="Top", kind=COMMAND, cid="PIE_TOP"),
+    MenuItem(label="Right", kind=COMMAND, cid="PIE_RIGHT"),
+    submenu("Branch", [MenuItem(label="Leaf", kind=COMMAND, cid="PIE_LEAF")]),
+    MenuItem(label="Left", kind=COMMAND, cid="PIE_LEFT"),
+]
+manager.show_menu(pie_items, anchor=QPoint(300, 300), title="Wheel", mode="pie")
+pie = manager.popup
+app.processEvents()
+check(pie._mode == PIE, "popup switched to pie mode")
+check(len(pie._pie_items) == 4, f"one segment per item ({len(pie._pie_items)})")
+check(pie._title == "Wheel", "title goes into the centre hole")
+check(not any(item.kind == TITLE for item in pie._items), "a pie has no title row")
+check(pie._hover == -1, "a pie starts with nothing pre-selected")
+
+cx, cy, r_out, r_in = pie._pie_metrics()
+mid = (r_in + r_out) / 2.0
+check(pie._pie_index_at(QPoint(int(cx), int(cy - mid))) == 0, "top segment is first")
+check(pie._pie_index_at(QPoint(int(cx + mid), int(cy))) == 1, "segments run clockwise")
+check(pie._pie_index_at(QPoint(int(cx), int(cy + mid))) == 2, "bottom segment")
+check(pie._pie_index_at(QPoint(int(cx - mid), int(cy))) == 3, "left segment")
+check(pie._pie_index_at(QPoint(int(cx), int(cy))) == -1, "the centre hole selects nothing")
+check(pie._pie_index_at(QPoint(int(cx), int(cy - r_out - 20))) == -1,
+      "outside the ring selects nothing")
+
+pie_shot = pie.grab()
+check(not pie_shot.isNull() and pie_shot.width() > 100,
+      f"the pie paints ({pie_shot.width()}x{pie_shot.height()})")
+
+print("== pie: resting on a branch unfolds its submenu, release runs the segment ==")
+pie._hover = 2
+pie._dwell.timeout.emit()  # what the dwell timer fires after PIE_DWELL_MS
+app.processEvents()
+check(pie._child is not None and pie._child.isVisible(), "dwell opened the branch submenu")
+check(pie._child_index == 2, "submenu bound to its segment")
+pie._hover = 0
+check(pie._deepest_hover() is not None and pie._deepest_hover().cid == "PIE_TOP",
+      "release over a segment runs that command")
+
+print("== pie: what is drawn is what is hit (one geometry for both) ==")
+for index in range(len(pie._pie_items)):
+    point = pie._segment_centre(index)
+    check(pie._pie_index_at(point) == index,
+          f"segment {index} centre hits segment {index} (got {pie._pie_index_at(point)})")
+check(pie._segment_centre(0).x() > cx and pie._segment_centre(0).y() < cy,
+      "with four segments the first one runs from the top towards the right")
+check(pie._segment_centre(1).x() > cx and pie._segment_centre(1).y() > cy,
+      "segments run clockwise from the top (second one is bottom-right)")
+pie.dismiss()
+app.processEvents()
+check(not pie.isVisible(), "pie dismissed")
 
 print()
 if failures:

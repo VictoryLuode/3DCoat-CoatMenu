@@ -217,8 +217,36 @@ class CoatMenuEditor(QWidget):
             button = QPushButton(label)
             button.clicked.connect(slot)
             row.addWidget(button)
+
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItems(["List", "Pie"])
+        self._mode_combo.setToolTip(
+            "How this list opens: a vertical List, or a radial Pie menu"
+        )
+        self._mode_combo.currentIndexChanged.connect(self.set_mode_from_combo)
+        row.addWidget(QLabel("as"))
+        row.addWidget(self._mode_combo)
         row.addStretch(1)
         return row
+
+    def _sync_mode_combo(self) -> None:
+        target = self.current_list
+        index = 1 if (target is not None and target.mode == "pie") else 0
+        self._mode_combo.blockSignals(True)
+        self._mode_combo.setCurrentIndex(index)
+        self._mode_combo.blockSignals(False)
+
+    def set_mode_from_combo(self, index: int) -> None:
+        """Persist the layout choice for the selected list."""
+        target = self.current_list
+        if target is None or index < 0:
+            return
+        mode = "pie" if index == 1 else "list"
+        if mode == target.mode:
+            return
+        self._config.set_mode(target.name, mode)
+        self.save()
+        self.set_status(f"'{target.name}' opens as a {mode}")
 
     def _build_items_panel(self) -> QWidget:
         panel = QWidget()
@@ -395,6 +423,7 @@ class CoatMenuEditor(QWidget):
         self._list_combo.setCurrentIndex(self._index)
         self._list_combo.blockSignals(False)
         self.refresh_tree()
+        self._sync_mode_combo()
         self.set_status("")
 
     def select_list(self, index: int) -> None:
@@ -402,6 +431,7 @@ class CoatMenuEditor(QWidget):
             return
         self._index = index
         self.refresh_tree()
+        self._sync_mode_combo()
 
     def add_list(self) -> None:
         name = self._new_name.text().strip()

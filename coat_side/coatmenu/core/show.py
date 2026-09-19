@@ -91,7 +91,7 @@ def show_list(key: str, script_path: str = "") -> None:
             candidates.append("execute:" + script_path)
         vk = find_trigger_vk(candidates)
         log(f"show_list: {target.name} ({len(target.items)} rows), trigger_vk={vk}")
-        popup.show_menu(target.items, trigger_vk=vk, title=target.name)
+        popup.show_menu(target.items, trigger_vk=vk, title=target.name, mode=target.mode)
     except Exception:
         log("show_list failed", exc=True)
 

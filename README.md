@@ -9,8 +9,8 @@ frameless overlay that appears where your cursor is.
 Hold the hotkey, move to the entry you want, release — it runs.
 `Esc` cancels. Clicking works too, if you prefer the mouse.
 
-> **Status: M2.** Multiple lists, submenus, per-list hotkeys and a drag-and-drop
-> editor are in. The radial pie renderer is M3.
+> **Status: M3.** Multiple lists, submenus, per-list hotkeys, a drag-and-drop
+> editor and a radial **pie** renderer are in.
 
 ## Demo
 
@@ -19,6 +19,12 @@ Index (one row per list), a list opened as a submenu, and a single list flat:
 ![CoatMenu index](docs/preview-popup.png)
 ![CoatMenu submenu](docs/preview-submenu.png)
 ![CoatMenu list](docs/preview-list.png)
+
+The same list as a radial pie — the highlighted segment carries the accent dot
+that marks a submenu (rest on it for a moment and the child panel unfolds):
+
+![CoatMenu pie](docs/preview-pie.png)
+![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
 
 The editor:
 
@@ -36,11 +42,18 @@ extension builds on this machine)*
 * **Multiple lists, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
   want; each becomes its own entry in 3D-Coat's menu (and so in
   Preferences ▸ Hotkeys).
-* **Submenus** — a row can open a child panel (nested, hover to open, grace
-  timer so diagonal mouse moves don't close it).
+* **Rows *or* a pie** — each list opens as a vertical list or as a radial pie
+  (pick per list in the editor): 8 wedges, the list name in the middle, the hole
+  cancels. In a pie you can sweep-and-release without reading, which is the point
+  of a marking menu.
+* **Submenus** — a row (or wedge) can open a child panel (nested, hover to open,
+  grace timer so diagonal mouse moves don't close it; in a pie a short dwell
+  unfolds it).
 * **Built-in editor** — add rows from 3D-Coat's own command catalog
-  (`Options_Hotkeys.xml` ids, `CustomMenu` entries, scripts), drag to reorder,
-  double-click to rename, nest submenus, import/export, save & apply.
+  (3D-Coat's own menu definitions → **900+ commands**, hotkey ids, `CustomMenu`
+  entries, tool presets, scripts), with readable names taken from `English.xml`;
+  drag to reorder, double-click to rename, nest submenus, import/export, save &
+  apply.
 * **Shared list format** — the same JSON shape as Krita
   [MenuBelt](https://github.com/VictoryLuode/Krita-MenuBelt), so lists move
   between the two add-ons.
@@ -106,7 +119,7 @@ install\install.cmd --uninstall
 |---|---|
 | ✔ M1 | extension skeleton, cursor overlay, linear list, click/hold/`Esc`, installer, tests |
 | ✔ M2 | `data/lists.json`, multi-list + per-list hotkeys, submenus, built-in editor (sources, drag-and-drop, import/export), generated launchers |
-| M3 | radial pie renderer (same data, ≤8 entries), dwell submenus, flick mode |
+| ✔ M3 | radial pie renderer (same data), dwell submenus, per-list list/pie switch |
 | M4 | conflict detection, live preview, packaging, README polish |
 
 ## Tests
@@ -121,7 +134,7 @@ Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
 |---|---|
 | `test_catalog.py` | hotkey/`CustomMenu`/script parsing, key-code mapping, trigger-key lookup |
 | `test_config.py` | list model, JSON round trip, launcher + menu-XML generation, stale cleanup |
-| `test_popup.py` | layout, hit testing, hover, click-to-run, trigger release, `Esc`, submenus |
+| `test_popup.py` | layout, hit testing, hover, click-to-run, trigger release, `Esc`, submenus, pie geometry (drawn = hit) |
 | `test_editor.py` | view↔model round trip, list ops, source catalog, save & reload |
 | `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
 | `test_install.py` | install/reinstall/uninstall into a throwaway tree (other extensions untouched) |

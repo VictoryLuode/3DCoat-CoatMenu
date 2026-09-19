@@ -18,8 +18,9 @@ a raised exception here is a crash there.
 from __future__ import annotations
 
 import ctypes
+import math
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -35,6 +36,8 @@ from coatmenu.core.log import log
 from coatmenu.core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
     COMMAND,
     HEADER,
+    LIST,
+    PIE,
     SCRIPT,
     SEPARATOR,
     SUBMENU,
@@ -87,16 +90,23 @@ def is_key_down(vk: int) -> bool:
 class MenuPopup(QWidget):
     """Frameless overlay drawing a vertical list of :class:`MenuItem`."""
 
-    def __init__(self, parent_popup: "MenuPopup | None" = None) -> None:
+    def __init__(self, parent_popup: "MenuPopup | None" = None, mode: str = LIST) -> None:
         super().__init__(None)
+        self._mode = mode if mode in (LIST, PIE) else LIST
         self._items: list[MenuItem] = []
+        self._pie_items: list[MenuItem] = []
         self._rows: list[tuple[int, MenuItem, int]] = []  # (y, item, height)
+        self._title: str = ""
         self._hover: int = -1
         self._trigger_vk: int = 0
         self._parent = parent_popup
         self._child: "MenuPopup | None" = None
-        self._child_row: int = -1
+        self._child_index: int = -1
         self._cursor_local: QPoint | None = None
+        self._dwell = QTimer(self)
+        self._dwell.setSingleShot(True)
+        self._dwell.setInterval(theme.PIE_DWELL_MS)
+        self._dwell.timeout.connect(self._on_dwell)
 
         self.setWindowFlags(
             Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
@@ -155,8 +165,17 @@ class MenuPopup(QWidget):
     def set_items(self, items: list[MenuItem]) -> None:
         self._close_child()
         self._items = list(items)
-        self._rebuild_rows()
+        if self._mode == PIE:
+            self._rebuild_pie()
+        else:
+            self._rebuild_rows()
         self._hover = self._first_interactive()
+
+    def set_title(self, text: str) -> None:
+        """Centre label (drawn in the pie's hole; lists show it as a title row)."""
+        self._title = text or ""
+        if self._mode == PIE:
+            self.update()
 
     def _rebuild_rows(self) -> None:
         rows: list[tuple[int, MenuItem, int]] = []
@@ -185,18 +204,91 @@ class MenuPopup(QWidget):
         """First row the user can act on (a command *or* a submenu).
 
         The index menu consists only of submenu rows, so "first clickable" would
-        leave nothing highlighted and the overlay would look inert.
+        leave nothing highlighted and the overlay would look inert. A pie has no
+        pre-selection at all: you point at the segment you want.
         """
+        if self._mode == PIE:
+            return -1
         for idx, (_y, item, _h) in enumerate(self._rows):
             if item.clickable or item.is_branch:
                 return idx
         return -1
 
+    # -- pie geometry -----------------------------------------------------
+
+    def _rebuild_pie(self) -> None:
+        self._pie_items = [i for i in self._items if i.clickable or i.is_branch]
+        size = int(theme.PIE_RADIUS * 2 + theme.PADDING * 2)
+        self._rows = []
+        self.setFixedSize(size, size)
+
+    def _pie_metrics(self) -> tuple[float, float, float, float]:
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        r_out = float(theme.PIE_RADIUS)
+        return cx, cy, r_out, r_out * theme.PIE_INNER_RATIO
+
+    def _segment_mid_angle(self, index: int) -> float:
+        """Angle of a segment's centre: 0 deg = straight up, increasing clockwise.
+
+        Both the painter and the hit test go through this one convention, so the
+        wedge you point at is the wedge that lights up.
+        """
+        span = 360.0 / max(1, len(self._pie_items))
+        return (index + 0.5) * span
+
+    def _segment_centre(self, index: int, radius: float | None = None) -> QPoint:
+        """Widget coordinates of a segment's centre (used for the pointer, dots)."""
+        cx, cy, r_out, r_in = self._pie_metrics()
+        if radius is None:
+            radius = (r_in + r_out) / 2.0
+        angle = math.radians(self._segment_mid_angle(index))
+        return QPoint(int(cx + math.sin(angle) * radius),
+                      int(cy - math.cos(angle) * radius))
+
+    def _pie_index_at(self, pos: QPoint) -> int:
+        items = self._pie_items
+        if not items:
+            return -1
+        cx, cy, r_out, r_in = self._pie_metrics()
+        dx, dy = pos.x() - cx, pos.y() - cy
+        distance = math.hypot(dx, dy)
+        if distance < r_in or distance > r_out:
+            return -1  # the hole cancels, outside the ring is nothing
+        span = 360.0 / len(items)
+        angle = (math.degrees(math.atan2(dx, -dy))) % 360.0  # 0 = up, clockwise
+        return min(len(items) - 1, int(angle // span))
+
+    def _item_at_index(self, index: int) -> MenuItem | None:
+        if self._mode == PIE:
+            return self._pie_items[index] if 0 <= index < len(self._pie_items) else None
+        return self._rows[index][1] if 0 <= index < len(self._rows) else None
+
+    def _index_at_pos(self, pos: QPoint) -> int:
+        if self._mode == PIE:
+            return self._pie_index_at(pos)
+        return self._row_at(pos)
+
+    def _count_items(self) -> int:
+        return len(self._pie_items) if self._mode == PIE else len(self._rows)
+
     def _first_branch(self) -> int:
+        if self._mode == PIE:
+            for idx, item in enumerate(self._pie_items):
+                if item.is_branch:
+                    return idx
+            return -1
         for idx, (_y, item, _h) in enumerate(self._rows):
             if item.is_branch:
                 return idx
         return -1
+
+    def set_mode(self, mode: str) -> None:
+        """Switch list <-> pie (the widget survives, its layout is rebuilt)."""
+        mode = mode if mode in (LIST, PIE) else LIST
+        if mode != self._mode:
+            self._close_child()
+            self._mode = mode
 
     def _row_at(self, pos: QPoint) -> int:
         for idx, (y, _item, h) in enumerate(self._rows):
@@ -214,16 +306,14 @@ class MenuPopup(QWidget):
 
     # -- submenus ---------------------------------------------------------
 
-    def _open_child(self, row_index: int) -> None:
-        """Open (or re-target) the child panel for a branch row."""
+    def _open_child(self, index: int) -> None:
+        """Open (or re-target) the child panel for a branch row/segment."""
         try:
-            if row_index < 0 or row_index >= len(self._rows):
-                return
-            item = self._rows[row_index][1]
-            if not item.is_branch:
+            item = self._item_at_index(index)
+            if item is None or not item.is_branch:
                 self._close_child()
                 return
-            if self._child is not None and self._child_row == row_index and self._child.isVisible():
+            if self._child is not None and self._child_index == index and self._child.isVisible():
                 return
             self._close_child()
             if not item.children:
@@ -236,24 +326,47 @@ class MenuPopup(QWidget):
             child._hover = -1
             child.setWindowOpacity(1.0)
             child.show()
-            child.move(self._child_position(row_index, child))
+            child.move(self._child_position(index, child))
             child.update()
             self._child = child
-            self._child_row = row_index
+            self._child_index = index
             self._grace.stop()
             self.update()
         except Exception:
             log("popup._open_child failed", exc=True)
 
-    def _child_position(self, row_index: int, child: "MenuPopup") -> QPoint:
-        row_y = self._rows[row_index][0]
-        x = self.x() + self.width() - theme.SUBMENU_OVERLAP
+    def _on_dwell(self) -> None:
+        """Pie only: open a branch's submenu once the cursor rests on it."""
+        try:
+            if self._mode != PIE or self._hover < 0:
+                return
+            item = self._item_at_index(self._hover)
+            if item is not None and item.is_branch:
+                self._open_child(self._hover)
+        except Exception:
+            log("popup dwell failed", exc=True)
+
+    def _child_position(self, index: int, child: "MenuPopup") -> QPoint:
         screen = QGuiApplication.screenAt(QPoint(self.x() + 10, self.y() + 10)) \
             or QGuiApplication.primaryScreen()
         try:
             area = screen.availableGeometry()
         except AttributeError:
             area = screen.geometry()
+
+        if self._mode == PIE:
+            # Beside the segment, in its own direction, then kept on screen.
+            cx, cy, r_out, _r_in = self._pie_metrics()
+            angle = math.radians(self._segment_mid_angle(index))
+            reach = r_out + 6
+            x = self.x() + cx + math.sin(angle) * reach
+            y = self.y() + cy - math.cos(angle) * reach - child.height() / 2.0
+            x = max(area.left(), min(x, area.right() - child.width()))
+            y = max(area.top(), min(y, area.bottom() - child.height()))
+            return QPoint(int(x), int(y))
+
+        row_y = self._rows[index][0]
+        x = self.x() + self.width() - theme.SUBMENU_OVERLAP
         if x + child.width() > area.right():
             x = self.x() - child.width() + theme.SUBMENU_OVERLAP
         # Align the child's first row with the parent row it belongs to, so the
@@ -266,7 +379,7 @@ class MenuPopup(QWidget):
     def _close_child(self) -> None:
         child = self._child
         self._child = None
-        self._child_row = -1
+        self._child_index = -1
         if child is not None:
             child.dismiss()
         self.update()
@@ -287,10 +400,9 @@ class MenuPopup(QWidget):
         popup: MenuPopup | None = self
         found: MenuItem | None = None
         while popup is not None:
-            if 0 <= popup._hover < len(popup._rows):
-                candidate = popup._rows[popup._hover][1]
-                if candidate.clickable:
-                    found = candidate
+            candidate = popup._item_at_index(popup._hover)
+            if candidate is not None and candidate.clickable:
+                found = candidate
             child = popup._child
             if child is None or not child.isVisible():
                 break
@@ -334,11 +446,90 @@ class MenuPopup(QWidget):
         path.closeSubpath()
         painter.fillPath(path, colour)
 
+    def _draw_pie(self, painter: QPainter) -> None:
+        """Radial layout: one wedge per item, centre hole carries the list name."""
+        items = self._pie_items
+        cx, cy, r_out, r_in = self._pie_metrics()
+        outer = QRectF(cx - r_out, cy - r_out, r_out * 2, r_out * 2)
+        inner = QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2)
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(*theme.BG))
+        painter.drawEllipse(outer)
+
+        if items:
+            span = 360.0 / len(items)
+            label_font = QFont(self._font)
+            label_font.setPointSize(theme.PIE_LABEL_SIZE)
+            metrics = QFontMetrics(label_font)
+            label_radius = (r_out + r_in) / 2.0
+            half_width = r_out * 0.26
+
+            for index, item in enumerate(items):
+                # Qt measures angles anticlockwise with 0 at 3 o'clock; our
+                # convention is 0 = up, clockwise, so flip and offset here - the
+                # same maths the hit test uses.
+                start_qt = 90.0 - index * span
+                sweep = span - theme.PIE_GAP_DEG
+                path = QPainterPath()
+                path.arcMoveTo(outer, start_qt)
+                path.arcTo(outer, start_qt, -sweep)
+                path.arcTo(inner, start_qt - sweep, sweep)
+                path.closeSubpath()
+
+                highlighted = index == self._hover and (item.clickable or item.is_branch)
+                painter.setPen(Qt.NoPen)
+                if highlighted:
+                    painter.setBrush(QColor(*theme.HOVER_BG))
+                else:
+                    painter.setBrush(QColor(*theme.SEGMENT_BG))
+                painter.drawPath(path)
+
+                centre = self._segment_centre(index, label_radius)
+                painter.setFont(label_font)
+                if highlighted:
+                    painter.setPen(QColor(*theme.HOVER_TEXT))
+                elif item.enabled:
+                    painter.setPen(QColor(*theme.TEXT))
+                else:
+                    painter.setPen(QColor(*theme.TEXT_DIM))
+                box = QRectF(centre.x() - half_width, centre.y() - 9,
+                             half_width * 2, 18)
+                text = metrics.elidedText(item.label or item.cid, Qt.ElideMiddle,
+                                          int(box.width()))
+                painter.drawText(box, Qt.AlignCenter, text)
+
+                if item.is_branch:
+                    # A dot in the accent colour instead of a glyph: no font
+                    # dependency, and it reads as "there is more this way".
+                    dot = self._segment_centre(index, label_radius + 14)
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QColor(*theme.ACCENT))
+                    painter.drawEllipse(QPointF(dot.x(), dot.y()), 2.5, 2.5)
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(*theme.BG))
+        painter.drawEllipse(inner)
+
+        if self._title:
+            painter.setFont(self._bold)
+            painter.setPen(QColor(*theme.ACCENT))
+            painter.drawText(inner, Qt.AlignCenter | Qt.TextWordWrap, self._title)
+
+        painter.setPen(QPen(QColor(*theme.BORDER), theme.BORDER_WIDTH))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(outer)
+
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.Antialiasing, True)
             painter.setRenderHint(QPainter.TextAntialiasing, True)
+
+            if self._mode == PIE:
+                self._draw_pie(painter)
+                self._draw_cursor(painter)
+                return
 
             rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
             painter.setPen(QPen(QColor(*theme.BORDER), theme.BORDER_WIDTH))
@@ -437,24 +628,34 @@ class MenuPopup(QWidget):
         self._cancel_grace()
         pos = self._event_pos(event)
         self._cursor_local = pos
-        idx = self._row_at(pos)
+        idx = self._index_at_pos(pos)
         if idx != self._hover:
             self._hover = idx
             self.update()
-        if idx < 0:
+        item = self._item_at_index(idx)
+        if item is None:
+            self._dwell.stop()
             self._close_child()
             return
-        if self._rows[idx][1].is_branch:
-            self._open_child(idx)
-        elif self._child is not None and self._child_row != idx:
-            self._close_child()
+        if item.is_branch:
+            if self._mode == PIE:
+                # Let the cursor settle before unfolding: in a pie you sweep
+                # across segments on the way to your target.
+                if self._child is None or self._child_index != idx:
+                    self._dwell.start()
+            else:
+                self._open_child(idx)
+        else:
+            self._dwell.stop()
+            if self._child is not None:
+                self._close_child()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
-        idx = self._row_at(self._event_pos(event))
-        if idx < 0 or idx >= len(self._rows):
+        idx = self._index_at_pos(self._event_pos(event))
+        item = self._item_at_index(idx)
+        if item is None:
             self._root().dismiss()
             return
-        item = self._rows[idx][1]
         if item.is_branch:
             self._open_child(idx)
             return
@@ -619,25 +820,34 @@ class PopupManager:
         anchor: QPoint | None = None,
         trigger_vk: int = 0,
         title: str = "",
+        mode: str = LIST,
     ) -> None:
-        """Show (or refresh) the overlay at *anchor* (defaults to the cursor)."""
+        """Show (or refresh) the overlay at *anchor* (defaults to the cursor).
+
+        *mode* picks the layout: ``LIST`` (vertical rows) or ``PIE`` (radial).
+        """
         try:
             self._ensure_app()
             if self._popup is None:
                 self._popup = MenuPopup()
 
+            popup = self._popup
+            popup.set_mode(mode)
+
             show_items = list(items)
-            if title:
+            if title and mode != PIE:
+                # A list shows its name as a title row; a pie paints it in the hole.
                 show_items = [title_item(title)] + show_items
 
-            popup = self._popup
             if popup.isVisible():
                 popup.set_items(show_items)
+                popup.set_title(title)
                 popup.set_trigger_vk(trigger_vk)
                 popup.update()
                 return
 
             popup.set_items(show_items)
+            popup.set_title(title)
             if anchor is None:
                 anchor = _cursor_pos()
             popup.show_at(anchor, trigger_vk=trigger_vk)
@@ -669,8 +879,8 @@ def get_manager() -> PopupManager:
 
 
 def show_menu(items: list[MenuItem], anchor: QPoint | None = None,
-              trigger_vk: int = 0, title: str = "") -> None:
-    get_manager().show_menu(items, anchor=anchor, trigger_vk=trigger_vk, title=title)
+              trigger_vk: int = 0, title: str = "", mode: str = LIST) -> None:
+    get_manager().show_menu(items, anchor=anchor, trigger_vk=trigger_vk, title=title, mode=mode)
 
 
 def hide_menu() -> None:

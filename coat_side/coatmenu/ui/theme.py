@@ -43,3 +43,11 @@ CURSOR_POLL_MS = 10   # how often a panel re-reads the real pointer position
 # --- submenu arrow (drawn, not a font glyph) ---
 ARROW_WIDTH = 5
 ARROW_HEIGHT = 8
+
+# --- radial pie mode ---
+PIE_RADIUS = 124        # outer radius, px
+PIE_INNER_RATIO = 0.50  # hole in the middle (centre label / click-to-cancel)
+PIE_GAP_DEG = 2.0       # gap between segments
+PIE_DWELL_MS = 160      # hover time on a branch before its submenu opens
+PIE_LABEL_SIZE = 8      # point size for segment labels
+SEGMENT_BG = (52, 54, 58, 235)  # wedge fill (HOVER_BG marks the pointed-at one)

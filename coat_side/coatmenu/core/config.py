@@ -246,6 +246,14 @@ class MenuConfig:
         self.lists.remove(target)
         return True
 
+    def set_mode(self, key: str, mode: str) -> bool:
+        """Pick how a list renders: ``list`` (rows) or ``pie`` (radial)."""
+        target = self.find(key)
+        if target is None:
+            return False
+        target.mode = "pie" if str(mode).lower() == "pie" else "list"
+        return True
+
     def rename_list(self, old: str, new: str) -> MenuList | None:
         target = self.find(old)
         new_name = (new or "").strip()

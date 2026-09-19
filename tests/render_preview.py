@@ -96,6 +96,9 @@ for lst in config.lists:
     print(f"  {lst.hotkey_id:24} {lst.name:10} {len(lst.items)} row(s)")
 
 manager = popup.get_manager()
+# Offscreen rendering has no real foreground window, so the "did the user switch
+# to another app?" check would close the overlay mid-render. Stub it out here.
+popup.system.foreground_is_current_process = lambda: True
 
 # Pretend 3DCoat hid the system pointer (brush mode) so the preview shows the
 # overlay's own drawn arrow.
@@ -130,7 +133,41 @@ widget = manager.popup
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-list.png"), [widget])
 
-# 4. the editor panel
+# 4. the same commands as a radial pie
+from coatmenu.ui.popup import COMMAND, MenuItem  # noqa: E402
+
+import math  # noqa: E402
+
+widget.dismiss()
+app.processEvents()
+pie_rows = [
+    MenuItem(label="Resample", kind=COMMAND, cid="Resample"),
+    MenuItem(label="Smooth All", kind=COMMAND, cid="SmoothObject"),
+    MenuItem(label="Decimate", kind=COMMAND, cid="Decimate"),
+    submenu("Retopo\u2026", [MenuItem(label="Auto-Retopo", kind=COMMAND, cid="AUTORETOPO")]),
+    MenuItem(label="Bevel", kind=COMMAND, cid="Bevel"),
+    MenuItem(label="Mirror", kind=COMMAND, cid="MIRROR"),
+    MenuItem(label="Clean", kind=COMMAND, cid="CleanVoxels"),
+    MenuItem(label="Measure", kind=COMMAND, cid="MEASURE"),
+]
+manager.show_menu(pie_rows, anchor=QPoint(140, 140), title="Sculpt", mode="pie")
+pie = manager.popup
+app.processEvents()
+pie._hover = 3  # the branch, so the preview shows a highlighted segment + dot
+pie._cursor_local = pie._segment_centre(pie._hover)
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-pie.png"), [pie])
+
+# 5. the pie with that segment's submenu unfolded (what dwelling does)
+pie._dwell.timeout.emit()
+app.processEvents()
+print(f"pie submenu open: {pie._child is not None}")
+if pie._child is not None:
+    compose(os.path.join(OUT_DIR, "preview-pie-submenu.png"), [pie, pie._child])
+pie.dismiss()
+app.processEvents()
+
+# 6. the editor panel
 from coatmenu.ui.editor import CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)

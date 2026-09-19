@@ -17,6 +17,10 @@ HEADER = "header"        # dim group label
 TITLE = "title"          # list title row
 
 
+LIST = "list"
+PIE = "pie"
+
+
 @dataclass
 class MenuItem:
     """One row of a CoatMenu list."""
