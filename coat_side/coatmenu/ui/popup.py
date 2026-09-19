@@ -46,6 +46,7 @@ from coatmenu.core.menu_model import (  # noqa: F401  (re-exported for callers/t
     title_item,
 )
 from coatmenu.ui import cursor as cursor_tool
+from coatmenu.ui import system
 from coatmenu.ui import theme
 
 # ---------------------------------------------------------------------------
@@ -520,6 +521,10 @@ class MenuPopup(QWidget):
         """Per-frame health check: Escape cancels, release-of-trigger runs."""
         try:
             if self.is_child:
+                return
+            if not system.foreground_is_current_process():
+                # The user switched to another application - don't linger on top.
+                self.dismiss()
                 return
             self._sync_cursor()
             if is_key_down(VK_ESCAPE):

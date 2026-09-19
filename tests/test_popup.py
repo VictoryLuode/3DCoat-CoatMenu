@@ -217,6 +217,15 @@ widget.leaveEvent(None)
 check(widget._cursor_local is None, "leaving the panel stops drawing the pointer")
 widget.dismiss()
 
+print("== stepping aside when another application takes the foreground ==")
+manager.show_menu(build_items(), anchor=QPoint(120, 120))
+widget = manager.popup
+check(widget.isVisible(), "overlay open")
+popup.system.foreground_is_current_process = lambda: False
+widget._on_poll()
+check(not widget.isVisible(), "overlay closes instead of floating over the other app")
+popup.system.foreground_is_current_process = lambda: True
+
 print()
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))

@@ -184,8 +184,14 @@ check(sample.alpha() > 200, f"panel background is painted, not transparent (alph
 check(sample.red() < 90 and sample.green() < 90 and sample.blue() < 90,
       f"panel background is dark (rgb={sample.getRgb()})")
 
+layer = chrome._cursor_layer
+check(layer.testAttribute(Qt.WA_TransparentForMouseEvents),
+      "pointer layer is click-through (rows stay usable under it)")
+check(layer.geometry().size() == chrome.rect().size(), "pointer layer covers the panel")
+check(layer.isVisible(), "pointer layer is visible")
+
 cursor_mod.system_cursor_visible = lambda: False
-chrome._cursor_local = QPoint(40, 40)
+layer.set_position(QPoint(40, 40))
 chrome.repaint()
 app.processEvents()
 with_pointer = chrome.grab().toImage()
@@ -199,6 +205,7 @@ check(with_pointer != without_pointer,
 
 chrome.close_editor()
 check(not chrome._cursor_timer.isActive(), "pointer polling stops when the editor closes")
+check(layer._position is None, "the drawn pointer is cleared on close")
 
 print()
 if failures:

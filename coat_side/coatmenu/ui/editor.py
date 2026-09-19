@@ -41,6 +41,7 @@ from coatmenu.core.config import MenuConfig, MenuList, item_to_json
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import COMMAND, HEADER, SCRIPT, SEPARATOR, SUBMENU, MenuItem
 from coatmenu.ui import cursor as cursor_tool
+from coatmenu.ui import system
 from coatmenu.ui import theme
 
 ROLE_KIND = Qt.UserRole + 1
@@ -86,6 +87,38 @@ def _css() -> str:
     """
 
 
+class _CursorLayer(QWidget):
+    """Transparent, click-through child that draws the pointer.
+
+    The arrow cannot live in the panel's own paintEvent: Qt paints child widgets
+    *after* their parent, so the tree/list widgets would cover the arrow exactly
+    when the user is pointing at a row.
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._position: QPoint | None = None
+
+    def set_position(self, position: QPoint | None) -> None:
+        if position == self._position:
+            return
+        self._position = position
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            cursor_tool.draw(painter, self._position)
+        except Exception:
+            log("editor cursor layer failed", exc=True)
+        finally:
+            painter.end()
+
+
 class CoatMenuEditor(QWidget):
     """Frameless editor panel (one per process)."""
 
@@ -97,7 +130,6 @@ class CoatMenuEditor(QWidget):
         self._sources_loaded = False
         self._drag_offset: QPoint | None = None
         self._dirty = False
-        self._cursor_local: QPoint | None = None
 
         self.setObjectName("coatmenuEditor")
         self.setWindowTitle("CoatMenu")
@@ -117,6 +149,11 @@ class CoatMenuEditor(QWidget):
         self._cursor_timer.timeout.connect(self._sync_cursor)
 
         self._build()
+
+        # Above every child widget, click-through, so the arrow is never covered.
+        self._cursor_layer = _CursorLayer(self)
+        self._cursor_layer.setGeometry(self.rect())
+        self._cursor_layer.raise_()
 
     # ------------------------------------------------------------------
     # construction
@@ -255,10 +292,11 @@ class CoatMenuEditor(QWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:  # noqa: N802
-        """Panel chrome + our own pointer.
+        """Panel chrome.
 
         A plain QWidget draws neither a stylesheet background nor a border, and
-        3DCoat may have hidden the system cursor - both are drawn here.
+        3DCoat may have hidden the system cursor (that part lives in
+        ``_CursorLayer`` so child widgets cannot cover it).
         """
         painter = QPainter(self)
         try:
@@ -274,8 +312,6 @@ class CoatMenuEditor(QWidget):
             painter.setPen(QPen(QColor(*theme.SEPARATOR), 1))
             painter.drawLine(int(theme.PADDING * 1.5), separator_y,
                              self.width() - int(theme.PADDING * 1.5), separator_y)
-
-            cursor_tool.draw(painter, self._cursor_local)
         except Exception:
             log("editor.paintEvent failed", exc=True)
         finally:
@@ -286,12 +322,19 @@ class CoatMenuEditor(QWidget):
         try:
             if not self.isVisible():
                 return
-            value = cursor_tool.local_position(self)
-            if value != self._cursor_local:
-                self._cursor_local = value
-                self.update()
+            if not system.foreground_is_current_process():
+                # 3DCoat is no longer in front - step aside instead of floating
+                # over whatever the user switched to.
+                self.close_editor()
+                return
+            self._cursor_layer.set_position(cursor_tool.local_position(self))
         except Exception:
             pass
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._cursor_layer.setGeometry(self.rect())
+        self._cursor_layer.raise_()
 
     # ------------------------------------------------------------------
     # window behaviour
@@ -300,18 +343,23 @@ class CoatMenuEditor(QWidget):
     def show_editor(self) -> None:
         """Refresh from the config and show (idempotent)."""
         # An explicitly injected config (tests, previews) is authoritative; only
-        # the singleton reads back from disk.
-        if not self._explicit_config:
+        # the singleton reads back from disk - and it keeps un-saved edits, so
+        # stepping aside (switching applications) never throws work away.
+        if not self._explicit_config and not self._dirty:
             self._config = lists.get_config()
         self.reload_lists()
+        if self._dirty:
+            self.set_status("un-saved edits kept - press Save & apply")
         self.show()
         self.raise_()
         self.setWindowOpacity(1.0)
+        self._cursor_layer.setGeometry(self.rect())
+        self._cursor_layer.raise_()
         self._cursor_timer.start()
 
     def close_editor(self) -> None:
         self._cursor_timer.stop()
-        self._cursor_local = None
+        self._cursor_layer.set_position(None)
         self.hide()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802

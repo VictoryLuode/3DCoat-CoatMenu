@@ -12,6 +12,11 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
 
+# Panels close themselves when another application takes the foreground; under
+# the offscreen platform there is no meaningful foreground window, so tests turn
+# that check off (the behaviour itself is covered by a mocked case in test_popup).
+export COATMENU_FOREGROUND_CHECK=0
+
 find_python() {
     local cand
     for cand in \
