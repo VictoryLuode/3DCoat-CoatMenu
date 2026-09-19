@@ -397,8 +397,8 @@ class MenuPopup(QWidget):
                             self.width() - theme.PADDING,
                             h,
                         ),
-                        4,
-                        4,
+                        theme.ROW_CORNER_RADIUS,
+                        theme.ROW_CORNER_RADIUS,
                     )
 
                 painter.setFont(self._font)
@@ -497,17 +497,21 @@ class MenuPopup(QWidget):
             self._poll.start()
 
     def _clamped_position(self, anchor: QPoint) -> QPoint:
-        off = 10
-        x, y = anchor.x() + off, anchor.y() + off
+        """Panel top-left sits exactly on the anchor - same as Krita's QMenu.
+
+        Flips to the other side of the cursor when the panel would otherwise run
+        off the screen.
+        """
+        x, y = anchor.x(), anchor.y()
         screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
         try:
             area = screen.availableGeometry()
         except AttributeError:
             area = screen.geometry()
         if x + self.width() > area.right():
-            x = max(area.left(), anchor.x() - self.width() - off)
+            x = max(area.left(), anchor.x() - self.width())
         if y + self.height() > area.bottom():
-            y = max(area.top(), anchor.y() - self.height() - off)
+            y = max(area.top(), anchor.y() - self.height())
         return QPoint(int(x), int(y))
 
     def _fade_tick(self) -> None:

@@ -58,6 +58,8 @@ manager.show_menu(build_items(), anchor=QPoint(120, 120), title="CoatMenu")
 widget = manager.popup
 check(widget is not None and widget.isVisible(), "popup is visible after show_menu")
 if widget is not None:
+    check(widget.pos() == QPoint(120, 120),
+          f"top-left corner sits exactly on the cursor, like Krita's menu ({widget.pos()})")
     check(len(widget._rows) == 6, f"row count includes title+section headers ({len(widget._rows)})")
     check(widget.width() > 100 and widget.height() > 60,
           f"size is sane ({widget.width()}x{widget.height()})")
@@ -216,6 +218,16 @@ cursor_mod.system_cursor_visible = lambda: True
 widget.leaveEvent(None)
 check(widget._cursor_local is None, "leaving the panel stops drawing the pointer")
 widget.dismiss()
+
+print("== near the screen edge the panel flips to stay visible ==")
+from PySide6.QtGui import QGuiApplication  # noqa: E402
+
+area = QGuiApplication.primaryScreen().availableGeometry()
+manager.show_menu(build_items(), anchor=area.bottomRight() - QPoint(6, 6))
+edge = manager.popup
+check(edge.x() < area.right() - 6 and edge.y() < area.bottom() - 6,
+      f"flips instead of running off the screen ({edge.pos()} in {area})")
+edge.dismiss()
 
 print("== stepping aside when another application takes the foreground ==")
 manager.show_menu(build_items(), anchor=QPoint(120, 120))

@@ -7,7 +7,8 @@ so the popup reads as part of the application rather than as a foreign window.
 from __future__ import annotations
 
 # --- window ---
-CORNER_RADIUS = 8
+CORNER_RADIUS = 0      # square corners: matches 3DCoat's own menus
+ROW_CORNER_RADIUS = 0  # highlight bar corners
 BORDER_WIDTH = 1
 PADDING = 6
 SHADOW_BLUR = 24

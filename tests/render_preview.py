@@ -89,7 +89,9 @@ index_rows = [submenu(lst.name, lst.items) for lst in config.lists]
 manager.show_menu(index_rows, anchor=QPoint(80, 80), title="CoatMenu")
 widget = manager.popup
 app.processEvents()
-widget._cursor_local = QPoint(24, widget._rows[1][0] + 14)
+# The panel's top-left corner sits on the cursor now, so that is where the drawn
+# pointer belongs in the preview.
+widget._cursor_local = QPoint(2, 2)
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-popup.png"), [widget])
 
@@ -101,7 +103,6 @@ app.processEvents()
 child = widget._child
 print(f"child panel open: {child is not None}")
 if child is not None:
-    child._cursor_local = QPoint(18, child._rows[0][0] + 12)
     compose(os.path.join(OUT_DIR, "preview-submenu.png"), [widget, child])
 
 # 3. a single list shown flat
