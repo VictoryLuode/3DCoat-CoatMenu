@@ -268,14 +268,23 @@ print("== pie layout ==")
 pie_items = [
     MenuItem(label="Top", kind=COMMAND, cid="PIE_TOP"),
     MenuItem(label="Right", kind=COMMAND, cid="PIE_RIGHT"),
-    submenu("Branch", [MenuItem(label="Leaf", kind=COMMAND, cid="PIE_LEAF")]),
-    MenuItem(label="Left", kind=COMMAND, cid="PIE_LEFT"),
+    submenu("Big", [MenuItem(label=f"Leaf{i}", kind=COMMAND, cid=f"PIE_LEAF{i}")
+                    for i in range(4)]),
+    submenu("Pair", [MenuItem(label="A", kind=COMMAND, cid="PIE_A"),
+                     MenuItem(label="B", kind=COMMAND, cid="PIE_B")]),
 ]
 manager.show_menu(pie_items, anchor=QPoint(300, 300), title="Wheel", mode="pie")
 pie = manager.popup
 app.processEvents()
 check(pie._mode == PIE, "popup switched to pie mode")
-check(len(pie._pie_items) == 4, f"one segment per item ({len(pie._pie_items)})")
+check(len(pie._pie_items) == 4, f"one slot per item ({len(pie._pie_items)})")
+check(len(pie._pie_rects) == 4, "each slot has geometry")
+check(pie._slot_expanded(3) and not pie._slot_expanded(2),
+      "a small group draws its children in place, a big one does not")
+check([len(r) for r in pie._pie_rects] == [1, 1, 1, 2],
+      f"only the small group stacks buttons ({[len(r) for r in pie._pie_rects]})")
+check([t.label for t in pie._slot_targets(3)] == ["A", "B"],
+      "stacked buttons carry the children, in order")
 check(pie._title == "Wheel", "the list name is still remembered")
 check(not any(item.kind == TITLE for item in pie._items),
       "a pie has no title row (Blender-style: no centre caption)")
@@ -286,10 +295,14 @@ for index, sx, sy in ((0, 1, -1), (1, 1, 1), (2, -1, 1), (3, -1, -1)):
     point = pie._slot_centre(index)
     dx = point.x() - centre.x()
     dy = point.y() - centre.y()
-    check(pie._pie_index_at(point) == index,
-          f"button {index} hit-tests to itself ({pie._pie_index_at(point)})")
+    # A stacked slot's bounding box straddles the gap between its buttons, so
+    # hit-test the first button itself rather than the slot centre.
+    first_button = pie._slot_rects(index)[0]
+    hit_point = QPoint(int(first_button.center().x()), int(first_button.center().y()))
+    check(pie._pie_index_at(hit_point) == index,
+          f"slot {index} hit-tests to itself ({pie._pie_index_at(hit_point)})")
     check(dx * sx > 0 and dy * sy > 0,
-          f"button {index} sits in its own direction ({dx:.0f}, {dy:.0f})")
+          f"slot {index} sits in its own direction ({dx:.0f}, {dy:.0f})")
     reach = math.hypot(dx, dy)
     check(abs(reach - pie._slot_distance) < 8,
           f"button {index} sits one pie radius out ({reach:.0f}px)")
@@ -319,7 +332,18 @@ pie._hover = 0
 check(pie._deepest_hover() is not None and pie._deepest_hover().cid == "PIE_TOP",
       "release over a segment runs that command")
 
+print("== pie: a stacked slot runs the button you clicked ==")
+FAKE.calls.clear()
+pair_rect = pie._slot_rects(3)[1]  # the "B" button of the stacked slot
+QTest.mouseClick(pie, Qt.LeftButton, Qt.NoModifier,
+                 QPoint(int(pair_rect.center().x()), int(pair_rect.center().y())))
+check(FAKE.commands_run() == ["$PIE_B"],
+      f"clicking the second stacked button ran it ({FAKE.commands_run()})")
+
 print("== pie: the digit keys run a button outright (Blender's shortcut hints) ==")
+manager.show_menu(pie_items, anchor=QPoint(300, 300), title="Wheel", mode="pie")
+pie = manager.popup
+app.processEvents()
 FAKE.calls.clear()
 real_key_down = popup.is_key_down
 popup.is_key_down = lambda vk: vk == popup.VK_1
@@ -331,6 +355,18 @@ check(handled, "pressing 1 is handled")
 check(FAKE.commands_run() == ["$PIE_TOP"],
       f"key 1 ran the first button ({FAKE.commands_run()})")
 check(not pie.isVisible(), "the pie closed after the shortcut ran")
+
+manager.show_menu(pie_items, anchor=QPoint(300, 300), title="Wheel", mode="pie")
+pie = manager.popup
+app.processEvents()
+FAKE.calls.clear()
+popup.is_key_down = lambda vk: vk == popup.VK_1 + 3  # the "4" key
+try:
+    pie._check_digits()
+finally:
+    popup.is_key_down = real_key_down
+check(FAKE.commands_run() == ["$PIE_A"],
+      f"a digit aimed at a stacked slot runs its first button ({FAKE.commands_run()})")
 
 print("== a multi-command row fires its commands in order ==")
 from coatmenu.core.menu_model import sequence  # noqa: E402

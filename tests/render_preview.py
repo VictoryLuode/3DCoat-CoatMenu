@@ -144,9 +144,15 @@ pie_rows = [
     MenuItem(label="Resample", kind=COMMAND, cid="Resample"),
     MenuItem(label="Smooth All", kind=COMMAND, cid="SmoothObject"),
     MenuItem(label="Decimate", kind=COMMAND, cid="Decimate"),
-    submenu("Retopo\u2026", [MenuItem(label="Auto-Retopo", kind=COMMAND, cid="AUTORETOPO")]),
+    # A small group opens in place (Blender stacks Material/Wireframe like this);
+    # bigger groups still unfold into a child panel.
+    submenu("Shading", [MenuItem(label="Solid", kind=COMMAND, cid="SOLID"),
+                        MenuItem(label="Material", kind=COMMAND, cid="MATERIAL"),
+                        MenuItem(label="Wireframe", kind=COMMAND, cid="VIEW_WIREFRAME")]),
     MenuItem(label="Bevel", kind=COMMAND, cid="Bevel"),
-    MenuItem(label="Mirror", kind=COMMAND, cid="MIRROR"),
+    # A big group keeps unfolding into a child panel next to the wheel.
+    submenu("Retopo\u2026", [MenuItem(label=f"Auto-Retopo {i}", kind=COMMAND,
+                                     cid=f"AUTORETOPO{i}") for i in range(5)]),
     MenuItem(label="Clean", kind=COMMAND, cid="CleanVoxels"),
     MenuItem(label="Measure", kind=COMMAND, cid="MEASURE"),
 ]
@@ -158,7 +164,10 @@ pie._cursor_local = pie._slot_centre(pie._hover)
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-pie.png"), [pie])
 
-# 5. the pie with that segment's submenu unfolded (what dwelling does)
+# 5. the pie with that slot's submenu unfolded (what dwelling does)
+big_slot = next(i for i, item in enumerate(pie._pie_items) if item.is_branch
+                and not pie._slot_expanded(i))
+pie._hover = big_slot
 pie._dwell.timeout.emit()
 app.processEvents()
 print(f"pie submenu open: {pie._child is not None}")

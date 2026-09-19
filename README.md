@@ -55,7 +55,10 @@ extension builds on this machine)*
   (pick per list in the editor). The pie is laid out the way Blender's is:
   rounded buttons around a small centre ring, each showing its `1..9` shortcut,
   so you can hit the digit instead of aiming. The ring grows with the label
-  widths (button spacing is `2*R*sin(pi/N)`) so buttons can never overlap.
+  widths (button spacing is `2*R*sin(pi/N)`) so buttons can never overlap. A slot
+  that is a small group (three children or fewer) stacks its buttons in place, the
+  way Blender's Shading pie shows Material/Wireframe; bigger groups still unfold
+  into a panel beside the wheel.
 * **Multi-step rows** — a row can fire several 3DCoat commands in order, which
   is how primitives work ("neutralise the tool → open the primitive tool → pick
   the shape"). The bundled `Prims` list is a port of the LKS add-on's Add-Prims

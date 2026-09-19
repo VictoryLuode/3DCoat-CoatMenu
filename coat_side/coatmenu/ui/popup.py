@@ -97,7 +97,9 @@ class MenuPopup(QWidget):
         self._mode = mode if mode in (LIST, PIE) else LIST
         self._items: list[MenuItem] = []
         self._pie_items: list[MenuItem] = []
-        self._pie_rects: list[QRectF] = []
+        self._pie_rects: list[list[QRectF]] = []      # one list of buttons per slot
+        self._pie_targets: list[list[MenuItem]] = []  # parallel to _pie_rects
+        self._pie_expanded: list[bool] = []           # slot draws its children in place
         self._slot_distance: float = float(theme.PIE_SLOT_DISTANCE)
         self._rows: list[tuple[int, MenuItem, int]] = []  # (y, item, height)
         self._title: str = ""
@@ -230,13 +232,18 @@ class MenuPopup(QWidget):
     def _rebuild_pie(self) -> None:
         """Lay the buttons out around the centre - Blender's pie, not a wheel.
 
-        Each item gets a rounded button whose centre sits ``PIE_SLOT_DISTANCE``
-        away from the middle in its own direction. The geometry is kept as rects
-        so the painter and the hit test cannot drift apart.
+        Each slot sits ``PIE_SLOT_DISTANCE`` from the middle in its own direction.
+        A slot that is a small group (``PIE_INLINE_MAX`` children or fewer) draws
+        its children **stacked in place**, the way Blender's Shading pie shows
+        Material/Wireframe; bigger groups still unfold into a child panel.
+
+        Geometry is kept as rects so the painter and the hit test cannot drift.
         """
         self._pie_items = [i for i in self._items if i.clickable or i.is_branch]
         self._rows = []
         self._pie_rects = []
+        self._pie_targets = []
+        self._pie_expanded = []
         count = len(self._pie_items)
         min_size = int(2 * (theme.PIE_SLOT_DISTANCE + theme.PIE_CENTRE_RING
                             + theme.PADDING))
@@ -245,33 +252,47 @@ class MenuPopup(QWidget):
             return
 
         metrics = QFontMetrics(self._font)
-        sizes: list[tuple[float, float]] = []
+        slot_buttons: list[list[MenuItem]] = []
+        widths: list[float] = []
+        room = theme.PIE_DIGIT_HINT_W + theme.PADDING * 3
         for item in self._pie_items:
-            text = item.label or item.cid
-            room = theme.PIE_DIGIT_HINT_W + theme.PADDING * 3
-            width = metrics.horizontalAdvance(text) + room
-            width = max(theme.PIE_BUTTON_MIN_W, min(theme.PIE_BUTTON_MAX_W, float(width)))
-            sizes.append((width, float(theme.PIE_SLOT_HEIGHT)))
+            children = list(item.children)
+            if item.is_branch and 0 < len(children) <= theme.PIE_INLINE_MAX:
+                buttons = children
+                self._pie_expanded.append(True)
+            else:
+                buttons = [item]
+                self._pie_expanded.append(False)
+            slot_buttons.append(buttons)
+            widest = max(metrics.horizontalAdvance(b.label or b.cid or "") for b in buttons)
+            widths.append(max(theme.PIE_BUTTON_MIN_W,
+                              min(theme.PIE_BUTTON_MAX_W, float(widest + room))))
 
-        half = max(max(w for w, _h in sizes) / 2.0, theme.PIE_CENTRE_RING / 2.0)
-        widest = max(w for w, _h in sizes)
-        # Push the ring out until neighbouring buttons cannot touch: at N slots
-        # the distance between two button centres is 2*R*sin(pi/N), so R has to
-        # clear the widest button. Blender grows its pie the same way.
+        step = theme.PIE_SLOT_HEIGHT + theme.PIE_BUTTON_GAP
+        heights = [len(buttons) * step - theme.PIE_BUTTON_GAP for buttons in slot_buttons]
+        # Push the ring out until neighbouring slots cannot touch: at N slots the
+        # distance between two slot centres is 2*R*sin(pi/N), so R has to clear
+        # the widest slot. Blender grows its pie the same way.
         gap = math.sin(math.pi / count) if count > 1 else 1.0
-        needed = widest / (2.0 * gap) if count > 1 else 0.0
+        needed = max(widths) / (2.0 * gap) if count > 1 else 0.0
         self._slot_distance = max(float(theme.PIE_SLOT_DISTANCE), needed * 1.06)
+        half = max(max(widths) / 2.0, max(heights) / 2.0, theme.PIE_CENTRE_RING / 2.0)
         size = int(2 * (self._slot_distance + half + theme.PADDING))
         self.setFixedSize(size, size)
 
         cx = cy = size / 2.0
-        for index, (width, height) in enumerate(sizes):
+        for index, buttons in enumerate(slot_buttons):
             angle = math.radians(self._slot_angle(index))
-            dx = math.sin(angle) * self._slot_distance
-            dy = -math.cos(angle) * self._slot_distance
-            self._pie_rects.append(
-                QRectF(cx + dx - width / 2.0, cy + dy - height / 2.0, width, height)
-            )
+            bx = cx + math.sin(angle) * self._slot_distance
+            by = cy - math.cos(angle) * self._slot_distance
+            width = widths[index]
+            top = by - heights[index] / 2.0
+            rects = []
+            for row_index, _button in enumerate(buttons):
+                rects.append(QRectF(bx - width / 2.0, top + row_index * step,
+                                    width, float(theme.PIE_SLOT_HEIGHT)))
+            self._pie_rects.append(rects)
+            self._pie_targets.append(list(buttons))
 
     def _centre_point(self) -> QPointF:
         return QPointF(self.width() / 2.0, self.height() / 2.0)
@@ -285,21 +306,57 @@ class MenuPopup(QWidget):
         span = 360.0 / max(1, len(self._pie_items))
         return (index + 0.5) * span
 
-    def _slot_rect(self, index: int) -> QRectF:
+    def _slot_rects(self, index: int) -> list[QRectF]:
+        """Every button rect of one slot (a slot may stack several)."""
         if 0 <= index < len(self._pie_rects):
             return self._pie_rects[index]
-        return QRectF()
+        return []
+
+    def _slot_targets(self, index: int) -> list[MenuItem]:
+        if 0 <= index < len(self._pie_targets):
+            return self._pie_targets[index]
+        return []
+
+    def _slot_rect(self, index: int) -> QRectF:
+        """Bounding box of a slot - used for placement and for the tests."""
+        rects = self._slot_rects(index)
+        if not rects:
+            return QRectF()
+        box = QRectF(rects[0])
+        for rect in rects[1:]:
+            box = box.united(rect)
+        return box
 
     def _slot_centre(self, index: int) -> QPoint:
         rect = self._slot_rect(index)
         return QPoint(int(rect.center().x()), int(rect.center().y()))
 
-    def _pie_index_at(self, pos: QPoint) -> int:
+    def _slot_expanded(self, index: int) -> bool:
+        return 0 <= index < len(self._pie_expanded) and self._pie_expanded[index]
+
+    def _pie_hit(self, pos: QPoint) -> tuple[int, int] | None:
+        """``(slot, button)`` under the point, or None."""
         point = QPointF(pos)
-        for index in range(len(self._pie_rects)):
-            if self._slot_rect(index).contains(point):
-                return index
-        return -1
+        for slot, rects in enumerate(self._pie_rects):
+            for button, rect in enumerate(rects):
+                if rect.contains(point):
+                    return slot, button
+        return None
+
+    def _pie_index_at(self, pos: QPoint) -> int:
+        hit = self._pie_hit(pos)
+        return hit[0] if hit is not None else -1
+
+    def _pie_click_item(self, pos: QPoint) -> tuple[int, MenuItem] | None:
+        """The item a click at *pos* should act on (slot index + item)."""
+        hit = self._pie_hit(pos)
+        if hit is None:
+            return None
+        slot, button = hit
+        targets = self._slot_targets(slot)
+        if not (0 <= button < len(targets)):
+            return None
+        return slot, targets[button]
 
     def _item_at_index(self, index: int) -> MenuItem | None:
         if self._mode == PIE:
@@ -382,6 +439,8 @@ class MenuPopup(QWidget):
         try:
             if self._mode != PIE or self._hover < 0:
                 return
+            if self._slot_expanded(self._hover):
+                return  # the children are already on screen
             item = self._item_at_index(self._hover)
             if item is not None and item.is_branch:
                 self._open_child(self._hover)
@@ -510,43 +569,49 @@ class MenuPopup(QWidget):
         hint_font.setPointSize(max(6, theme.PIE_LABEL_SIZE - 3))
 
         for index, item in enumerate(self._pie_items):
-            rect = self._slot_rect(index)
+            slot_rects = self._slot_rects(index)
+            targets = self._slot_targets(index)
             highlighted = index == self._hover and (item.clickable or item.is_branch)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(*(theme.HOVER_BG if highlighted else theme.SEGMENT_BG)))
-            painter.drawRoundedRect(rect, theme.PIE_BUTTON_RADIUS, theme.PIE_BUTTON_RADIUS)
-
-            painter.setFont(label_font)
-            if highlighted:
-                painter.setPen(QColor(*theme.HOVER_TEXT))
-            elif item.enabled:
-                painter.setPen(QColor(*theme.TEXT))
-            else:
-                painter.setPen(QColor(*theme.TEXT_DIM))
-            hint = str(index + 1) if index < 9 else ""
-            room = float(theme.PIE_DIGIT_HINT_W) if hint else 0.0
-            text_box = QRectF(rect.left() + theme.PADDING, rect.top(),
-                              max(10.0, rect.width() - room - theme.PADDING * 2),
-                              rect.height())
-            text = metrics.elidedText(item.label or item.cid, Qt.ElideMiddle,
-                                      int(text_box.width()))
-            painter.drawText(text_box, Qt.AlignCenter, text)
-
-            if hint:
-                # Blender prints the shortcut digit on the button; here it is the
-                # 1..9 key that runs this slot while the menu is open.
-                painter.setFont(hint_font)
-                painter.setPen(QColor(*(theme.HOVER_TEXT if highlighted else theme.TEXT_DIM)))
-                hint_box = QRectF(rect.right() - theme.PADDING - room, rect.top(),
-                                  room, rect.height())
-                painter.drawText(hint_box, Qt.AlignCenter, hint)
-
-            if item.is_branch:
-                # A dot in the accent colour instead of a glyph: no font
-                # dependency, and it reads as "there is more this way".
+            for button_index, rect in enumerate(slot_rects):
+                target = targets[button_index] if button_index < len(targets) else item
+                enabled = target.enabled and target.clickable
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor(*theme.ACCENT))
-                painter.drawEllipse(QPointF(rect.left() + 4.0, rect.top() + 4.0), 2.5, 2.5)
+                painter.setBrush(QColor(*(theme.HOVER_BG if highlighted else theme.SEGMENT_BG)))
+                painter.drawRoundedRect(rect, theme.PIE_BUTTON_RADIUS, theme.PIE_BUTTON_RADIUS)
+
+                painter.setFont(label_font)
+                if highlighted:
+                    painter.setPen(QColor(*theme.HOVER_TEXT))
+                elif enabled:
+                    painter.setPen(QColor(*theme.TEXT))
+                else:
+                    painter.setPen(QColor(*theme.TEXT_DIM))
+                # The digit belongs to the slot, so only its first button shows it.
+                hint = str(index + 1) if (button_index == 0 and index < 9) else ""
+                room = float(theme.PIE_DIGIT_HINT_W) if hint else 0.0
+                text_box = QRectF(rect.left() + theme.PADDING, rect.top(),
+                                  max(10.0, rect.width() - room - theme.PADDING * 2),
+                                  rect.height())
+                text = metrics.elidedText(target.label or target.cid, Qt.ElideMiddle,
+                                          int(text_box.width()))
+                painter.drawText(text_box, Qt.AlignCenter, text)
+
+                if hint:
+                    # Blender prints the shortcut digit on the button; here it is
+                    # the 1..9 key that runs this slot while the menu is open.
+                    painter.setFont(hint_font)
+                    painter.setPen(QColor(*(theme.HOVER_TEXT if highlighted else theme.TEXT_DIM)))
+                    hint_box = QRectF(rect.right() - theme.PADDING - room, rect.top(),
+                                      room, rect.height())
+                    painter.drawText(hint_box, Qt.AlignCenter, hint)
+
+                if button_index == 0 and item.is_branch and not self._slot_expanded(index):
+                    # A dot in the accent colour instead of a glyph: no font
+                    # dependency, and it reads as "there is more this way".
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QColor(*theme.ACCENT))
+                    painter.drawEllipse(QPointF(rect.left() + 4.0, rect.top() + 4.0),
+                                        2.5, 2.5)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
@@ -668,8 +733,10 @@ class MenuPopup(QWidget):
         if item.is_branch:
             if self._mode == PIE:
                 # Let the cursor settle before unfolding: in a pie you sweep
-                # across segments on the way to your target.
-                if self._child is None or self._child_index != idx:
+                # across slots on the way to your target. A slot that draws its
+                # children in place has nothing left to unfold.
+                if not self._slot_expanded(idx) and (
+                        self._child is None or self._child_index != idx):
                     self._dwell.start()
             else:
                 self._open_child(idx)
@@ -679,7 +746,24 @@ class MenuPopup(QWidget):
                 self._close_child()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
-        idx = self._index_at_pos(self._event_pos(event))
+        pos = self._event_pos(event)
+        if self._mode == PIE:
+            hit = self._pie_click_item(pos)
+            if hit is None:
+                self._root().dismiss()
+                return
+            slot, item = hit
+            if item.is_branch and not self._slot_expanded(slot):
+                self._open_child(slot)  # a big group still unfolds into a panel
+                return
+            if not item.clickable:
+                self._root().dismiss()
+                return
+            self._root().dismiss()
+            run_item(item)
+            return
+
+        idx = self._index_at_pos(pos)
         item = self._item_at_index(idx)
         if item is None:
             self._root().dismiss()
@@ -781,7 +865,8 @@ class MenuPopup(QWidget):
             return False
         for index in range(min(9, len(self._pie_items))):
             if is_key_down(VK_1 + index):
-                item = self._item_at_index(index)
+                targets = self._slot_targets(index)
+                item = targets[0] if targets else None
                 self.dismiss()
                 if item is not None and item.clickable:
                     run_item(item)
