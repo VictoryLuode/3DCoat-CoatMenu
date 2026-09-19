@@ -47,7 +47,38 @@ with open(os.path.join(USERPREF, "Scripts", "speedup.py"), "w", encoding="utf-8"
 with open(os.path.join(USERPREF, "Scripts", "sub", "helper.py"), "w", encoding="utf-8") as fh:
     fh.write("# demo\n")
 
-FAKE = install_fake_coat(DOCS, COAT_SIDE)
+# A stand-in for the 3DCoat program folder: its own menu definitions plus the
+# English.xml name table (both live there, and neither can be corrupted).
+INSTALL = tempfile.mkdtemp(prefix="coatmenu-install-")
+CMAKE = os.path.join(INSTALL, "UserPrefs", "StdScripts", "cTemplates")
+os.makedirs(os.path.join(CMAKE, "MainMenu"), exist_ok=True)
+with open(os.path.join(CMAKE, "MainMenu", "File.py"), "w", encoding="utf-8") as fh:
+    fh.write(
+        'import coat\n'
+        'from cTemplates.Structs import *\n\n'
+        'CreateFileMenu = MainMenu("FILE")\n\n'
+        '@d_menu_section(CreateFileMenu)\n'
+        'def S_New():\n'
+        '    coat.menu_item("CLEARSCENE")  # New\n'
+        '    coat.menu_item("OPEN_FILE")   # Open\n'
+        '    # coat.menu_item("COMMENTED_OUT")\n'
+    )
+with open(os.path.join(CMAKE, "sculptTools.py"), "w", encoding="utf-8") as fh:
+    fh.write('import coat\ncoat.menu_item("BaseVoxBrush")\ncoat.menu_item("CLEARSCENE")\n')
+LANG = os.path.join(INSTALL, "data", "Languages")
+os.makedirs(LANG, exist_ok=True)
+with open(os.path.join(LANG, "English.xml"), "w", encoding="utf-8") as fh:
+    # deliberately contains the same broken escape 3DCoat writes (&lt without ;)
+    fh.write(
+        "<ClassArray.TextItem>\n"
+        "\t<TextItem><ID>CLEARSCENE</ID><Text>New</Text></TextItem>\n"
+        "\t<TextItem><ID>OPEN_FILE</ID><Text>Open</Text></TextItem>\n"
+        "\t<TextItem><ID>Resample</ID><Text>Resample</Text></TextItem>\n"
+        "\t<TextItem><ID>WEIRD</ID><Text>a &lt b</Text></TextItem>\n"
+        "</ClassArray.TextItem>\n"
+    )
+
+FAKE = install_fake_coat(DOCS, COAT_SIDE, install_root=INSTALL)
 
 from coatmenu.core import catalog  # noqa: E402
 from coatmenu.core.hotkeys import code_to_vk, find_trigger_vk, read_bindings  # noqa: E402
@@ -109,6 +140,41 @@ with open(HOTKEYS, "w", encoding="utf-8") as fh:
 popup.is_key_down = lambda vk: vk == ord("W")
 check(find_trigger_vk(["CoatMenu_Show", "execute:C:\\t\\actions\\CoatMenu_Show.py"]) == ord("W"),
       "prefers the candidate that is currently held")
+
+print("== 3DCoat's own menu definitions (authoritative, cannot be corrupted) ==")
+menu = catalog.read_menu_commands()
+check(len(menu) == 3, f"menu_item ids extracted ({sorted(e.cid for e in menu)})")
+check(all(e.cid != "COMMENTED_OUT" for e in menu), "commented-out calls ignored")
+check(any(e.hint == "MainMenu/File" for e in menu), "group carries the source file")
+check(catalog.install_root() == INSTALL, "install root taken from coat.io.installPath()")
+
+print("== readable names from English.xml ==")
+names = catalog.read_translations()
+check(names.get("CLEARSCENE") == "New", f"id -> name ({names.get('CLEARSCENE')})")
+check(len(names) == 4, f"parsed despite broken escapes ({len(names)})")
+
+print("== combined command list ==")
+combined = catalog.read_all_commands(names)
+by_id = {e.cid: e for e in combined}
+check(by_id["CLEARSCENE"].label == "New", "entries carry readable names")
+check(by_id["Resample"].room == "VoxelsCustom", "custom-menu entries merged in")
+check(len(combined) >= 7, f"union of menu + hotkeys + custom menu ({len(combined)})")
+
+print("== a hotkeys file broken by 3DCoat still parses ==")
+# 3DCoat writes '&lt'/'&gt' without the semicolon; a strict XML parser rejects the
+# whole document, which is what used to leave the command list nearly empty.
+with open(HOTKEYS, "w", encoding="utf-8") as fh:
+    fh.write('<AppOptions><HotKeys>\n'
+             '\t<OneHotKey><ID>UNDO</ID><Room>Voxels</Room><Code>Z</Code><Ctrl>true</Ctrl></OneHotKey>\n'
+             '\t<OneHotKey><ID>DEC_SPEC_DEGREE</ID><Room>Voxels</Room><Code>&lt</Code></OneHotKey>\n'
+             '\t<OneHotKey><ID>INC_SPEC_DEGREE</ID><Room>Voxels</Room><Code>&gt</Code></OneHotKey>\n'
+             '</HotKeys></AppOptions>\n')
+ids = catalog.read_hotkey_commands()
+check(len(ids) == 3, f"every id recovered from the broken file ({len(ids)})")
+broken_bindings = read_bindings()
+check(len(broken_bindings) == 3, f"bindings recover too ({len(broken_bindings)})")
+check(any(b["code"] == "&lt" for b in broken_bindings),
+      "the corrupt value stays visible instead of killing the file")
 
 print()
 if failures:

@@ -246,7 +246,7 @@ class CoatMenuEditor(QWidget):
         box.addWidget(QLabel("Add from"))
 
         self._source_kind = QComboBox()
-        self._source_kind.addItems(["3DCoat commands", "CustomMenu entries", "Scripts"])
+        self._source_kind.addItems(["3DCoat commands", "Tools", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -520,7 +520,7 @@ class CoatMenuEditor(QWidget):
             return
         cid = entry.data(Qt.UserRole) or ""
         kind = SCRIPT if self._source_kind.currentIndex() == 2 else COMMAND
-        label = entry.text().split("  \u2014  ")[0] if kind == COMMAND else (cid or entry.text())
+        label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
         new_item = MenuItem(label=label, kind=kind, cid=cid, path=cid if kind == SCRIPT else "")
 
         parent = self._tree.currentItem()
@@ -574,30 +574,36 @@ class CoatMenuEditor(QWidget):
         needle = self._search.text().strip().lower()
         kind = self._source_kind.currentIndex()
         self._source_list.clear()
-        rows: list[tuple[str, str]] = []
+        rows: list[tuple[str, str, str]] = []  # (display text, command id, readable label)
 
         if kind == 0:
-            for entry in catalog.read_hotkey_commands():
-                rows.append((f"{entry.cid}  \u2014  {entry.room or 'global'}", entry.cid))
-            for entry in catalog.read_custom_menu_commands():
-                rows.append((f"{entry.label}  \u2014  {entry.cid}", entry.cid))
+            # The full command list: 3DCoat's own menus (~600) + hotkey ids +
+            # custom-menu entries, with readable names where we have them.
+            for entry in catalog.read_all_commands():
+                where = entry.hint or entry.room or entry.source
+                rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
+                             entry.cid, entry.label))
         elif kind == 1:
-            for entry in catalog.read_custom_menu_commands():
-                rows.append((f"{entry.label}  \u2014  {entry.cid}", f"${entry.cid}"))
+            for entry in catalog.read_tool_commands():
+                rows.append((f"{entry.label}  \u2014  tool", entry.cid, entry.label))
         else:
             for entry in catalog.read_script_commands():
-                rows.append((entry.label, entry.cid))
+                rows.append((entry.label, entry.cid, os.path.basename(entry.cid)))
 
-        for text, cid in rows:
+        shown = 0
+        for text, cid, label in rows:
             if needle and needle not in text.lower():
                 continue
             node = QListWidgetItem(text)
             node.setData(Qt.UserRole, cid)
+            node.setData(Qt.UserRole + 1, label)
+            node.setToolTip(text)
             self._source_list.addItem(node)
-            if self._source_list.count() >= 400:
+            shown += 1
+            if shown >= 2000:
                 break
         self._sources_loaded = True
-        self.set_status(f"{self._source_list.count()} source(s) (of {len(rows)})")
+        self.set_status(f"{shown} of {len(rows)} source(s)")
 
     # ------------------------------------------------------------------
     # load / save

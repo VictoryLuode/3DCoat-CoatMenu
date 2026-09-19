@@ -36,6 +36,18 @@ for name, cid in (("Resample", "$Resample"), ("Smooth", "$SmoothObject")):
 
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
+# Tool presets, so the editor's "Tools" source has something to list.
+TOOLS_DIR = os.path.join(DOCS, "3DCoat", "UserPrefs", "CustomTools")
+os.makedirs(TOOLS_DIR, exist_ok=True)
+with open(os.path.join(TOOLS_DIR, "BaseVoxBrush.txt"), "w", encoding="utf-8") as fh:
+    fh.write("tool preset\n")
+
+# ...and one script, for the "Scripts" source.
+SCRIPTS_DIR = os.path.join(DOCS, "3DCoat", "UserPrefs", "Scripts")
+os.makedirs(SCRIPTS_DIR, exist_ok=True)
+with open(os.path.join(SCRIPTS_DIR, "speedup.py"), "w", encoding="utf-8") as fh:
+    fh.write("# demo\n")
+
 from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -116,9 +128,10 @@ check("Details x" not in [lst.name for lst in editor._config.lists], "list remov
 
 print("== source catalog ==")
 editor.select_list(0)
-editor._source_kind.setCurrentIndex(1)  # CustomMenu entries
+editor._source_kind.setCurrentIndex(0)  # 3DCoat commands (the combined list)
 editor.reload_sources()
-check(editor._source_list.count() == 2, f"sources loaded ({editor._source_list.count()})")
+combined_count = editor._source_list.count()
+check(combined_count >= 2, f"combined command list populated ({combined_count})")
 editor._search.setText("Resample")
 editor.reload_sources()
 check(editor._source_list.count() == 1, "filter narrows the list")
@@ -127,7 +140,16 @@ before = editor._tree.topLevelItemCount()
 editor.add_source_item()
 check(editor._tree.topLevelItemCount() == before + 1, "row appended to the list")
 appended = editor.tree_to_items()[-1]
-check(appended.cid in ("Resample", "$Resample"), f"appended entry carries the id ({appended.cid})")
+check("Resample" in appended.cid, f"appended entry carries the id ({appended.cid})")
+
+editor._search.clear()
+editor._source_kind.setCurrentIndex(1)  # Tools
+editor.reload_sources()
+check(editor._source_list.count() == 1, f"tool presets listed ({editor._source_list.count()})")
+
+editor._source_kind.setCurrentIndex(2)  # Scripts
+editor.reload_sources()
+check(editor._source_list.count() == 1, f"scripts listed ({editor._source_list.count()})")
 
 print("== adding decoration rows ==")
 rows_before = editor._tree.topLevelItemCount()

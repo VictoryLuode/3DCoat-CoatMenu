@@ -81,32 +81,19 @@ def _normalise_path(path: str) -> str:
 
 
 def read_bindings(path: str | None = None) -> list[dict]:
-    """All bindings, as dicts: id, room, code, ctrl, alt, shift."""
-    from coatmenu.core.catalog import hotkeys_path
+    """All bindings, as dicts: id, room, code, ctrl, alt, shift.
 
-    path = path or hotkeys_path()
-    out: list[dict] = []
+    Delegates to the catalog's lenient reader: 3DCoat writes un-escaped ``&``
+    characters into this file, so a strict XML parser would throw the whole
+    document away (which for us means losing every trigger-key lookup).
+    """
+    from coatmenu.core.catalog import iter_hotkey_blocks
+
     try:
-        tree = ET.parse(path)
+        return iter_hotkey_blocks(path)
     except Exception as exc:
-        log(f"hotkeys: cannot read {path}: {exc}")
-        return out
-    for node in tree.getroot().iter("OneHotKey"):
-        cid = (node.findtext("ID") or "").strip()
-        code = (node.findtext("Code") or "").strip()
-        if not cid:
-            continue
-        out.append(
-            {
-                "id": cid,
-                "room": (node.findtext("Room") or "").strip(),
-                "code": code,
-                "ctrl": (node.findtext("Ctrl") or "").strip().lower() == "true",
-                "alt": (node.findtext("Alt") or "").strip().lower() == "true",
-                "shift": (node.findtext("Shift") or "").strip().lower() == "true",
-            }
-        )
-    return out
+        log(f"hotkeys: cannot read {path or 'hotkeys file'}: {exc}")
+        return []
 
 
 def find_trigger_vk(candidates: list[str], path: str | None = None) -> int:

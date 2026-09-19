@@ -13,11 +13,12 @@ import types
 
 
 class FakeCoat:
-    def __init__(self, documents: str):
+    def __init__(self, documents: str, install_root: str | None = None):
         self.calls: list[tuple[str, str]] = []
         self.translations: dict[str, str] = {}
         self.menu_items: dict[str, tuple[str, str]] = {}
         self._documents = documents
+        self._install = install_root or os.path.join(documents, "3DCoat-Install")
         self.ui = types.SimpleNamespace(
             cmd=self._cmd,
             presentInUI=lambda _id: True,
@@ -28,6 +29,7 @@ class FakeCoat:
         )
         self.io = types.SimpleNamespace(
             documents=lambda: self._documents,
+            installPath=lambda: self._install,
             executeScript=self._script,
             step=lambda _n: 0,
         )
@@ -67,17 +69,19 @@ class FakeCoat:
         return [arg for kind, arg in self.calls if kind == "script"]
 
 
-def install_fake_coat(documents: str | None = None, source_dir: str | None = None):
+def install_fake_coat(documents: str | None = None, source_dir: str | None = None,
+                      install_root: str | None = None):
     """Put a fake ``coat`` on sys.modules and return it.
 
-    ``source_dir`` (the coat_side folder) is added to sys.path so ``core`` and
-    ``ui`` import exactly as they do inside 3DCoat.
+    ``source_dir`` (the coat_side folder) is added to sys.path so ``coatmenu.*``
+    imports exactly as it does inside 3DCoat. ``install_root`` stands in for the
+    3DCoat program folder (menu definitions, English.xml).
     """
     documents = documents or os.path.join(os.environ.get("TEMP", "."), "coatmenu-fake-docs")
     if source_dir and source_dir not in sys.path:
         sys.path.insert(0, source_dir)
 
-    fake = FakeCoat(documents)
+    fake = FakeCoat(documents, install_root)
     module = types.ModuleType("coat")
     module.ui = fake.ui
     module.io = fake.io

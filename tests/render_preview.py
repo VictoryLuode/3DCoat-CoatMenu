@@ -26,7 +26,24 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from fake_coat import install_fake_coat  # noqa: E402
 
 DOCS = os.path.join(os.path.expanduser("~"), "Documents")
-FAKE = install_fake_coat(DOCS, COAT_SIDE)
+
+
+def real_install_root() -> str:
+    """3DCoat program folder, read from the marker 3DCoat itself writes.
+
+    Keeps this preview machine-independent: it uses the local install rather than
+    a hard-coded path.
+    """
+    try:
+        with open(os.path.join(DOCS, "3DCoat", "executable.txt"), encoding="utf-8",
+                  errors="replace") as fh:
+            exe = fh.read().strip().splitlines()[0].strip()
+        return os.path.dirname(exe)
+    except Exception:
+        return ""
+
+
+FAKE = install_fake_coat(DOCS, COAT_SIDE, install_root=real_install_root())
 # Never touch the extension's own data folder while rendering previews.
 os.environ["COATMENU_DATA_DIR"] = tempfile.mkdtemp(prefix="coatmenu-preview-")
 
@@ -120,10 +137,10 @@ editor_config = starter_config(DOCS)
 editor_config.add_list("Paint")
 editor = CoatMenuEditor(config=editor_config)
 editor.show_editor()
-editor._source_kind.setCurrentIndex(1)
+editor._source_kind.setCurrentIndex(0)  # the combined 3DCoat command list
 editor.reload_sources()
 editor.move(QPoint(60, 60))
-editor._cursor_local = QPoint(170, 132)
+editor._cursor_layer.set_position(QPoint(170, 132))
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-editor.png"), [editor])
 editor.close_editor()
