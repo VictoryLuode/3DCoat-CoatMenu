@@ -20,6 +20,11 @@ ROW_PADDING_H = 10
 SEPARATOR_HEIGHT = 7
 HEADER_HEIGHT = 20
 TITLE_HEIGHT = 24
+
+# A list taller than this scrolls instead of running off the screen. 3DCoat is
+# used full-screen, and a menu whose last rows are unreachable looks broken.
+MAX_MENU_HEIGHT = 560
+SCROLLBAR_W = 3
 FONT_SIZE = 9          # points, matching LKS's radial menu type size
 FONT_FAMILY = "Segoe UI"
 

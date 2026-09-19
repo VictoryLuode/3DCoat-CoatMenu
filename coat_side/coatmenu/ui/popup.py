@@ -58,6 +58,9 @@ from coatmenu.ui import theme
 
 VK_ESCAPE = 0x1B
 VK_LBUTTON = 0x01
+VK_RETURN = 0x0D
+VK_UP = 0x26
+VK_DOWN = 0x28
 VK_1 = 0x31  # .. VK_9 = 0x39, the digit row (Blender's pie shortcut keys)
 
 
@@ -110,6 +113,10 @@ class MenuPopup(QWidget):
         self._child: "MenuPopup | None" = None
         self._child_index: int = -1
         self._cursor_local: QPoint | None = None
+        self._scroll = 0
+        self._scroll_max = 0
+        self._content_height = 0
+        self._keys_down: dict[int, bool] = {}
         self._dwell = QTimer(self)
         self._dwell.setSingleShot(True)
         self._dwell.setInterval(theme.PIE_DWELL_MS)
@@ -211,7 +218,22 @@ class MenuPopup(QWidget):
             rows.append((y, item, h))
             y += h
         self._rows = rows
-        self.setFixedSize(width + theme.PADDING * 2, y + theme.PADDING)
+        self._content_height = y + theme.PADDING
+        # Cap the panel: a list longer than the screen scrolls (see wheelEvent and
+        # the arrow keys) instead of pushing its last rows out of reach.
+        limit = self._viewport_limit()
+        self.setFixedSize(width + theme.PADDING * 2, min(self._content_height, limit))
+        self._scroll_max = max(0, self._content_height - self.height())
+        self._scroll = max(0, min(self._scroll, self._scroll_max))
+
+    def _viewport_limit(self) -> int:
+        """Tallest the panel may get - whichever is smaller, our cap or the screen."""
+        try:
+            screen = QGuiApplication.primaryScreen()
+            area = screen.availableGeometry()
+            return max(160, min(theme.MAX_MENU_HEIGHT, int(area.height() * 0.85)))
+        except Exception:
+            return theme.MAX_MENU_HEIGHT
 
     def _first_interactive(self) -> int:
         """First row the user can act on (a command *or* a submenu).
@@ -390,10 +412,23 @@ class MenuPopup(QWidget):
             self._mode = mode
 
     def _row_at(self, pos: QPoint) -> int:
+        y_pos = pos.y() + self._scroll
         for idx, (y, _item, h) in enumerate(self._rows):
-            if y <= pos.y() < y + h:
+            if y <= y_pos < y + h:
                 return idx
         return -1
+
+    def _ensure_visible(self, index: int) -> None:
+        """Scroll so the given row is inside the panel (keyboard navigation)."""
+        if not self._scroll_max or not (0 <= index < len(self._rows)):
+            return
+        y, _item, h = self._rows[index]
+        top = theme.PADDING
+        bottom = self.height() - theme.PADDING
+        if y < self._scroll + top:
+            self._scroll = max(0, y - top)
+        elif y + h > self._scroll + bottom:
+            self._scroll = min(self._scroll_max, y + h - bottom)
 
     @staticmethod
     def _event_pos(event) -> QPoint:
@@ -629,6 +664,14 @@ class MenuPopup(QWidget):
             painter.setBrush(QColor(*theme.BG))
             painter.drawRoundedRect(rect, theme.CORNER_RADIUS, theme.CORNER_RADIUS)
 
+            # A scrolling list: rows are drawn at their unscrolled y, shifted here.
+            clipped = self._scroll_max > 0
+            if clipped:
+                painter.save()
+                painter.setClipRect(QRectF(0, theme.PADDING, self.width(),
+                                           self.height() - theme.PADDING * 2))
+                painter.translate(0, -self._scroll)
+
             for idx, (y, item, h) in enumerate(self._rows):
                 if item.kind == SEPARATOR:
                     painter.setPen(QPen(QColor(*theme.SEPARATOR), 1))
@@ -708,6 +751,10 @@ class MenuPopup(QWidget):
                         y + h / 2.0,
                         QColor(*theme.HOVER_TEXT) if highlighted else QColor(*theme.TEXT_DIM),
                     )
+
+            if clipped:
+                painter.restore()
+                self._draw_scrollbar(painter)
 
             self._draw_cursor(painter)
         except Exception:
@@ -855,23 +902,104 @@ class MenuPopup(QWidget):
                 return False
         return True
 
-    def _check_digits(self) -> bool:
-        """Pie only: the 1..9 keys run that button straight away.
+    def _poll_keys(self) -> None:
+        """Arrow keys move the highlight; Enter opens a group or runs the entry.
 
-        Blender prints the shortcut digit on each button and honours it while the
-        pie is open - this is that behaviour.
+        Edge-triggered: the keys are read by polling, so a held key must not race
+        through the whole list.
         """
-        if self._mode != PIE:
-            return False
-        for index in range(min(9, len(self._pie_items))):
+        for vk, delta in ((VK_DOWN, 1), (VK_UP, -1)):
+            down = is_key_down(vk)
+            if down and not self._keys_down.get(vk):
+                self._move_hover(delta)
+            self._keys_down[vk] = down
+
+        enter = is_key_down(VK_RETURN)
+        if enter and not self._keys_down.get(VK_RETURN):
+            self._activate_hover()
+        self._keys_down[VK_RETURN] = enter
+
+    def _move_hover(self, delta: int) -> None:
+        """Move the highlight to the next actionable row / slot."""
+        count = len(self._pie_items) if self._mode == PIE else len(self._rows)
+        if not count:
+            return
+        index = self._hover
+        for _step in range(count):
+            index = (index + delta) % count
+            if self._is_actionable(index):
+                self._hover = index
+                self._ensure_visible(index)
+                self.update()
+                return
+
+    def _activate_hover(self) -> None:
+        """Enter: unfold a group, otherwise run the highlighted entry."""
+        index = self._hover
+        item = self._item_at_index(index)
+        if item is None:
+            return
+        if item.is_branch and not (self._mode == PIE and self._slot_expanded(index)):
+            self._open_child(index)
+            return
+        if item.clickable:
+            self.dismiss()
+            run_item(item)
+
+    def _is_actionable(self, index: int) -> bool:
+        item = self._item_at_index(index)
+        return item is not None and (item.clickable or item.is_branch)
+
+    def _digit_target(self, index: int) -> MenuItem | None:
+        """The entry the N-th digit points at (slot in a pie, row in a list)."""
+        if self._mode == PIE:
+            targets = self._slot_targets(index)
+            return targets[0] if targets else None
+        actionable = [i for i in range(len(self._rows)) if self._is_actionable(i)]
+        if index >= len(actionable):
+            return None
+        return self._item_at_index(actionable[index])
+
+    def _check_digits(self) -> bool:
+        """The 1..9 keys run the N-th entry.
+
+        In a pie the digit is printed on the slot button (Blender's shortcut); in
+        a list it is the N-th actionable row - not printed, to stay close to
+        3DCoat's own menu look.
+        """
+        for index in range(min(9, self._count_items())):
             if is_key_down(VK_1 + index):
-                targets = self._slot_targets(index)
-                item = targets[0] if targets else None
+                item = self._digit_target(index)
                 self.dismiss()
                 if item is not None and item.clickable:
                     run_item(item)
                 return True
         return False
+
+    def _draw_scrollbar(self, painter: QPainter) -> None:
+        """Thin indicator on the right: this panel holds more than it shows."""
+        track_h = self.height() - theme.PADDING * 2
+        if track_h <= 0 or self._content_height <= 0 or not self._scroll_max:
+            return
+        thumb_h = max(24.0, track_h * self.height() / self._content_height)
+        travel = max(0.0, track_h - thumb_h)
+        top = theme.PADDING + travel * (self._scroll / self._scroll_max)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(*theme.BORDER))
+        painter.drawRoundedRect(
+            QRectF(self.width() - theme.PADDING - theme.SCROLLBAR_W + 1, top,
+                   float(theme.SCROLLBAR_W), thumb_h),
+            1.5, 1.5,
+        )
+
+    def wheelEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        """Mouse wheel scrolls a long list (a pie never scrolls)."""
+        if self._mode == PIE or not self._scroll_max:
+            return
+        steps = event.angleDelta().y() / 120.0
+        self._scroll = max(0, min(self._scroll_max,
+                                  int(self._scroll - steps * theme.ROW_HEIGHT * 2)))
+        self.update()
 
     def _on_poll(self) -> None:
         """Per-frame health check: Escape and clicks outside close the menu.
@@ -895,6 +1023,7 @@ class MenuPopup(QWidget):
             if is_key_down(VK_ESCAPE):
                 self.dismiss()
                 return
+            self._poll_keys()
             if self._check_digits():
                 return
             if self._click_outside():

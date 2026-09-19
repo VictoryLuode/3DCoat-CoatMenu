@@ -253,6 +253,23 @@ check(panel is not None and not panel.isVisible(), "closing the editor closes th
 check(editor._preview is None, "and forgets it")
 editor.show_editor()
 
+print("== un-saved edits are marked in the title strip ==")
+editor._dirty = False
+editor._refresh_title()
+check("*" not in editor._title_label.text(), f"clean title ({editor._title_label.text()!r})")
+editor.add_separator()
+check("*" in editor._title_label.text(),
+      f"an edit marks the title ({editor._title_label.text()!r})")
+editor.save()
+check("*" not in editor._title_label.text(), "saving clears the mark")
+
+print("== the delete key removes the selected row ==")
+editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
+rows_before_delete = editor._tree.topLevelItemCount()
+editor.keyPressEvent(type("E", (), {"key": lambda _s: Qt.Key_Delete})())
+check(editor._tree.topLevelItemCount() == rows_before_delete - 1,
+      f"Delete removed the selected row ({editor._tree.topLevelItemCount()})")
+
 print()
 if failures:
     print(f"EDITOR FAILED ({len(failures)}): " + "; ".join(failures))

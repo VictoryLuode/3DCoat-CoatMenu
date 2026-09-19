@@ -71,6 +71,10 @@ extension builds on this machine)*
   entries, tool presets, scripts), with readable names taken from `English.xml`;
   drag to reorder, double-click to rename, nest submenus, import/export, save &
   apply.
+* **Keyboard and wheel** — a long list scrolls (the panel caps itself so the last
+  rows are always reachable): wheel or `↑`/`↓` to scroll/move, `Enter` opens a
+  group or runs the entry, `1..9` runs the N-th row (in a pie the digit is printed
+  on the slot).
 * **Live preview** — the editor's `Preview` button opens the current list exactly
   as it will appear (list or pie, un-saved edits included). That panel never runs
   anything, so it is safe to poke at the layout while editing.

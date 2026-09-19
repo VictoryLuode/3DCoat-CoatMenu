@@ -68,6 +68,11 @@ def _css() -> str:
     }}
     QPushButton:hover {{ background: rgba(80, 84, 92, 255); }}
     QPushButton:pressed {{ background: rgba(58, 106, 160, 255); }}
+    QPushButton#coatmenuPrimary {{
+        background: rgba(58, 106, 160, 255); border-color: rgba(96, 150, 200, 255);
+        font-weight: bold;
+    }}
+    QPushButton#coatmenuPrimary:hover {{ background: rgba(70, 122, 180, 255); }}
     QPushButton#coatmenuClose {{ padding: 1px 7px; }}
     QLineEdit, QComboBox {{
         color: rgb(228, 228, 228); background: rgba(32, 32, 34, 255);
@@ -133,6 +138,7 @@ class CoatMenuEditor(QWidget):
         self._drag_offset: QPoint | None = None
         self._dirty = False
         self._preview = None
+        self._title_label: QLabel | None = None
 
         self.setObjectName("coatmenuEditor")
         self.setWindowTitle("CoatMenu")
@@ -178,11 +184,22 @@ class CoatMenuEditor(QWidget):
 
         root.addLayout(self._build_footer())
 
+    def _mark_dirty(self) -> None:
+        """Flag un-saved edits and show it in the title strip."""
+        self._dirty = True
+        self._refresh_title()
+
+    def _refresh_title(self) -> None:
+        label = getattr(self, "_title_label", None)
+        if label is not None:
+            label.setText("CoatMenu \u2014 Editor" + ("  *" if self._dirty else ""))
+
     def _build_title_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(8)
         title = QLabel("CoatMenu \u2014 Editor")
         title.setObjectName("coatmenuTitle")
+        self._title_label = title
         row.addWidget(title)
         row.addStretch(1)
         self._status = QLabel("")
@@ -288,6 +305,7 @@ class CoatMenuEditor(QWidget):
 
         self._source_list = QListWidget()
         self._source_list.itemDoubleClicked.connect(lambda _i: self.add_source_item())
+        self._source_list.setToolTip("double-click (or Add \u2192) to append to the list")
         box.addWidget(self._source_list, 1)
 
         add = QPushButton("Add \u2192")
@@ -315,6 +333,8 @@ class CoatMenuEditor(QWidget):
             ("Save & apply", self.save),
         ):
             button = QPushButton(label)
+            if label.startswith("Save"):
+                button.setObjectName("coatmenuPrimary")
             button.clicked.connect(slot)
             row.addWidget(button)
         return row
@@ -398,6 +418,19 @@ class CoatMenuEditor(QWidget):
     # ------------------------------------------------------------------
     # live preview
     # ------------------------------------------------------------------
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        """Delete removes the selected row, Escape closes the editor."""
+        try:
+            if event.key() == Qt.Key_Delete:
+                self.remove_row()
+                return
+            if event.key() == Qt.Key_Escape:
+                self.close_editor()
+                return
+        except Exception:
+            log("editor.keyPressEvent failed", exc=True)
+        super().keyPressEvent(event)
 
     def preview_list(self) -> None:
         """Show the current rows exactly as the menu will open them.
@@ -584,7 +617,7 @@ class CoatMenuEditor(QWidget):
         text = node.text(0).strip()
         if kind == HEADER and text.startswith("[") and text.endswith("]"):
             node.setText(0, text[1:-1])
-        self._dirty = True
+        self._mark_dirty()
         self.set_status("edited (remember to Save & apply)")
 
     def tree_to_items(self) -> list[MenuItem]:
@@ -629,7 +662,7 @@ class CoatMenuEditor(QWidget):
             parent.setExpanded(True)
         else:
             self._tree.addTopLevelItem(node)
-        self._dirty = True
+        self._mark_dirty()
         self.set_status(f"Added {label}")
 
     def add_submenu(self) -> None:
@@ -640,16 +673,16 @@ class CoatMenuEditor(QWidget):
         else:
             self._tree.addTopLevelItem(node)
         self._tree.setCurrentItem(node)
-        self._dirty = True
+        self._mark_dirty()
         self.set_status("Submenu added - double-click to rename")
 
     def add_header(self) -> None:
         self._tree.addTopLevelItem(self._node_for(MenuItem(label="Section", kind=HEADER)))
-        self._dirty = True
+        self._mark_dirty()
 
     def add_separator(self) -> None:
         self._tree.addTopLevelItem(self._node_for(MenuItem(kind=SEPARATOR)))
-        self._dirty = True
+        self._mark_dirty()
 
     def remove_row(self) -> None:
         node = self._tree.currentItem()
@@ -661,7 +694,7 @@ class CoatMenuEditor(QWidget):
             self._tree.takeTopLevelItem(self._tree.indexOfTopLevelItem(node))
         else:
             parent.removeChild(node)
-        self._dirty = True
+        self._mark_dirty()
 
     # ------------------------------------------------------------------
     # sources
@@ -721,6 +754,7 @@ class CoatMenuEditor(QWidget):
             info = lists.save_config(config)
             self._config = config
             self._dirty = False
+            self._refresh_title()
             self.reload_lists()
             if self._preview is not None:
                 # Keep the preview honest: the rows may have just changed.

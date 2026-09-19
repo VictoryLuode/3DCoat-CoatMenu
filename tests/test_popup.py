@@ -378,6 +378,53 @@ expected = ["$SCULPT_TRANSFORM", "$SCULP_PRIM", "$VoxelSculptTool::prm_CubPrim"]
 check(FAKE.commands_run() == expected,
       f"all three commands ran, in order ({FAKE.commands_run()})")
 
+print("== long lists scroll; arrows and Enter drive the menu ==")
+long_rows = [MenuItem(label=f"Entry {i:02d}", kind=COMMAND, cid=f"CMD{i}")
+             for i in range(40)]
+manager.show_menu(long_rows, anchor=QPoint(120, 120), title="Long")
+widget = manager.popup
+app.processEvents()
+check(widget.height() <= theme.MAX_MENU_HEIGHT, f"the panel is capped ({widget.height()}px)")
+check(widget._content_height > widget.height(), "the rows are taller than the panel")
+check(widget._scroll_max > 0, f"so it knows it must scroll ({widget._scroll_max}px)")
+
+check(widget._row_at(QPoint(10, 10)) == 0, "the first row is reachable before scrolling")
+widget.wheelEvent(type("E", (), {"angleDelta": lambda _s: QPoint(0, -120)})())
+check(widget._scroll > 0, f"the wheel scrolls ({widget._scroll}px)")
+widget._scroll = 0
+
+kept_key_down = popup.is_key_down
+start = widget._hover
+popup.is_key_down = lambda vk: vk == popup.VK_DOWN
+widget._on_poll()
+popup.is_key_down = lambda _vk: False
+widget._on_poll()
+check(widget._hover == start + 1, f"down-arrow moved the highlight ({widget._hover})")
+popup.is_key_down = lambda vk: vk == popup.VK_UP
+widget._on_poll()
+popup.is_key_down = lambda _vk: False
+widget._on_poll()
+check(widget._hover == start, f"up-arrow came back ({widget._hover})")
+
+FAKE.calls.clear()
+popup.is_key_down = lambda vk: vk == popup.VK_RETURN
+widget._on_poll()
+popup.is_key_down = kept_key_down
+check(FAKE.commands_run() == ["$CMD0"],
+      f"enter ran the highlighted row ({FAKE.commands_run()})")
+check(not widget.isVisible(), "and the menu closed")
+
+print("== a digit also works in a list (same indexing as the pie) ==")
+manager.show_menu(long_rows, anchor=QPoint(120, 120), title="Long")
+widget = manager.popup
+app.processEvents()
+FAKE.calls.clear()
+popup.is_key_down = lambda vk: vk == popup.VK_1 + 2  # the "3" key
+widget._on_poll()
+popup.is_key_down = kept_key_down
+check(FAKE.commands_run() == ["$CMD2"],
+      f"digit 3 ran the third row ({FAKE.commands_run()})")
+
 print()
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))
