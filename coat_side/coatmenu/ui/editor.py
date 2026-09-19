@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, lists
 from coatmenu.core.config import MenuConfig, MenuList, item_to_json
 from coatmenu.core.log import log
@@ -416,16 +417,36 @@ class CoatMenuEditor(QWidget):
         return None
 
     def reload_lists(self) -> None:
+        # Read the bindings first: the editor is where a missing key or two lists
+        # fighting over one key should become visible.
+        self._bindings = bindings_mod.describe(self._config)
         self._list_combo.blockSignals(True)
         self._list_combo.clear()
         for lst in self._config.lists:
-            self._list_combo.addItem(f"{lst.name}  ({len(lst.items)})")
+            key = self._bindings.for_list(lst.name)
+            self._list_combo.addItem(
+                f"{lst.name}  ({len(lst.items)})" + (f"  [{key}]" if key else "")
+            )
         self._index = min(self._index, max(0, len(self._config.lists) - 1))
         self._list_combo.setCurrentIndex(self._index)
         self._list_combo.blockSignals(False)
+        self._list_combo.setToolTip(self._bindings_tooltip())
         self.refresh_tree()
         self._sync_mode_combo()
         self.set_status("")
+        if self._bindings.conflicts:
+            self.set_status("Hotkey clash: " + "; ".join(self._bindings.conflicts))
+
+    def _bindings_tooltip(self) -> str:
+        """Keys per list, plus any clashes - survives later status messages."""
+        lines = [
+            f"{lst.name}: {self._bindings.for_list(lst.name) or 'unbound - bind it in Preferences > Hotkeys'}"
+            for lst in self._config.lists
+        ]
+        if self._bindings.conflicts:
+            lines.append("")
+            lines.extend(self._bindings.conflicts)
+        return "\n".join(lines)
 
     def select_list(self, index: int) -> None:
         if index < 0:

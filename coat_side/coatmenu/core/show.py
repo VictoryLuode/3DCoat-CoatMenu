@@ -16,7 +16,7 @@ from coatmenu.core.config import MenuConfig
 from coatmenu.core.hotkeys import find_trigger_vk
 from coatmenu.core.lists_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
 from coatmenu.core.log import log
-from coatmenu.core.menu_model import MenuItem, separator, submenu
+from coatmenu.core.menu_model import MenuItem, header, separator, submenu
 from coatmenu.ui import popup
 
 # Main entry id/label (kept as module constants for callers and tests).
@@ -77,6 +77,18 @@ def show_main_menu(script_path: str = "") -> None:
         log("show_main_menu failed", exc=True)
 
 
+def list_rows(target) -> list[MenuItem]:
+    """Rows to draw for one configured list.
+
+    An empty list would open an invisible panel and look like a bug, so it gets a
+    single dim hint row instead.
+    """
+    items = list(target.items)
+    if not items:
+        items = [header("this list is empty - use Edit lists to fill it")]
+    return items
+
+
 def show_list(key: str, script_path: str = "") -> None:
     """Show one configured list flat (called by its generated launcher)."""
     try:
@@ -90,8 +102,9 @@ def show_list(key: str, script_path: str = "") -> None:
         if script_path:
             candidates.append("execute:" + script_path)
         vk = find_trigger_vk(candidates)
-        log(f"show_list: {target.name} ({len(target.items)} rows), trigger_vk={vk}")
-        popup.show_menu(target.items, trigger_vk=vk, title=target.name, mode=target.mode)
+        items = list_rows(target)
+        log(f"show_list: {target.name} ({len(items)} rows), trigger_vk={vk}")
+        popup.show_menu(items, trigger_vk=vk, title=target.name, mode=target.mode)
     except Exception:
         log("show_list failed", exc=True)
 

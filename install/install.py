@@ -200,7 +200,7 @@ def install(documents: str) -> int:
     if stale:
         print(f"  stale removed  : {', '.join(stale)}")
     print(f"  lists          : {info['lists']} ({', '.join(lst.name for lst in config.lists)})")
-    print(f"  menu items     : {info['lists'] + 2} written to {p['menu_xml']}")
+    print(f"  menu items     : {info['lists'] + 3} written to {p['menu_xml']}")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
     print("then use Scripts > CoatMenu > Show CoatMenu. Every list can get its own")

@@ -2,9 +2,9 @@
 CoatMenu - hotkey lookup.
 
 3DCoat stores every binding in ``UserPrefs/Preferences/Options_Hotkeys.xml``.
-We only ever **read** it. The whole point of reading it is the "hold to open,
-release to run" interaction: when the overlay opens we need to know which
-physical key the user is currently holding so we can watch for the release.
+We only ever **read** it. It tells us which key launches a given menu, which is
+what the editor shows next to each list (and how two lists bound to one key are
+caught). Nothing in CoatMenu ever depends on a key being held down.
 
 Two ids can exist for the same script:
 

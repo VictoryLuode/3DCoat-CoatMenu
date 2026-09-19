@@ -127,10 +127,11 @@ check("_schedule_self_removal" in source,
 
 with open(xml_path, encoding="utf-8") as fh:
     xml = fh.read()
-check(xml.count("<ExtraMenuItem>") == 4,
-      f"main entry + editor + one per list ({xml.count('<ExtraMenuItem>')})")
+check(xml.count("<ExtraMenuItem>") == 5,
+      f"main entry + editor + doctor + one per list ({xml.count('<ExtraMenuItem>')})")
 check("<MenuItem>CoatMenu_Show</MenuItem>" in xml, "main entry registered")
 check("<MenuItem>CoatMenu_Editor</MenuItem>" in xml, "editor entry registered")
+check("<MenuItem>CoatMenu_Doctor</MenuItem>" in xml, "doctor entry registered")
 check("<MenuItem>CoatMenu_List_Sculpt</MenuItem>" in xml, "list entry registered")
 check(f"<Command>script:{registry._posix(sculpt_script)}</Command>" in xml, "absolute posix script path")
 
@@ -197,6 +198,51 @@ check(back.cmds == sphere.cmds, f"sequences survive a JSON round trip ({back.cmd
 check(round_trip.find("Prims").preset == "prims/2", "the preset marker survives too")
 check(isinstance(round_trip.to_json()["lists"][0]["items"][0], dict),
       "a multi-command row is written as an object, not a bare id")
+
+print("== key bindings, clashes and the doctor report ==")
+from coatmenu.core import bindings as bindings_mod  # noqa: E402
+from coatmenu.core import doctor  # noqa: E402
+from coatmenu.core import show as show_mod  # noqa: E402
+
+hotkeys_file = os.path.join(DOCS, "3DCoat", "UserPrefs", "Preferences", "Options_Hotkeys.xml")
+os.makedirs(os.path.dirname(hotkeys_file), exist_ok=True)
+bind_cfg = MenuConfig(lists=[
+    MenuList(name="Sculpt"),
+    MenuList(name="Paint"),
+    MenuList(name="Prims"),
+])
+with open(hotkeys_file, "w", encoding="utf-8") as fh:
+    fh.write(
+        '<AppOptions><HotKeys>\n'
+        '\t<OneHotKey><ID>CoatMenu_List_Sculpt</ID><Room>Voxels</Room><Code>Q</Code>'
+        '<Ctrl>true</Ctrl></OneHotKey>\n'
+        '\t<OneHotKey><ID>CoatMenu_List_Paint</ID><Room>Voxels</Room><Code>Q</Code>'
+        '<Ctrl>true</Ctrl></OneHotKey>\n'
+        '\t<OneHotKey><ID>CoatMenu_List_Prims</ID><Room>Voxels</Room><Code>key_00</Code>'
+        '</OneHotKey>\n'
+        '</HotKeys></AppOptions>\n'
+    )
+seen = bindings_mod.describe(bind_cfg, hotkeys_file)
+check(seen.for_list("Sculpt") == "Ctrl+Q", f"binding read as Ctrl+Q ({seen.for_list('Sculpt')})")
+check(seen.for_list("Prims") == "", "an unbound list reports nothing")
+check(len(seen.conflicts) == 1 and "Sculpt" in seen.conflicts[0],
+      f"two lists on one key are flagged ({seen.conflicts})")
+check(bindings_mod.key_label("key_00") == "", "the unbound placeholder has no label")
+check(bindings_mod.key_label("ENTER") == "Enter", "named keys get readable labels")
+
+text = doctor.report(bind_cfg)
+check("CoatMenu doctor" in text, "the doctor writes a titled report")
+check("Sculpt" in text and "Ctrl+Q" in text, "the report lists lists and their keys")
+check("command source:" in text, "the report includes the catalog sizes")
+check(doctor.startup_path().endswith("startup.txt"), "the doctor knows the startup file")
+
+empty = MenuList(name="Nothing")
+rows = show_mod.list_rows(empty)
+check(len(rows) == 1 and rows[0].kind == "header",
+      f"an empty list opens a hint row instead of nothing ({rows[0].kind})")
+filled = MenuList(name="Some", items=[MenuItem(label="A", cid="A")])
+check(len(show_mod.list_rows(filled)) == 1 and show_mod.list_rows(filled)[0].label == "A",
+      "a filled list is passed through untouched")
 
 print()
 if failures:

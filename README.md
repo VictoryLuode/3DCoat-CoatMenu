@@ -68,6 +68,10 @@ extension builds on this machine)*
   entries, tool presets, scripts), with readable names taken from `English.xml`;
   drag to reorder, double-click to rename, nest submenus, import/export, save &
   apply.
+* **Diagnostics built in** — the editor shows each list's hotkey next to its name
+  and flags two lists fighting over one key, and `Scripts ▸ CoatMenu ▸
+  CoatMenu_Doctor` writes a full report (paths, startup state, catalog sizes,
+  per-list rows/keys, clashes, log tail) to `data/doctor.txt`.
 * **Shared list format** — the same JSON shape as Krita
   [MenuBelt](https://github.com/VictoryLuode/Krita-MenuBelt), so lists move
   between the two add-ons.
