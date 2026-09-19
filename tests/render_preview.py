@@ -80,10 +80,16 @@ for lst in config.lists:
 
 manager = popup.get_manager()
 
+# Pretend 3DCoat hid the system pointer (brush mode) so the preview shows the
+# overlay's own drawn arrow.
+os.environ["COATMENU_FORCE_CURSOR"] = "0"
+
 # 1. the index
 index_rows = [submenu(lst.name, lst.items) for lst in config.lists]
 manager.show_menu(index_rows, anchor=QPoint(80, 80), title="CoatMenu")
 widget = manager.popup
+app.processEvents()
+widget._cursor_local = QPoint(24, widget._rows[1][0] + 14)
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-popup.png"), [widget])
 
@@ -95,6 +101,7 @@ app.processEvents()
 child = widget._child
 print(f"child panel open: {child is not None}")
 if child is not None:
+    child._cursor_local = QPoint(18, child._rows[0][0] + 12)
     compose(os.path.join(OUT_DIR, "preview-submenu.png"), [widget, child])
 
 # 3. a single list shown flat

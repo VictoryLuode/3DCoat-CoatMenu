@@ -18,6 +18,7 @@ a raised exception here is a crash there.
 from __future__ import annotations
 
 import ctypes
+import os
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import (
@@ -73,6 +74,53 @@ def is_key_down(vk: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Is the real mouse pointer even visible?
+# ---------------------------------------------------------------------------
+
+
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+class _CURSORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("hCursor", ctypes.c_void_p),
+        ("ptScreenPos", _POINT),
+    ]
+
+
+CURSOR_SHOWING = 0x00000001
+
+
+def system_cursor_visible() -> bool:
+    """True when Windows is actually drawing the mouse pointer.
+
+    3DCoat hides the system cursor in brush/pen modes, so the overlay would show
+    no pointer at all while someone is sculpting. In exactly that case we draw
+    our own arrow; when the real pointer is visible we draw nothing, so there is
+    never a double cursor.
+
+    ``COATMENU_FORCE_CURSOR`` overrides the detection (previews, tests).
+    """
+    force = os.environ.get("COATMENU_FORCE_CURSOR")
+    if force:
+        return force.strip().lower() not in ("0", "false", "off", "no")
+    u = _user32()
+    if u is None:
+        return True
+    try:
+        info = _CURSORINFO()
+        info.cbSize = ctypes.sizeof(_CURSORINFO)
+        if not u.GetCursorInfo(ctypes.byref(info)):
+            return True
+        return bool(info.flags & CURSOR_SHOWING)
+    except Exception:
+        return True
+
+
+# ---------------------------------------------------------------------------
 # The widget
 # ---------------------------------------------------------------------------
 
@@ -89,6 +137,7 @@ class MenuPopup(QWidget):
         self._parent = parent_popup
         self._child: "MenuPopup | None" = None
         self._child_row: int = -1
+        self._cursor_local: QPoint | None = None
 
         self.setWindowFlags(
             Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
@@ -148,7 +197,7 @@ class MenuPopup(QWidget):
         self._close_child()
         self._items = list(items)
         self._rebuild_rows()
-        self._hover = self._first_clickable()
+        self._hover = self._first_interactive()
 
     def _rebuild_rows(self) -> None:
         rows: list[tuple[int, MenuItem, int]] = []
@@ -173,9 +222,14 @@ class MenuPopup(QWidget):
         self._rows = rows
         self.setFixedSize(width + theme.PADDING * 2, y + theme.PADDING)
 
-    def _first_clickable(self) -> int:
+    def _first_interactive(self) -> int:
+        """First row the user can act on (a command *or* a submenu).
+
+        The index menu consists only of submenu rows, so "first clickable" would
+        leave nothing highlighted and the overlay would look inert.
+        """
         for idx, (_y, item, _h) in enumerate(self._rows):
-            if item.clickable:
+            if item.clickable or item.is_branch:
                 return idx
         return -1
 
@@ -291,6 +345,43 @@ class MenuPopup(QWidget):
 
     # -- painting ---------------------------------------------------------
 
+    def _draw_cursor(self, painter: QPainter) -> None:
+        """Draw our own pointer when 3DCoat has hidden the system one."""
+        pos = self._cursor_local
+        if pos is None or system_cursor_visible():
+            return
+        x, y = float(pos.x()), float(pos.y())
+        arrow = QPainterPath()
+        arrow.moveTo(x, y)
+        arrow.lineTo(x, y + 17.0)
+        arrow.lineTo(x + 4.3, y + 12.7)
+        arrow.lineTo(x + 7.4, y + 18.8)
+        arrow.lineTo(x + 10.3, y + 17.3)
+        arrow.lineTo(x + 7.2, y + 11.4)
+        arrow.lineTo(x + 12.8, y + 11.0)
+        arrow.closeSubpath()
+        painter.setPen(QPen(QColor(18, 18, 18, 235), 1.4))
+        painter.setBrush(QColor(252, 252, 252, 250))
+        painter.drawPath(arrow)
+
+    def _sync_cursor(self) -> None:
+        """Follow the real pointer position (driven by the poll timer).
+
+        Needed because a hidden system cursor gives no feedback at all: the mouse
+        can sit still, and the overlay still has to show where it is.
+        """
+        try:
+            from PySide6.QtGui import QCursor
+            screen_pos = QCursor.pos()
+        except Exception:
+            return
+        for panel in self.child_panels():
+            local = panel.mapFromGlobal(screen_pos)
+            value = local if panel.rect().contains(local) else None
+            if value != panel._cursor_local:
+                panel._cursor_local = value
+                panel.update()
+
     def _draw_arrow(self, painter: QPainter, centre_y: float, colour: QColor) -> None:
         """Right-pointing triangle for submenu rows.
 
@@ -395,6 +486,8 @@ class MenuPopup(QWidget):
                         y + h / 2.0,
                         QColor(*theme.HOVER_TEXT) if highlighted else QColor(*theme.TEXT_DIM),
                     )
+
+            self._draw_cursor(painter)
         except Exception:
             log("popup.paintEvent failed", exc=True)
         finally:
@@ -404,7 +497,9 @@ class MenuPopup(QWidget):
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         self._cancel_grace()
-        idx = self._row_at(self._event_pos(event))
+        pos = self._event_pos(event)
+        self._cursor_local = pos
+        idx = self._row_at(pos)
         if idx != self._hover:
             self._hover = idx
             self.update()
@@ -433,12 +528,19 @@ class MenuPopup(QWidget):
         run_item(item)
 
     def leaveEvent(self, _event) -> None:  # noqa: N802
-        self._hover = self._first_clickable()
+        self._hover = self._first_interactive()
+        self._cursor_local = None
         self.update()
         self._start_grace()
 
     def enterEvent(self, _event) -> None:  # noqa: N802
         self._cancel_grace()
+        try:
+            from PySide6.QtGui import QCursor
+            local = self.mapFromGlobal(QCursor.pos())
+            self._cursor_local = local if self.rect().contains(local) else None
+        except Exception:
+            self._cursor_local = None
 
     # -- lifecycle --------------------------------------------------------
 
@@ -482,6 +584,7 @@ class MenuPopup(QWidget):
         try:
             if self.is_child:
                 return
+            self._sync_cursor()
             if is_key_down(VK_ESCAPE):
                 self.dismiss()
                 return
