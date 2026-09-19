@@ -58,9 +58,7 @@ from coatmenu.ui import theme
 
 VK_ESCAPE = 0x1B
 VK_LBUTTON = 0x01
-VK_BACK = 0x08
 VK_RETURN = 0x0D
-VK_SPACE = 0x20
 VK_UP = 0x26
 VK_DOWN = 0x28
 VK_1 = 0x31  # .. VK_9 = 0x39, the digit row (Blender's pie shortcut keys)
@@ -119,7 +117,6 @@ class MenuPopup(QWidget):
         self._scroll_max = 0
         self._content_height = 0
         self._keys_down: dict[int, bool] = {}
-        self._query = ""
         self._press_pos: QPoint | None = None
         self._dwell = QTimer(self)
         self._dwell.setSingleShot(True)
@@ -183,7 +180,6 @@ class MenuPopup(QWidget):
     def set_items(self, items: list[MenuItem]) -> None:
         self._close_child()
         self._items = list(items)
-        self._query = ""
         self._scroll = 0
         if self._mode == PIE:
             self._rebuild_pie()
@@ -203,12 +199,12 @@ class MenuPopup(QWidget):
         """A preview panel never closes itself - the editor owns its lifetime."""
         self._transient = bool(transient)
 
-    def _rebuild_rows(self, items: list[MenuItem] | None = None) -> None:
-        """Lay out the rows. *items* defaults to everything (a search narrows it)."""
+    def _rebuild_rows(self) -> None:
+        """Lay out every row (the geometry the painter and the hit test share)."""
         rows: list[tuple[int, MenuItem, int]] = []
         y = theme.PADDING
         width = 120
-        for item in (self._items if items is None else items):
+        for item in self._items:
             if item.kind == SEPARATOR:
                 h = theme.SEPARATOR_HEIGHT
             elif item.kind == HEADER:
@@ -924,64 +920,8 @@ class MenuPopup(QWidget):
                 return False
         return True
 
-    def _poll_typing(self) -> None:
-        """Blender's type-to-search: letters narrow the open list.
-
-        The overlay never takes keyboard focus (3DCoat must keep seeing keys), so
-        the letters are read the same way the arrows are: by polling, and only on
-        the down edge.
-        """
-        if self._mode != LIST:
-            return
-        for vk in range(0x41, 0x5B):  # A..Z
-            down = is_key_down(vk)
-            if down and not self._keys_down.get(vk):
-                self._type(chr(vk + 0x20))
-            self._keys_down[vk] = down
-
-        space = is_key_down(VK_SPACE)
-        if space and not self._keys_down.get(VK_SPACE):
-            self._type(" ")
-        self._keys_down[VK_SPACE] = space
-
-        back = is_key_down(VK_BACK)
-        if back and not self._keys_down.get(VK_BACK):
-            self._type(None)
-        self._keys_down[VK_BACK] = back
-
-    def _type(self, text: str | None) -> None:
-        """Add a character (or None for backspace) to the query and re-filter."""
-        if text is None:
-            self._query = self._query[:-1]
-        elif len(self._query) < 24:
-            self._query += text
-        else:
-            return
-        self._apply_query()
-
-    def _apply_query(self) -> None:
-        """Show only the rows matching the query (plus a line saying so)."""
-        if self._query:
-            needle = self._query.lower()
-            kept = [item for item in self._items
-                    if needle in (item.label or item.cid).lower()]
-            if kept:
-                kept = [header(f"search: {self._query}")] + kept
-            else:
-                kept = [header(f"search: {self._query}  -  no match, Backspace")]
-        else:
-            kept = list(self._items)
-        self._rebuild_rows(kept)
-        self._hover = self._first_interactive()
-        self._scroll = 0
-        self.update()
-
     def _escape(self) -> None:
-        """Blender-style Escape: drop the search, then close one level at a time."""
-        if self._query:
-            self._query = ""
-            self._apply_query()
-            return
+        """Escape steps back out one level: the child panel first, then the menu."""
         child = self._child
         if child is not None and child.isVisible():
             self._close_child()
@@ -1109,7 +1049,6 @@ class MenuPopup(QWidget):
             if is_key_down(VK_ESCAPE):
                 self._escape()
                 return
-            self._poll_typing()
             self._poll_keys()
             if self._check_digits():
                 return

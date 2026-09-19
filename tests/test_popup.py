@@ -425,47 +425,6 @@ popup.is_key_down = kept_key_down
 check(FAKE.commands_run() == ["$CMD2"],
       f"digit 3 ran the third row ({FAKE.commands_run()})")
 
-print("== type-to-search (Blender's F3 behaviour) ==")
-search_rows = [MenuItem(label=f"Alpha{i}", kind=COMMAND, cid=f"A{i}") for i in range(3)]
-search_rows += [MenuItem(label=f"Beta{i}", kind=COMMAND, cid=f"B{i}") for i in range(3)]
-manager.show_menu(search_rows, anchor=QPoint(120, 120), title="Search")
-widget = manager.popup
-app.processEvents()
-rows_all = len(widget._rows)
-kept_key_poll = popup.is_key_down
-
-popup.is_key_down = lambda vk: vk == 0x42  # the "B" key
-widget._on_poll()
-popup.is_key_down = lambda _vk: False
-widget._on_poll()
-check(widget._query == "b", f"a letter builds the query ({widget._query!r})")
-check(len(widget._rows) < rows_all, f"the list narrowed ({len(widget._rows)} of {rows_all})")
-check(widget._rows[0][1].kind == "header", "a line says what is being searched for")
-check(widget._hover == 1, f"the highlight lands on the first match ({widget._hover})")
-
-popup.is_key_down = lambda vk: vk == popup.VK_BACK
-widget._on_poll()
-popup.is_key_down = lambda _vk: False
-widget._on_poll()
-check(widget._query == "" and len(widget._rows) == rows_all,
-      "backspace widens it again")
-
-popup.is_key_down = lambda vk: vk == 0x42
-widget._on_poll()
-popup.is_key_down = lambda _vk: False
-widget._on_poll()
-popup.is_key_down = lambda vk: vk == popup.VK_ESCAPE
-widget._on_poll()
-popup.is_key_down = lambda _vk: False
-widget._on_poll()
-check(widget._query == "" and widget.isVisible(),
-      "escape drops the search but keeps the menu")
-
-popup.is_key_down = lambda vk: vk == popup.VK_ESCAPE
-widget._on_poll()
-popup.is_key_down = kept_key_poll
-check(not widget.isVisible(), "a second escape closes the menu")
-
 print("== escape closes a submenu before the menu ==")
 manager.show_menu(sub_items, anchor=QPoint(120, 120), title="Levels")
 widget = manager.popup
@@ -481,7 +440,7 @@ check(widget._child is None and widget.isVisible(),
       "first escape closes the child, the menu stays")
 popup.is_key_down = lambda vk: vk == popup.VK_ESCAPE
 widget._on_poll()
-popup.is_key_down = kept_key_poll
+popup.is_key_down = kept_key_down
 check(not widget.isVisible(), "second escape closes the menu")
 
 print()

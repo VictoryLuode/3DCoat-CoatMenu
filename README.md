@@ -46,10 +46,9 @@ extension builds on this machine)*
   focus from 3D-Coat.
 * **Blender-style interaction** — the menu opens under the cursor and **stays**
   after you let the key go: `↑`/`↓` + `Enter` drive it, `1..9` run the N-th entry,
-  **typing narrows the list** (type `smooth`, hit `Enter`), `Esc` steps back out
-  one level at a time (search → submenu → menu), right-click cancels, and entries
-  fire on mouse *release*, so press-drag-release works like Blender's. A click away
-  still reaches 3DCoat.
+  `Esc` steps back out one level at a time (submenu → menu), right-click cancels,
+  and entries fire on mouse *release*, so press-drag-release works like Blender's.
+  A click away still reaches 3DCoat.
 * **Multiple lists, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
   want; each becomes its own entry in 3D-Coat's menu (and so in
   Preferences ▸ Hotkeys).
