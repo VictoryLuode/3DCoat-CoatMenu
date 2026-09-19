@@ -57,6 +57,7 @@ from coatmenu.ui import theme
 # ---------------------------------------------------------------------------
 
 VK_ESCAPE = 0x1B
+VK_1 = 0x31  # .. VK_9 = 0x39, the digit row (Blender's pie shortcut keys)
 
 
 def _user32():
@@ -95,6 +96,8 @@ class MenuPopup(QWidget):
         self._mode = mode if mode in (LIST, PIE) else LIST
         self._items: list[MenuItem] = []
         self._pie_items: list[MenuItem] = []
+        self._pie_rects: list[QRectF] = []
+        self._slot_distance: float = float(theme.PIE_SLOT_DISTANCE)
         self._rows: list[tuple[int, MenuItem, int]] = []  # (y, item, height)
         self._title: str = ""
         self._hover: int = -1
@@ -219,47 +222,78 @@ class MenuPopup(QWidget):
     # -- pie geometry -----------------------------------------------------
 
     def _rebuild_pie(self) -> None:
+        """Lay the buttons out around the centre - Blender's pie, not a wheel.
+
+        Each item gets a rounded button whose centre sits ``PIE_SLOT_DISTANCE``
+        away from the middle in its own direction. The geometry is kept as rects
+        so the painter and the hit test cannot drift apart.
+        """
         self._pie_items = [i for i in self._items if i.clickable or i.is_branch]
-        size = int(theme.PIE_RADIUS * 2 + theme.PADDING * 2)
         self._rows = []
+        self._pie_rects = []
+        count = len(self._pie_items)
+        min_size = int(2 * (theme.PIE_SLOT_DISTANCE + theme.PIE_CENTRE_RING
+                            + theme.PADDING))
+        if not count:
+            self.setFixedSize(min_size, min_size)
+            return
+
+        metrics = QFontMetrics(self._font)
+        sizes: list[tuple[float, float]] = []
+        for item in self._pie_items:
+            text = item.label or item.cid
+            room = theme.PIE_DIGIT_HINT_W + theme.PADDING * 3
+            width = metrics.horizontalAdvance(text) + room
+            width = max(theme.PIE_BUTTON_MIN_W, min(theme.PIE_BUTTON_MAX_W, float(width)))
+            sizes.append((width, float(theme.PIE_SLOT_HEIGHT)))
+
+        half = max(max(w for w, _h in sizes) / 2.0, theme.PIE_CENTRE_RING / 2.0)
+        widest = max(w for w, _h in sizes)
+        # Push the ring out until neighbouring buttons cannot touch: at N slots
+        # the distance between two button centres is 2*R*sin(pi/N), so R has to
+        # clear the widest button. Blender grows its pie the same way.
+        gap = math.sin(math.pi / count) if count > 1 else 1.0
+        needed = widest / (2.0 * gap) if count > 1 else 0.0
+        self._slot_distance = max(float(theme.PIE_SLOT_DISTANCE), needed * 1.06)
+        size = int(2 * (self._slot_distance + half + theme.PADDING))
         self.setFixedSize(size, size)
 
-    def _pie_metrics(self) -> tuple[float, float, float, float]:
-        cx = self.width() / 2.0
-        cy = self.height() / 2.0
-        r_out = float(theme.PIE_RADIUS)
-        return cx, cy, r_out, float(theme.PIE_DEAD_ZONE)
+        cx = cy = size / 2.0
+        for index, (width, height) in enumerate(sizes):
+            angle = math.radians(self._slot_angle(index))
+            dx = math.sin(angle) * self._slot_distance
+            dy = -math.cos(angle) * self._slot_distance
+            self._pie_rects.append(
+                QRectF(cx + dx - width / 2.0, cy + dy - height / 2.0, width, height)
+            )
 
-    def _segment_mid_angle(self, index: int) -> float:
-        """Angle of a segment's centre: 0 deg = straight up, increasing clockwise.
+    def _centre_point(self) -> QPointF:
+        return QPointF(self.width() / 2.0, self.height() / 2.0)
 
-        Both the painter and the hit test go through this one convention, so the
-        wedge you point at is the wedge that lights up.
+    def _slot_angle(self, index: int) -> float:
+        """Direction of a slot: 0 deg = straight up, increasing clockwise.
+
+        The painter, the hit test and the submenu placement all use this, so the
+        button you point at is the button that lights up.
         """
         span = 360.0 / max(1, len(self._pie_items))
         return (index + 0.5) * span
 
-    def _segment_centre(self, index: int, radius: float | None = None) -> QPoint:
-        """Widget coordinates of a segment's centre (used for the pointer, dots)."""
-        cx, cy, r_out, r_in = self._pie_metrics()
-        if radius is None:
-            radius = (r_in + r_out) / 2.0
-        angle = math.radians(self._segment_mid_angle(index))
-        return QPoint(int(cx + math.sin(angle) * radius),
-                      int(cy - math.cos(angle) * radius))
+    def _slot_rect(self, index: int) -> QRectF:
+        if 0 <= index < len(self._pie_rects):
+            return self._pie_rects[index]
+        return QRectF()
+
+    def _slot_centre(self, index: int) -> QPoint:
+        rect = self._slot_rect(index)
+        return QPoint(int(rect.center().x()), int(rect.center().y()))
 
     def _pie_index_at(self, pos: QPoint) -> int:
-        items = self._pie_items
-        if not items:
-            return -1
-        cx, cy, r_out, r_in = self._pie_metrics()
-        dx, dy = pos.x() - cx, pos.y() - cy
-        distance = math.hypot(dx, dy)
-        if distance < r_in or distance > r_out:
-            return -1  # the hole cancels, outside the ring is nothing
-        span = 360.0 / len(items)
-        angle = (math.degrees(math.atan2(dx, -dy))) % 360.0  # 0 = up, clockwise
-        return min(len(items) - 1, int(angle // span))
+        point = QPointF(pos)
+        for index in range(len(self._pie_rects)):
+            if self._slot_rect(index).contains(point):
+                return index
+        return -1
 
     def _item_at_index(self, index: int) -> MenuItem | None:
         if self._mode == PIE:
@@ -357,13 +391,16 @@ class MenuPopup(QWidget):
             area = screen.geometry()
 
         if self._mode == PIE:
-            # Beside the segment, in its own direction, then kept on screen.
-            cx, cy, r_out, _r_in = self._pie_metrics()
-            angle = math.radians(self._segment_mid_angle(index))
-            reach = r_out + 6
-            x = self.x() + cx + math.sin(angle) * reach
-            y = self.y() + cy - math.cos(angle) * reach - child.height() / 2.0
-            x = max(area.left(), min(x, area.right() - child.width()))
+            # Next to its button, on the side pointing away from the centre.
+            anchor = self._slot_centre(index)
+            outward = 26
+            if anchor.x() >= self.width() / 2.0:
+                x = self.x() + anchor.x() + outward
+                x = min(x, area.right() - child.width())
+            else:
+                x = self.x() + anchor.x() - outward - child.width()
+                x = max(x, area.left())
+            y = self.y() + anchor.y() - child.height() / 2.0
             y = max(area.top(), min(y, area.bottom() - child.height()))
             return QPoint(int(x), int(y))
 
@@ -449,72 +486,61 @@ class MenuPopup(QWidget):
         painter.fillPath(path, colour)
 
     def _draw_pie(self, painter: QPainter) -> None:
-        """Radial layout, Blender-style: wedges run from a small dead zone to the rim.
+        """Blender-style pie: rounded buttons around a small centre ring.
 
-        Blender's own numbers (pie_menu_radius 100, pie_menu_threshold 12) mean
-        there is no centre disc and no centre caption: the wedges meet near the
-        middle and leave a 12px hole that selects nothing.
+        Not a wheel of wedges - Blender lays ordinary buttons out radially and
+        paints a ring where the cursor sits, with the shortcut digit on each
+        button. Same rects the hit test uses.
         """
-        items = self._pie_items
-        cx, cy, r_out, r_in = self._pie_metrics()
-        outer = QRectF(cx - r_out, cy - r_out, r_out * 2, r_out * 2)
-        inner = QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2)
+        ring_radius = theme.PIE_CENTRE_RING / 2.0
+        painter.setPen(QPen(QColor(*theme.BORDER), 2))
+        painter.setBrush(QColor(*theme.BG))
+        painter.drawEllipse(self._centre_point(), ring_radius, ring_radius)
 
-        if items:
-            span = 360.0 / len(items)
-            label_font = QFont(self._font)
-            label_font.setPointSize(theme.PIE_LABEL_SIZE)
-            metrics = QFontMetrics(label_font)
-            label_radius = r_in + (r_out - r_in) * 0.68
-            # Keep each label inside its own wedge: whichever is narrower, a share
-            # of the radius or of the arc at that radius. Blender clips labels the
-            # same way, but it ships a 100px pie for short English labels - ours
-            # sits a bit further out so 8 rows still read.
-            arc_width = 2.0 * math.pi * label_radius / len(items)
-            half_width = min(r_out * 0.34, arc_width * 0.50)
-            dot_radius = min(label_radius + 18.0, r_out - 12.0)
+        label_font = QFont(self._font)
+        label_font.setPointSize(theme.PIE_LABEL_SIZE)
+        metrics = QFontMetrics(label_font)
+        hint_font = QFont(self._font)
+        hint_font.setPointSize(max(6, theme.PIE_LABEL_SIZE - 3))
 
-            for index, item in enumerate(items):
-                # Qt measures angles anticlockwise with 0 at 3 o'clock; our
-                # convention is 0 = up, clockwise, so flip and offset here - the
-                # same maths the hit test uses.
-                start_qt = 90.0 - index * span
-                sweep = span - theme.PIE_GAP_DEG
-                path = QPainterPath()
-                path.arcMoveTo(outer, start_qt)
-                path.arcTo(outer, start_qt, -sweep)
-                path.arcTo(inner, start_qt - sweep, sweep)
-                path.closeSubpath()
+        for index, item in enumerate(self._pie_items):
+            rect = self._slot_rect(index)
+            highlighted = index == self._hover and (item.clickable or item.is_branch)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(*(theme.HOVER_BG if highlighted else theme.SEGMENT_BG)))
+            painter.drawRoundedRect(rect, theme.PIE_BUTTON_RADIUS, theme.PIE_BUTTON_RADIUS)
 
-                highlighted = index == self._hover and (item.clickable or item.is_branch)
+            painter.setFont(label_font)
+            if highlighted:
+                painter.setPen(QColor(*theme.HOVER_TEXT))
+            elif item.enabled:
+                painter.setPen(QColor(*theme.TEXT))
+            else:
+                painter.setPen(QColor(*theme.TEXT_DIM))
+            hint = str(index + 1) if index < 9 else ""
+            room = float(theme.PIE_DIGIT_HINT_W) if hint else 0.0
+            text_box = QRectF(rect.left() + theme.PADDING, rect.top(),
+                              max(10.0, rect.width() - room - theme.PADDING * 2),
+                              rect.height())
+            text = metrics.elidedText(item.label or item.cid, Qt.ElideMiddle,
+                                      int(text_box.width()))
+            painter.drawText(text_box, Qt.AlignCenter, text)
+
+            if hint:
+                # Blender prints the shortcut digit on the button; here it is the
+                # 1..9 key that runs this slot while the menu is open.
+                painter.setFont(hint_font)
+                painter.setPen(QColor(*(theme.HOVER_TEXT if highlighted else theme.TEXT_DIM)))
+                hint_box = QRectF(rect.right() - theme.PADDING - room, rect.top(),
+                                  room, rect.height())
+                painter.drawText(hint_box, Qt.AlignCenter, hint)
+
+            if item.is_branch:
+                # A dot in the accent colour instead of a glyph: no font
+                # dependency, and it reads as "there is more this way".
                 painter.setPen(Qt.NoPen)
-                if highlighted:
-                    painter.setBrush(QColor(*theme.HOVER_BG))
-                else:
-                    painter.setBrush(QColor(*theme.SEGMENT_BG))
-                painter.drawPath(path)
-
-                centre = self._segment_centre(index, label_radius)
-                painter.setFont(label_font)
-                if highlighted:
-                    painter.setPen(QColor(*theme.HOVER_TEXT))
-                elif item.enabled:
-                    painter.setPen(QColor(*theme.TEXT))
-                else:
-                    painter.setPen(QColor(*theme.TEXT_DIM))
-                box = QRectF(centre.x() - half_width, centre.y() - 9,
-                             half_width * 2, 18)
-                text = metrics.elidedText(item.label or item.cid, Qt.ElideMiddle,
-                                          int(box.width()))
-                painter.drawText(box, Qt.AlignCenter, text)
-
-                if item.is_branch:
-                    # A dot in the accent colour instead of a glyph: no font
-                    # dependency, and it reads as "there is more this way".
-                    dot = self._segment_centre(index, dot_radius)
-                    painter.setPen(Qt.NoPen)
-                    painter.setBrush(QColor(*theme.ACCENT))
-                    painter.drawEllipse(QPointF(dot.x(), dot.y()), 2.5, 2.5)
+                painter.setBrush(QColor(*theme.ACCENT))
+                painter.drawEllipse(QPointF(rect.left() + 4.0, rect.top() + 4.0), 2.5, 2.5)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
@@ -718,6 +744,23 @@ class MenuPopup(QWidget):
         if value < 1.0 and self.isVisible():
             QTimer.singleShot(theme.FADE_MS // 5, self._fade_tick)
 
+    def _check_digits(self) -> bool:
+        """Pie only: the 1..9 keys run that button straight away.
+
+        Blender prints the shortcut digit on each button and honours it while the
+        pie is open - this is that behaviour.
+        """
+        if self._mode != PIE:
+            return False
+        for index in range(min(9, len(self._pie_items))):
+            if is_key_down(VK_1 + index):
+                item = self._item_at_index(index)
+                self.dismiss()
+                if item is not None and item.clickable:
+                    run_item(item)
+                return True
+        return False
+
     def _on_poll(self) -> None:
         """Per-frame health check: Escape cancels, release-of-trigger runs."""
         try:
@@ -730,6 +773,8 @@ class MenuPopup(QWidget):
             self._sync_cursor()
             if is_key_down(VK_ESCAPE):
                 self.dismiss()
+                return
+            if self._check_digits():
                 return
             if self._trigger_vk and not is_key_down(self._trigger_vk):
                 item = self._deepest_hover()

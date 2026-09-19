@@ -49,10 +49,10 @@ extension builds on this machine)*
   want; each becomes its own entry in 3D-Coat's menu (and so in
   Preferences ▸ Hotkeys).
 * **Rows *or* a pie** — each list opens as a vertical list or as a radial pie
-  (pick per list in the editor). The pie follows Blender's geometry: wedges run
-  from the rim to a 12px dead zone (`pie_menu_threshold`), no centre disc, no
-  centre caption — so you can sweep-and-release without reading, which is the
-  point of a marking menu.
+  (pick per list in the editor). The pie is laid out the way Blender's is:
+  rounded buttons around a small centre ring, each showing its `1..9` shortcut,
+  so you can hit the digit instead of aiming. The ring grows with the label
+  widths (button spacing is `2*R*sin(pi/N)`) so buttons can never overlap.
 * **Multi-step rows** — a row can fire several 3DCoat commands in order, which
   is how primitives work ("neutralise the tool → open the primitive tool → pick
   the shape"). The bundled `Prims` list is a port of the LKS add-on's Add-Prims

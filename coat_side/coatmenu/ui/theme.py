@@ -44,14 +44,18 @@ CURSOR_POLL_MS = 10   # how often a panel re-reads the real pointer position
 ARROW_WIDTH = 5
 ARROW_HEIGHT = 8
 
-# --- radial pie mode (geometry follows Blender's pie menus) ---
-# Blender defaults, read from a live Blender: pie_menu_radius = 100,
-# pie_menu_threshold = 12. The wedges therefore run from a 12px dead zone all
-# the way out to 100px - there is no big centre hole and no centre caption.
-PIE_RADIUS = 120        # outer radius, px (Blender ships 100; a little wider so
-                        # 8x longer labels fit inside their wedge)
-PIE_DEAD_ZONE = 12      # centre radius that selects nothing (Blender: pie_menu_threshold)
-PIE_GAP_DEG = 2.0       # gap between segments
-PIE_DWELL_MS = 160      # hover time on a branch before its submenu opens
-PIE_LABEL_SIZE = 8      # point size for segment labels
-SEGMENT_BG = (52, 54, 58, 235)  # wedge fill (HOVER_BG marks the pointed-at one)
+# --- radial pie mode: Blender's pie layout ---
+# Blender does not draw wedges: it lays *buttons* out around the cursor with a
+# small ring in the middle (see its Shading pie). Measured from Blender's own
+# defaults/prefs: pie_menu_radius = 100 (button centre distance), and a ring of
+# roughly 38px diameter at the centre on a 1.5x UI scale.
+PIE_SLOT_DISTANCE = 100  # distance from the centre to each button's centre
+PIE_SLOT_HEIGHT = 24     # button height, px
+PIE_CENTRE_RING = 38     # centre ring diameter, px
+PIE_BUTTON_RADIUS = 4    # button corner radius (Blender's buttons are rounded)
+PIE_BUTTON_MIN_W = 64    # narrowest button
+PIE_BUTTON_MAX_W = 168   # widest button (long labels elide beyond this)
+PIE_DIGIT_HINT_W = 16    # room reserved for the "1..9" shortcut hint
+PIE_DWELL_MS = 160       # hover time on a branch before its submenu opens
+PIE_LABEL_SIZE = 9       # point size for button labels
+SEGMENT_BG = (52, 54, 58, 235)  # button fill (HOVER_BG marks the pointed-at one)

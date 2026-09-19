@@ -12,6 +12,8 @@ import os
 import sys
 import tempfile
 
+import math
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 COAT_SIDE = os.path.join(ROOT, "coat_side")
@@ -31,6 +33,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 app = QApplication.instance() or QApplication([])
 
 from coatmenu.ui import popup  # noqa: E402
+from coatmenu.ui import theme  # noqa: E402
 from coatmenu.ui.popup import (  # noqa: E402
     COMMAND,
     PIE,
@@ -264,19 +267,29 @@ check(not any(item.kind == TITLE for item in pie._items),
       "a pie has no title row (Blender-style: no centre caption)")
 check(pie._hover == -1, "a pie starts with nothing pre-selected")
 
-cx, cy, r_out, r_in = pie._pie_metrics()
-mid = (r_in + r_out) / 2.0
-check(pie._pie_index_at(QPoint(int(cx), int(cy - mid))) == 0, "top segment is first")
-check(pie._pie_index_at(QPoint(int(cx + mid), int(cy))) == 1, "segments run clockwise")
-check(pie._pie_index_at(QPoint(int(cx), int(cy + mid))) == 2, "bottom segment")
-check(pie._pie_index_at(QPoint(int(cx - mid), int(cy))) == 3, "left segment")
-check(pie._pie_index_at(QPoint(int(cx), int(cy))) == -1, "the dead zone selects nothing")
-check(pie._pie_index_at(QPoint(int(cx) + 6, int(cy))) == -1,
-      "just off centre is still dead (Blender's pie_menu_threshold is 12px)")
-check(pie._pie_index_at(QPoint(int(cx) + 30, int(cy))) == 1, "past the dead zone the wedge is live")
-check(abs(r_in - 12.0) < 0.01, f"dead zone follows Blender's 12px ({r_in})")
-check(pie._pie_index_at(QPoint(int(cx), int(cy - r_out - 20))) == -1,
-      "outside the ring selects nothing")
+centre = pie._centre_point()
+for index, sx, sy in ((0, 1, -1), (1, 1, 1), (2, -1, 1), (3, -1, -1)):
+    point = pie._slot_centre(index)
+    dx = point.x() - centre.x()
+    dy = point.y() - centre.y()
+    check(pie._pie_index_at(point) == index,
+          f"button {index} hit-tests to itself ({pie._pie_index_at(point)})")
+    check(dx * sx > 0 and dy * sy > 0,
+          f"button {index} sits in its own direction ({dx:.0f}, {dy:.0f})")
+    reach = math.hypot(dx, dy)
+    check(abs(reach - pie._slot_distance) < 8,
+          f"button {index} sits one pie radius out ({reach:.0f}px)")
+check(pie._slot_distance > theme.PIE_SLOT_DISTANCE - 1,
+      f"the ring grows past Blender's 100px when labels are wide ({pie._slot_distance:.0f}px)")
+for index in range(len(pie._pie_items)):
+    first = pie._slot_rect(index)
+    second = pie._slot_rect((index + 1) % len(pie._pie_items))
+    check(not first.intersects(second),
+          f"buttons {index} and {(index + 1) % len(pie._pie_items)} do not overlap")
+check(pie._pie_index_at(QPoint(int(centre.x()), int(centre.y()))) == -1,
+      "the centre ring selects nothing")
+check(pie._pie_index_at(QPoint(int(centre.x()), int(centre.y() - 200))) == -1,
+      "empty space between the buttons selects nothing")
 
 pie_shot = pie.grab()
 check(not pie_shot.isNull() and pie_shot.width() > 100,
@@ -292,18 +305,18 @@ pie._hover = 0
 check(pie._deepest_hover() is not None and pie._deepest_hover().cid == "PIE_TOP",
       "release over a segment runs that command")
 
-print("== pie: what is drawn is what is hit (one geometry for both) ==")
-for index in range(len(pie._pie_items)):
-    point = pie._segment_centre(index)
-    check(pie._pie_index_at(point) == index,
-          f"segment {index} centre hits segment {index} (got {pie._pie_index_at(point)})")
-check(pie._segment_centre(0).x() > cx and pie._segment_centre(0).y() < cy,
-      "with four segments the first one runs from the top towards the right")
-check(pie._segment_centre(1).x() > cx and pie._segment_centre(1).y() > cy,
-      "segments run clockwise from the top (second one is bottom-right)")
-pie.dismiss()
-app.processEvents()
-check(not pie.isVisible(), "pie dismissed")
+print("== pie: the digit keys run a button outright (Blender's shortcut hints) ==")
+FAKE.calls.clear()
+real_key_down = popup.is_key_down
+popup.is_key_down = lambda vk: vk == popup.VK_1
+try:
+    handled = pie._check_digits()
+finally:
+    popup.is_key_down = real_key_down
+check(handled, "pressing 1 is handled")
+check(FAKE.commands_run() == ["$PIE_TOP"],
+      f"key 1 ran the first button ({FAKE.commands_run()})")
+check(not pie.isVisible(), "the pie closed after the shortcut ran")
 
 print("== a multi-command row fires its commands in order ==")
 from coatmenu.core.menu_model import sequence  # noqa: E402

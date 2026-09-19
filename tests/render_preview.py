@@ -153,8 +153,8 @@ pie_rows = [
 manager.show_menu(pie_rows, anchor=QPoint(140, 140), title="Sculpt", mode="pie")
 pie = manager.popup
 app.processEvents()
-pie._hover = 3  # the branch, so the preview shows a highlighted segment + dot
-pie._cursor_local = pie._segment_centre(pie._hover)
+pie._hover = 3  # the branch, so the preview shows a highlighted button + dot
+pie._cursor_local = pie._slot_centre(pie._hover)
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-pie.png"), [pie])
 
