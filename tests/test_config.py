@@ -143,6 +143,44 @@ print("== re-sync does not rewrite unchanged launchers ==")
 info = registry.sync(cfg2, ext, entry_dir, xml_path)
 check(info["scripts_written"] == [], "no needless rewrite")
 
+print("== built-in Prims preset (port of the LKS Add-Prims menu) ==")
+from coatmenu.core import presets  # noqa: E402
+
+groups = presets.primitive_groups()
+check([len(rows) for _label, rows in groups] == [12, 5, 8],
+      f"three groups, 12/5/8 entries ({[len(r) for _l, r in groups]})")
+
+preset_list = presets.primitives_list()
+check(preset_list.mode == "list", f"opens as a list ({preset_list.mode})")
+check([i.kind for i in preset_list.items] == ["submenu"] * 3,
+      "one submenu per group")
+
+sphere = preset_list.items[0].children[0]
+check(sphere.label == "Sphere", f"first built-in entry ({sphere.label})")
+check(sphere.cmds == ["$SCULPT_TRANSFORM", "$SCULP_PRIM",
+                      "$VoxelSculptTool::prm_SpherePrim"],
+      f"three-step sequence, same order 3DCoat needs ({sphere.cmds})")
+check(preset_list.items[0].children[1].cmds[-1] == "$VoxelSculptTool::prm_CubPrim",
+      "Cube keeps 3DCoat's own abbreviation (prm_CubPrim)")
+
+mesh = preset_list.items[1].children[0]
+check(mesh.cmds == ["$SCULPT_TRANSFORM", "$SCULP_MERGE",
+                    "$select_UserPrefs/Models/SculptModels/Cube.obj"],
+      f"mesh prims go through the merge tool ({mesh.cmds})")
+check(preset_list.items[2].children[0].cmds[-1] == "$VoxelSculptTool::ffBlob",
+      "FFD entry uses the ff* id")
+
+preset_cfg = MenuConfig()
+check(presets.install_presets(preset_cfg) == ["Prims"], "preset list added")
+check(presets.install_presets(preset_cfg) == [], "adding it twice does nothing")
+check(len(preset_cfg.lists) == 1, "one list after the second call")
+
+round_trip = MenuConfig.from_json(preset_cfg.to_json())
+back = round_trip.find("Prims").items[0].children[0]
+check(back.cmds == sphere.cmds, f"sequences survive a JSON round trip ({back.cmds})")
+check(isinstance(round_trip.to_json()["lists"][0]["items"][0]["items"][0], dict),
+      "a multi-command row is written as an object, not a bare id")
+
 print()
 if failures:
     print(f"CONFIG FAILED ({len(failures)}): " + "; ".join(failures))

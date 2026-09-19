@@ -172,10 +172,12 @@ class MenuPopup(QWidget):
         self._hover = self._first_interactive()
 
     def set_title(self, text: str) -> None:
-        """Centre label (drawn in the pie's hole; lists show it as a title row)."""
+        """List name.
+
+        A list draws it as its first row; a pie has no centre caption (Blender
+        does not draw one either) - the title is kept for tooltips and callers.
+        """
         self._title = text or ""
-        if self._mode == PIE:
-            self.update()
 
     def _rebuild_rows(self) -> None:
         rows: list[tuple[int, MenuItem, int]] = []
@@ -226,7 +228,7 @@ class MenuPopup(QWidget):
         cx = self.width() / 2.0
         cy = self.height() / 2.0
         r_out = float(theme.PIE_RADIUS)
-        return cx, cy, r_out, r_out * theme.PIE_INNER_RATIO
+        return cx, cy, r_out, float(theme.PIE_DEAD_ZONE)
 
     def _segment_mid_angle(self, index: int) -> float:
         """Angle of a segment's centre: 0 deg = straight up, increasing clockwise.
@@ -447,23 +449,30 @@ class MenuPopup(QWidget):
         painter.fillPath(path, colour)
 
     def _draw_pie(self, painter: QPainter) -> None:
-        """Radial layout: one wedge per item, centre hole carries the list name."""
+        """Radial layout, Blender-style: wedges run from a small dead zone to the rim.
+
+        Blender's own numbers (pie_menu_radius 100, pie_menu_threshold 12) mean
+        there is no centre disc and no centre caption: the wedges meet near the
+        middle and leave a 12px hole that selects nothing.
+        """
         items = self._pie_items
         cx, cy, r_out, r_in = self._pie_metrics()
         outer = QRectF(cx - r_out, cy - r_out, r_out * 2, r_out * 2)
         inner = QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2)
-
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(*theme.BG))
-        painter.drawEllipse(outer)
 
         if items:
             span = 360.0 / len(items)
             label_font = QFont(self._font)
             label_font.setPointSize(theme.PIE_LABEL_SIZE)
             metrics = QFontMetrics(label_font)
-            label_radius = (r_out + r_in) / 2.0
-            half_width = r_out * 0.26
+            label_radius = r_in + (r_out - r_in) * 0.68
+            # Keep each label inside its own wedge: whichever is narrower, a share
+            # of the radius or of the arc at that radius. Blender clips labels the
+            # same way, but it ships a 100px pie for short English labels - ours
+            # sits a bit further out so 8 rows still read.
+            arc_width = 2.0 * math.pi * label_radius / len(items)
+            half_width = min(r_out * 0.34, arc_width * 0.50)
+            dot_radius = min(label_radius + 18.0, r_out - 12.0)
 
             for index, item in enumerate(items):
                 # Qt measures angles anticlockwise with 0 at 3 o'clock; our
@@ -502,23 +511,10 @@ class MenuPopup(QWidget):
                 if item.is_branch:
                     # A dot in the accent colour instead of a glyph: no font
                     # dependency, and it reads as "there is more this way".
-                    dot = self._segment_centre(index, label_radius + 14)
+                    dot = self._segment_centre(index, dot_radius)
                     painter.setPen(Qt.NoPen)
                     painter.setBrush(QColor(*theme.ACCENT))
                     painter.drawEllipse(QPointF(dot.x(), dot.y()), 2.5, 2.5)
-
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(*theme.BG))
-        painter.drawEllipse(inner)
-
-        if self._title:
-            painter.setFont(self._bold)
-            painter.setPen(QColor(*theme.ACCENT))
-            painter.drawText(inner, Qt.AlignCenter | Qt.TextWordWrap, self._title)
-
-        painter.setPen(QPen(QColor(*theme.BORDER), theme.BORDER_WIDTH))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(outer)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
@@ -774,7 +770,13 @@ def run_item(item: MenuItem) -> None:
         log(f"run_item: coat import failed: {exc}")
         return
     try:
-        if item.kind == SCRIPT:
+        if item.cmds:
+            # Multi-step action: same frame, same order 3DCoat's own UI uses.
+            for raw in item.cmds:
+                cmd = raw if raw.startswith("$") else "$" + raw
+                coat.ui.cmd(cmd)
+            log(f"ran sequence: {item.cmds}")
+        elif item.kind == SCRIPT:
             coat.io.executeScript(item.path or item.cid)
             log(f"ran script: {item.path or item.cid}")
         else:

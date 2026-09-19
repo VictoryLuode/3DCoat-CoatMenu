@@ -46,6 +46,7 @@ from coatmenu.ui import theme
 
 ROLE_KIND = Qt.UserRole + 1
 ROLE_CID = Qt.UserRole + 2
+ROLE_CMDS = Qt.UserRole + 3
 
 _TITLE_ROW_HEIGHT = 30
 
@@ -494,6 +495,9 @@ class CoatMenuEditor(QWidget):
         node = QTreeWidgetItem([self._label_for(item)])
         node.setData(0, ROLE_KIND, item.kind)
         node.setData(0, ROLE_CID, item.cid or item.path)
+        if item.cmds:
+            node.setData(0, ROLE_CMDS, list(item.cmds))
+            node.setToolTip(0, "runs in order: " + "  ->  ".join(item.cmds))
         flags = node.flags() | Qt.ItemIsEditable
         if item.kind == SUBMENU:
             flags |= Qt.ItemIsDropEnabled
@@ -541,6 +545,9 @@ class CoatMenuEditor(QWidget):
             return MenuItem(label=text, kind=SUBMENU, children=children)
         if kind == SCRIPT:
             return MenuItem(label=text, kind=SCRIPT, path=cid, cid=cid)
+        cmds = node.data(0, ROLE_CMDS) or []
+        if cmds:
+            return MenuItem(label=text, kind=COMMAND, cid=cid, cmds=list(cmds))
         return MenuItem(label=text, kind=COMMAND, cid=cid or text)
 
     def add_source_item(self) -> None:

@@ -44,9 +44,13 @@ CURSOR_POLL_MS = 10   # how often a panel re-reads the real pointer position
 ARROW_WIDTH = 5
 ARROW_HEIGHT = 8
 
-# --- radial pie mode ---
-PIE_RADIUS = 124        # outer radius, px
-PIE_INNER_RATIO = 0.50  # hole in the middle (centre label / click-to-cancel)
+# --- radial pie mode (geometry follows Blender's pie menus) ---
+# Blender defaults, read from a live Blender: pie_menu_radius = 100,
+# pie_menu_threshold = 12. The wedges therefore run from a 12px dead zone all
+# the way out to 100px - there is no big centre hole and no centre caption.
+PIE_RADIUS = 120        # outer radius, px (Blender ships 100; a little wider so
+                        # 8x longer labels fit inside their wedge)
+PIE_DEAD_ZONE = 12      # centre radius that selects nothing (Blender: pie_menu_threshold)
 PIE_GAP_DEG = 2.0       # gap between segments
 PIE_DWELL_MS = 160      # hover time on a branch before its submenu opens
 PIE_LABEL_SIZE = 8      # point size for segment labels

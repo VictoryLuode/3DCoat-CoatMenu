@@ -37,6 +37,7 @@ from coatmenu.ui.popup import (  # noqa: E402
     TITLE,
     MenuItem,
     header,
+    run_item,
     separator,
     submenu,
 )
@@ -258,8 +259,9 @@ pie = manager.popup
 app.processEvents()
 check(pie._mode == PIE, "popup switched to pie mode")
 check(len(pie._pie_items) == 4, f"one segment per item ({len(pie._pie_items)})")
-check(pie._title == "Wheel", "title goes into the centre hole")
-check(not any(item.kind == TITLE for item in pie._items), "a pie has no title row")
+check(pie._title == "Wheel", "the list name is still remembered")
+check(not any(item.kind == TITLE for item in pie._items),
+      "a pie has no title row (Blender-style: no centre caption)")
 check(pie._hover == -1, "a pie starts with nothing pre-selected")
 
 cx, cy, r_out, r_in = pie._pie_metrics()
@@ -268,7 +270,11 @@ check(pie._pie_index_at(QPoint(int(cx), int(cy - mid))) == 0, "top segment is fi
 check(pie._pie_index_at(QPoint(int(cx + mid), int(cy))) == 1, "segments run clockwise")
 check(pie._pie_index_at(QPoint(int(cx), int(cy + mid))) == 2, "bottom segment")
 check(pie._pie_index_at(QPoint(int(cx - mid), int(cy))) == 3, "left segment")
-check(pie._pie_index_at(QPoint(int(cx), int(cy))) == -1, "the centre hole selects nothing")
+check(pie._pie_index_at(QPoint(int(cx), int(cy))) == -1, "the dead zone selects nothing")
+check(pie._pie_index_at(QPoint(int(cx) + 6, int(cy))) == -1,
+      "just off centre is still dead (Blender's pie_menu_threshold is 12px)")
+check(pie._pie_index_at(QPoint(int(cx) + 30, int(cy))) == 1, "past the dead zone the wedge is live")
+check(abs(r_in - 12.0) < 0.01, f"dead zone follows Blender's 12px ({r_in})")
 check(pie._pie_index_at(QPoint(int(cx), int(cy - r_out - 20))) == -1,
       "outside the ring selects nothing")
 
@@ -298,6 +304,16 @@ check(pie._segment_centre(1).x() > cx and pie._segment_centre(1).y() > cy,
 pie.dismiss()
 app.processEvents()
 check(not pie.isVisible(), "pie dismissed")
+
+print("== a multi-command row fires its commands in order ==")
+from coatmenu.core.menu_model import sequence  # noqa: E402
+
+FAKE.calls.clear()
+run_item(sequence("Cube", ["$SCULPT_TRANSFORM", "$SCULP_PRIM",
+                           "$VoxelSculptTool::prm_CubPrim"]))
+expected = ["$SCULPT_TRANSFORM", "$SCULP_PRIM", "$VoxelSculptTool::prm_CubPrim"]
+check(FAKE.commands_run() == expected,
+      f"all three commands ran, in order ({FAKE.commands_run()})")
 
 print()
 if failures:

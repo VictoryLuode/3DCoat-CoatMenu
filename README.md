@@ -26,6 +26,12 @@ that marks a submenu (rest on it for a moment and the child panel unfolds):
 ![CoatMenu pie](docs/preview-pie.png)
 ![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
 
+The `Prims` list (ported from the LKS add-on's Add-Prims menu) and its
+built-in shapes:
+
+![CoatMenu Prims](docs/preview-prims.png)
+![CoatMenu Prims, built-in shapes](docs/preview-prims-builtin.png)
+
 The editor:
 
 ![CoatMenu editor](docs/preview-editor.png)
@@ -43,9 +49,14 @@ extension builds on this machine)*
   want; each becomes its own entry in 3D-Coat's menu (and so in
   Preferences ▸ Hotkeys).
 * **Rows *or* a pie** — each list opens as a vertical list or as a radial pie
-  (pick per list in the editor): 8 wedges, the list name in the middle, the hole
-  cancels. In a pie you can sweep-and-release without reading, which is the point
-  of a marking menu.
+  (pick per list in the editor). The pie follows Blender's geometry: wedges run
+  from the rim to a 12px dead zone (`pie_menu_threshold`), no centre disc, no
+  centre caption — so you can sweep-and-release without reading, which is the
+  point of a marking menu.
+* **Multi-step rows** — a row can fire several 3DCoat commands in order, which
+  is how primitives work ("neutralise the tool → open the primitive tool → pick
+  the shape"). The bundled `Prims` list is a port of the LKS add-on's Add-Prims
+  menu built from exactly that.
 * **Submenus** — a row (or wedge) can open a child panel (nested, hover to open,
   grace timer so diagonal mouse moves don't close it; in a pie a short dwell
   unfolds it).

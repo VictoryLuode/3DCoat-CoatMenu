@@ -109,6 +109,14 @@ def item_from_json(raw) -> MenuItem | None:
         label = str(raw.get("label") or os.path.basename(path) or path).strip()
         return MenuItem(label=label, kind="script", path=path, cid=path)
 
+    if "cmds" in raw:
+        # Multi-step action: a list of command ids fired in order.
+        cmds = [str(c).strip() for c in raw.get("cmds") or [] if str(c).strip()]
+        if not cmds:
+            return None
+        label = str(raw.get("label") or cmds[-1]).strip()
+        return MenuItem(label=label, kind="command", cid=cmds[0], cmds=cmds)
+
     if "id" in raw:
         cid = str(raw.get("id") or "").strip()
         if not cid:
@@ -128,6 +136,8 @@ def item_to_json(item: MenuItem):
         return {"name": item.label, "items": [item_to_json(c) for c in item.children]}
     if item.kind == "script":
         return {"script": item.path or item.cid, "label": item.label}
+    if item.cmds:
+        return {"cmds": list(item.cmds), "label": item.label}
     cid = item.cid or item.label
     if item.label and item.label != cid:
         return {"id": cid, "label": item.label}

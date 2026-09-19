@@ -36,7 +36,7 @@ MENU_LABEL = "Show CoatMenu"
 if SOURCE_DIR not in sys.path:
     sys.path.insert(0, SOURCE_DIR)
 
-from coatmenu.core import lists_registry  # noqa: E402
+from coatmenu.core import lists_registry, presets  # noqa: E402
 from coatmenu.core.config import MenuConfig, starter_config  # noqa: E402
 
 
@@ -178,7 +178,12 @@ def install(documents: str) -> int:
     # 2. launcher scripts + menu XML from the user's config ---------------
     config = _load_or_create_config(p["ext"], documents)
     config_path = os.path.join(p["ext"], "data", "lists.json")
-    if not os.path.exists(config_path):
+    # Built-in presets (the LKS Add-Prims port) land once; an existing list of
+    # the same name is never touched, and anything we do rewrite is backed up.
+    added_presets = presets.install_presets(config)
+    if added_presets and os.path.exists(config_path):
+        shutil.copy2(config_path, f"{config_path}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}")
+    if added_presets or not os.path.exists(config_path):
         config.save(config_path)
     info = lists_registry.sync(
         config,

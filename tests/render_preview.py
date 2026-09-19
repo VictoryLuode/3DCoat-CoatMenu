@@ -167,7 +167,28 @@ if pie._child is not None:
 pie.dismiss()
 app.processEvents()
 
-# 6. the editor panel
+# 6. the Prims preset (a port of the LKS Add-Prims menu) and its first submenu
+from coatmenu.core import presets  # noqa: E402
+
+widget.dismiss()
+app.processEvents()
+manager.show_menu(presets.primitives_list().items, anchor=QPoint(80, 80),
+                  title="Prims", mode="list")
+widget = manager.popup
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-prims.png"), [widget])
+
+prims_branch = widget._first_branch()
+widget._hover = prims_branch
+widget._open_child(prims_branch)
+app.processEvents()
+print(f"prims submenu open: {widget._child is not None}")
+if widget._child is not None:
+    compose(os.path.join(OUT_DIR, "preview-prims-builtin.png"), [widget, widget._child])
+widget.dismiss()
+app.processEvents()
+
+# 7. the editor panel
 from coatmenu.ui.editor import CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)
