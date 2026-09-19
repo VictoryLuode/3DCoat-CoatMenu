@@ -135,6 +135,33 @@ from coatmenu.ui.editor import get_editor  # noqa: E402
 check(get_editor().isVisible(), "editor panel is visible")
 get_editor().close_editor()
 
+print("== a second click runs again (3DCoat caches imports) ==")
+# 3DCoat runs a menu script as exec("import <module name>"), so the module stays
+# in sys.modules unless it removes itself - the bug behind "it worked once".
+import importlib  # noqa: E402
+
+actions_dir = os.path.join(EXT, "actions")
+if actions_dir not in sys.path:
+    sys.path.insert(0, actions_dir)
+
+
+def count_in_log(needle: str) -> int:
+    with open(LOG, encoding="utf-8") as fh:
+        return fh.read().count(needle)
+
+
+sys.modules.pop("CoatMenu_Show", None)
+before = count_in_log("menu item: show")
+importlib.import_module("CoatMenu_Show")
+app.processEvents()
+check("CoatMenu_Show" not in sys.modules,
+      "the entry un-registers itself, so the import cache cannot swallow the next click")
+importlib.import_module("CoatMenu_Show")
+app.processEvents()
+after = count_in_log("menu item: show")
+check(after == before + 2, f"two consecutive clicks both ran ({before} -> {after})")
+popup.hide_menu()
+
 print("== the log tells the story ==")
 with open(LOG, encoding="utf-8") as fh:
     log_text = fh.read()

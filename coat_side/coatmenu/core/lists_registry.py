@@ -39,21 +39,38 @@ _ROOT = os.path.dirname(os.path.dirname(_HERE))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from coatmenu.core.log import log  # noqa: E402
-from coatmenu.core.show import show_list  # noqa: E402
+
+def _schedule_self_removal() -> None:
+    """Let the next click re-run this module.
+
+    3DCoat executes a menu script as ``exec("import <module name>")``, so without
+    this the second click would hit the import cache and do nothing. Two paths,
+    because the extension's per-frame hook may not be running.
+    """
+    try:
+        queue = getattr(sys, "_coatmenu_modules_to_clear", None)
+        if queue is None:
+            queue = set()
+            sys._coatmenu_modules_to_clear = queue
+        queue.add(__name__)
+    except Exception:
+        pass
+    try:
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda name=__name__: sys.modules.pop(name, None))
+    except Exception:
+        pass
 
 
 def main() -> None:
+    from coatmenu.core.log import log
+    from coatmenu.core.show import show_list
     log("menu item: list {slug}")
     show_list({slug!r}, script_path=os.path.abspath(__file__))
 
 
+_schedule_self_removal()
 main()
-
-# Re-runnable on the next click.
-if not hasattr(sys, "_coatmenu_modules_to_clear"):
-    sys._coatmenu_modules_to_clear = set()
-sys._coatmenu_modules_to_clear.add(__name__)
 '''
 
 _MENU_ENTRY = """\t<ExtraMenuItem>

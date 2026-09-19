@@ -39,6 +39,32 @@ def _log_raw(message: str) -> None:
         pass
 
 
+def _schedule_self_removal() -> None:
+    """Arrange for the *next* click of this menu item to run again.
+
+    3DCoat executes a menu script as ``exec("import <module name>")``, so a second
+    click would hit the import cache and silently do nothing. Two independent
+    cleanup paths, because the extension's per-frame hook may not be running:
+
+    * the extension's postprocess queue (when the cExtension is loaded), and
+    * a Qt single-shot, since 3DCoat's own ``QT`` cExtension keeps an event loop
+      pumping either way.
+    """
+    try:
+        queue = getattr(sys, "_coatmenu_modules_to_clear", None)
+        if queue is None:
+            queue = set()
+            sys._coatmenu_modules_to_clear = queue
+        queue.add(__name__)
+    except Exception:
+        pass
+    try:
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda name=__name__: sys.modules.pop(name, None))
+    except Exception:
+        pass
+
+
 def main() -> None:
     try:
         from coatmenu.core.log import log
@@ -52,13 +78,10 @@ def main() -> None:
     show_main_menu(script_path=os.path.abspath(__file__))
 
 
+_schedule_self_removal()
+
 try:
     main()
 except Exception:
     _log_raw("RUN FAILED\n" + traceback.format_exc())
     raise
-
-# Re-runnable on the next click.
-if not hasattr(sys, "_coatmenu_modules_to_clear"):
-    sys._coatmenu_modules_to_clear = set()
-sys._coatmenu_modules_to_clear.add(__name__)

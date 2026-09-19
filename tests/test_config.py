@@ -121,6 +121,8 @@ with open(sculpt_script, encoding="utf-8") as fh:
 check("show_list('Sculpt'" in source, "launcher calls show_list with its slug")
 check("def main()" in source and "\nmain()\n" in source, "launcher is unconditional (no __name__ guard)")
 check("if __name__" not in source, "no __name__ guard in the generated launcher")
+check("_schedule_self_removal" in source,
+      "launcher un-registers itself so a second click runs again")
 
 with open(xml_path, encoding="utf-8") as fh:
     xml = fh.read()
