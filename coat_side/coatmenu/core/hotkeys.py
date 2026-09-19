@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 
-from core.log import log
+from coatmenu.core.log import log
 
 _NAMED_VK = {
     "BACK": 0x08,
@@ -82,7 +82,7 @@ def _normalise_path(path: str) -> str:
 
 def read_bindings(path: str | None = None) -> list[dict]:
     """All bindings, as dicts: id, room, code, ctrl, alt, shift."""
-    from core.catalog import hotkeys_path
+    from coatmenu.core.catalog import hotkeys_path
 
     path = path or hotkeys_path()
     out: list[dict] = []
@@ -137,7 +137,7 @@ def find_trigger_vk(candidates: list[str], path: str | None = None) -> int:
     if not bound:
         return 0
 
-    from ui.popup import is_key_down
+    from coatmenu.ui.popup import is_key_down
 
     for vk in bound:
         if is_key_down(vk):

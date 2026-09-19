@@ -16,9 +16,17 @@ _LOG_PATH: str | None = None
 
 
 def log_path() -> str:
-    """Absolute path of the log file (lazily resolved)."""
+    """Absolute path of the log file (lazily resolved).
+
+    ``COATMENU_LOG_PATH`` overrides it (tests, and hand debugging without
+    touching the real log).
+    """
     global _LOG_PATH
     if _LOG_PATH is None:
+        override = os.environ.get("COATMENU_LOG_PATH")
+        if override:
+            _LOG_PATH = override
+            return _LOG_PATH
         try:
             import coat  # type: ignore
             documents = coat.io.documents()

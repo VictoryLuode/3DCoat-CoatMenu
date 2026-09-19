@@ -27,7 +27,18 @@ if _HERE not in sys.path:
 
 import cPy.cCore  # noqa: E402
 
-from core.log import log  # noqa: E402
+try:
+    from coatmenu.core.log import log  # noqa: E402
+except Exception:  # pragma: no cover - only when the package is broken
+    import traceback
+
+    def log(message: str, exc: bool = False) -> None:
+        try:
+            print(f"[CoatMenu] {message}")
+            if exc:
+                traceback.print_exc()
+        except Exception:
+            pass
 
 EXTENSION_NAME = "CoatMenu"
 
@@ -38,7 +49,7 @@ def _popup():
     Keeping Qt out of the module-level import graph means a Qt problem degrades
     to "no overlay" instead of blocking the extension from loading at all.
     """
-    from ui import popup  # noqa: PLC0415
+    from coatmenu.ui import popup  # noqa: PLC0415
     return popup
 
 
@@ -71,7 +82,7 @@ class CoatMenuExtension(cPy.cCore.cExtension):
 
     def onStartup(self) -> None:
         try:
-            from core import lists
+            from coatmenu.core import lists
             lists.ensure_config()
             lists.register_menu_items(lists.get_config())
         except Exception:
@@ -81,7 +92,7 @@ class CoatMenuExtension(cPy.cCore.cExtension):
     def onBuildMainMenu(self) -> None:
         """Menu labels come from the translation table - make sure ours is in it."""
         try:
-            from core.show import apply_labels
+            from coatmenu.core.show import apply_labels
             apply_labels()
         except Exception:
             pass

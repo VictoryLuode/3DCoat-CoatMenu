@@ -2,32 +2,61 @@
 CoatMenu - menu item entry point.
 
 3DCoat runs this file when the user picks ``Scripts > CoatMenu > Show CoatMenu``
-(or presses the key bound to that item). 3DCoat imports it by module name, so
-the call at the bottom is unconditional.
+(or presses the key bound to that item). 3DCoat imports it by module name, so the
+call at the bottom is unconditional.
 
-The module queues itself for removal from ``sys.modules`` - 3DCoat's
-``CoatMenuExtension.postprocess`` drops it one frame later, otherwise the second
-click would hit the import cache and do nothing.
+Two hard-won details:
+
+* the package imports happen *inside* main(), so a broken import is written to
+  our own log file instead of only appearing in 3DCoat's ``python_error.txt``;
+* the module queues itself for removal from ``sys.modules`` - the extension's
+  ``postprocess`` drops it one frame later, otherwise the second click would hit
+  the import cache and do nothing.
 """
 import os
 import sys
+import traceback
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from core.log import log  # noqa: E402
-from core.show import apply_labels, show_main_menu  # noqa: E402
+
+def _log_raw(message: str) -> None:
+    """Append to CoatMenu.log without importing our package (it may be broken)."""
+    try:
+        path = os.environ.get("COATMENU_LOG_PATH") or os.path.join(
+            os.path.expanduser("~"), "Documents", "3DCoat", "CoatMenu.log"
+        )
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(f"[entry:CoatMenu_Show] {message}\n")
+    except Exception:
+        pass
+    try:
+        print(f"[CoatMenu] {message}")
+    except Exception:
+        pass
 
 
 def main() -> None:
+    try:
+        from coatmenu.core.log import log
+        from coatmenu.core.show import apply_labels, show_main_menu
+    except Exception:
+        _log_raw("IMPORT FAILED\n" + traceback.format_exc())
+        raise
+
     log("menu item: show")
     apply_labels()
     show_main_menu(script_path=os.path.abspath(__file__))
 
 
-main()
+try:
+    main()
+except Exception:
+    _log_raw("RUN FAILED\n" + traceback.format_exc())
+    raise
 
 # Re-runnable on the next click.
 if not hasattr(sys, "_coatmenu_modules_to_clear"):

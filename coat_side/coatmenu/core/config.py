@@ -38,7 +38,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from core.menu_model import (
+from coatmenu.core.menu_model import (
     MenuItem,
     header as header_item,
     separator as separator_item,
@@ -274,7 +274,7 @@ class MenuConfig:
 
 def starter_config(documents: str | None = None) -> MenuConfig:
     """First-run config: real CustomMenu entries, so nothing is dead on arrival."""
-    from core import catalog
+    from coatmenu.core import catalog
 
     root = os.path.join(
         documents or os.path.join(os.path.expanduser("~"), "Documents"),

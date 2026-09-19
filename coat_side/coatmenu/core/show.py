@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import os
 
-from core import lists, paths
-from core.config import MenuConfig
-from core.hotkeys import find_trigger_vk
-from core.lists_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
-from core.log import log
-from core.menu_model import MenuItem, separator, submenu
-from ui import popup
+from coatmenu.core import lists, paths
+from coatmenu.core.config import MenuConfig
+from coatmenu.core.hotkeys import find_trigger_vk
+from coatmenu.core.lists_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
+from coatmenu.core.log import log
+from coatmenu.core.menu_model import MenuItem, separator, submenu
+from coatmenu.ui import popup
 
 # Main entry id/label (kept as module constants for callers and tests).
 MENU_HOTKEY_ID = MAIN_MENU_ID

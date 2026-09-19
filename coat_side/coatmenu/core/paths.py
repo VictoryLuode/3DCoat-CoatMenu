@@ -13,8 +13,13 @@ MENU_XML_NAME = "CoatMenu.xml"
 
 
 def extension_root() -> str:
-    """``<ext>`` - the folder holding CoatMenu.py, core/, ui/, actions/."""
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    """``<ext>`` - the folder holding CoatMenu.py, coatmenu/, actions/.
+
+    (``coatmenu/core/paths.py`` -> coatmenu/core -> coatmenu -> <ext>.)
+    """
+    return os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
 
 
 def data_dir() -> str:

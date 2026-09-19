@@ -36,8 +36,8 @@ MENU_LABEL = "Show CoatMenu"
 if SOURCE_DIR not in sys.path:
     sys.path.insert(0, SOURCE_DIR)
 
-from core import lists_registry  # noqa: E402
-from core.config import MenuConfig, starter_config  # noqa: E402
+from coatmenu.core import lists_registry  # noqa: E402
+from coatmenu.core.config import MenuConfig, starter_config  # noqa: E402
 
 
 def default_documents() -> str:
@@ -96,6 +96,58 @@ def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
     return removed
 
 
+def _remove_stale_dirs(ext_dir: str) -> list[str]:
+    """Delete folders that are not part of the current layout.
+
+    An earlier version shipped ``core/`` and ``ui/`` at the top level - and
+    3DCoat had already generated its own ``.env``/``.vscode`` debug stubs inside
+    them, so "remove if empty" would never get rid of them.
+    """
+    removed: list[str] = []
+    keep_top = {"data", "actions", "coatmenu"}
+
+    for name in sorted(os.listdir(ext_dir)):
+        path = os.path.join(ext_dir, name)
+        if not os.path.isdir(path):
+            continue
+        if name == "__pycache__":
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append("__pycache__/")
+        elif name in keep_top or name.startswith("."):
+            # keep the layout folders, and leave 3DCoat's own dotfolders
+            # (.vscode debug stubs) alone
+            continue
+        else:
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(f"{name}/")
+
+    package = os.path.join(ext_dir, "coatmenu")
+    if os.path.isdir(package):
+        for name in sorted(os.listdir(package)):
+            path = os.path.join(package, name)
+            if not os.path.isdir(path):
+                continue
+            if name == "__pycache__":
+                shutil.rmtree(path, ignore_errors=True)
+            elif name not in ("core", "ui"):
+                shutil.rmtree(path, ignore_errors=True)
+                removed.append(f"coatmenu/{name}/")
+
+    # ...and finally any folder left empty anywhere below the package.
+    for dirpath, dirnames, filenames in os.walk(ext_dir, topdown=False):
+        if dirnames or filenames:
+            continue
+        rel = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
+        if rel in (".", "data", "actions", "actions/lists", "coatmenu", "coatmenu/core", "coatmenu/ui"):
+            continue
+        try:
+            os.rmdir(dirpath)
+            removed.append(f"{rel}/")
+        except OSError:
+            pass
+    return removed
+
+
 def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
     """Config from the installed copy when it exists, else a fresh starter."""
     path = os.path.join(ext_dir, "data", "lists.json")
@@ -121,6 +173,7 @@ def install(documents: str) -> int:
         shutil.copy2(src, dst)
         copied += 1
     stale = _prune_stale(p["ext"], {rel.replace("\\", "/") for _src, rel in files})
+    stale += _remove_stale_dirs(p["ext"])
 
     # 2. launcher scripts + menu XML from the user's config ---------------
     config = _load_or_create_config(p["ext"], documents)

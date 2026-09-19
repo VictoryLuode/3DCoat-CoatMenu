@@ -41,16 +41,16 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
 
-from core import paths  # noqa: E402
+from coatmenu.core import paths  # noqa: E402
 
 # Keep every write inside the temp tree - never the repository's own folders.
 paths.extension_root = lambda: os.path.join(WORK, "ext")
 paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "lists")
 os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 
-from core.config import MenuConfig, MenuList  # noqa: E402
-from core.menu_model import MenuItem  # noqa: E402
-from ui.editor import ROLE_KIND, CoatMenuEditor  # noqa: E402
+from coatmenu.core.config import MenuConfig, MenuList  # noqa: E402
+from coatmenu.core.menu_model import MenuItem  # noqa: E402
+from coatmenu.ui.editor import ROLE_KIND, CoatMenuEditor  # noqa: E402
 
 failures: list[str] = []
 

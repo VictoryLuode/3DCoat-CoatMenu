@@ -44,7 +44,8 @@ result = run()
 check(result.returncode == 0, f"installer exits 0 ({result.returncode}) {result.stderr.strip()}")
 check(os.path.isfile(os.path.join(ext, "CoatMenu.py")), "extension entry point copied")
 check(os.path.isfile(os.path.join(ext, "actions", "CoatMenu_Show.py")), "action script copied")
-check(os.path.isfile(os.path.join(ext, "ui", "popup.py")), "ui package copied")
+check(os.path.isfile(os.path.join(ext, "coatmenu", "ui", "popup.py")),
+      "ui package copied (under the namespaced package)")
 check(not os.path.isdir(os.path.join(ext, "tests")), "tests are not shipped")
 check(not os.path.isdir(os.path.join(ext, "__pycache__")), "no __pycache__ shipped")
 
@@ -72,14 +73,23 @@ after = open(STARTUP, encoding="utf-8").read()
 check(before == after, "startup.txt is not duplicated on reinstall")
 
 print("== stale modules from an older version are pruned ==")
-stale = os.path.join(ext, "core", "menu_data.py")
+stale = os.path.join(ext, "coatmenu", "core", "menu_data.py")
 with open(stale, "w", encoding="utf-8") as fh:
     fh.write("# left over from an older version\n")
+# ...and an old top-level package that 3DCoat already littered debug stubs into
+old_pkg = os.path.join(ext, "ui")
+os.makedirs(old_pkg, exist_ok=True)
+with open(os.path.join(old_pkg, "legacy.py"), "w", encoding="utf-8") as fh:
+    fh.write("# old layout\n")
+with open(os.path.join(old_pkg, ".env"), "w", encoding="utf-8") as fh:
+    fh.write("3DCoat generated debug stub\n")
 result = run()
 check(not os.path.exists(stale), "stale module removed by the next install")
+check(not os.path.isdir(old_pkg), "old top-level package folder removed, stubs and all")
 check(os.path.isfile(os.path.join(ext, "data", "lists.json")),
       "lists.json materialised on first install")
 check(os.path.isdir(os.path.join(ext, "actions", "lists")), "launcher folder created")
+check(os.path.isdir(os.path.join(ext, "coatmenu", "core")), "namespaced package intact")
 
 print("== uninstall ==")
 result = run("--uninstall")

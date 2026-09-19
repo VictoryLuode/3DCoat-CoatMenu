@@ -28,8 +28,8 @@ with open(os.path.join(MENU_DIR, "$SmoothObject.command"), "w", encoding="utf-8"
 
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
-from core import lists_registry as registry  # noqa: E402
-from core.config import MenuConfig, MenuList, item_from_json, item_to_json, slugify, starter_config  # noqa: E402
+from coatmenu.core import lists_registry as registry  # noqa: E402
+from coatmenu.core.config import MenuConfig, MenuList, item_from_json, item_to_json, slugify, starter_config  # noqa: E402
 
 failures: list[str] = []
 

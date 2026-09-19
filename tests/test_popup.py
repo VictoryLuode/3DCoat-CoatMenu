@@ -30,8 +30,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
 
-from ui import popup  # noqa: E402
-from ui.popup import MenuItem, header, separator  # noqa: E402
+from coatmenu.ui import popup  # noqa: E402
+from coatmenu.ui.popup import MenuItem, header, separator  # noqa: E402
 
 failures: list[str] = []
 

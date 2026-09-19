@@ -43,9 +43,9 @@ for _font_file in ("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/msyh.ttc"):
         QFontDatabase.addApplicationFont(_font_file)
 print(f"font families available: {len(QFontDatabase.families())}")
 
-from core.config import starter_config  # noqa: E402
-from core.menu_model import submenu  # noqa: E402
-from ui import popup  # noqa: E402
+from coatmenu.core.config import starter_config  # noqa: E402
+from coatmenu.core.menu_model import submenu  # noqa: E402
+from coatmenu.ui import popup  # noqa: E402
 
 OUT_DIR = os.path.join(ROOT, "docs")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -106,7 +106,7 @@ app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-list.png"), [widget])
 
 # 4. the editor panel
-from ui.editor import CoatMenuEditor  # noqa: E402
+from coatmenu.ui.editor import CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)
 editor_config.add_list("Paint")

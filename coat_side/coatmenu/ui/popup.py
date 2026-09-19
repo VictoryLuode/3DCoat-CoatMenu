@@ -31,8 +31,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QWidget
 
-from core.log import log
-from core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
+from coatmenu.core.log import log
+from coatmenu.core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
     COMMAND,
     HEADER,
     SCRIPT,
@@ -45,7 +45,7 @@ from core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
     submenu,
     title_item,
 )
-from ui import theme
+from coatmenu.ui import theme
 
 # ---------------------------------------------------------------------------
 # Win32 key polling

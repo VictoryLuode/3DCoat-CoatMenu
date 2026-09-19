@@ -35,11 +35,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core import catalog, lists
-from core.config import MenuConfig, MenuList, item_to_json
-from core.log import log
-from core.menu_model import COMMAND, HEADER, SCRIPT, SEPARATOR, SUBMENU, MenuItem
-from ui import theme
+from coatmenu.core import catalog, lists
+from coatmenu.core.config import MenuConfig, MenuList, item_to_json
+from coatmenu.core.log import log
+from coatmenu.core.menu_model import COMMAND, HEADER, SCRIPT, SEPARATOR, SUBMENU, MenuItem
+from coatmenu.ui import theme
 
 ROLE_KIND = Qt.UserRole + 1
 ROLE_CID = Qt.UserRole + 2

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 
-from core.config import MenuConfig
+from coatmenu.core.config import MenuConfig
 
 MAIN_MENU_ID = "CoatMenu_Show"
 MAIN_MENU_LABEL = "Show CoatMenu"
@@ -39,8 +39,8 @@ _ROOT = os.path.dirname(os.path.dirname(_HERE))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from core.log import log  # noqa: E402
-from core.show import show_list  # noqa: E402
+from coatmenu.core.log import log  # noqa: E402
+from coatmenu.core.show import show_list  # noqa: E402
 
 
 def main() -> None:

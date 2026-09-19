@@ -53,9 +53,20 @@ def check(condition: bool, label: str) -> None:
         failures.append(label)
 
 
-print("== import registers the extension ==")
-import CoatMenu  # noqa: E402  (import by module name, as 3DCoat does)
+# --- simulate another cExtension having claimed the generic names first ------
+# Every cExtension shares one interpreter and LKS ships its own top-level 'ui'
+# package. These stubs stand in for it: if CoatMenu went back to a top-level
+# 'ui'/'core', the import below would fail - which is exactly the bug that made
+# the first release silently do nothing when clicked.
+_stub_ui = types.ModuleType("ui")
+_stub_ui.__path__ = []
+_stub_core = types.ModuleType("core")
+_stub_core.__path__ = []
+sys.modules.setdefault("ui", _stub_ui)
+sys.modules.setdefault("core", _stub_core)
 
+print("== import registers the extension ('ui'/'core' already taken) ==")
+import CoatMenu  # noqa: E402  (import by module name, as 3DCoat does)
 check(isinstance(CoatMenu._extension, FakeCExtension),
       "module-level instantiation registered a cExtension")
 ext = CoatMenu._extension
@@ -81,7 +92,7 @@ ext.onExit()
 check(True, "onChangeRoom + onExit do not raise with nothing shown")
 
 print("== menu label is registered through the translation table ==")
-from core.show import MENU_HOTKEY_ID, MENU_LABEL, apply_labels  # noqa: E402
+from coatmenu.core.show import MENU_HOTKEY_ID, MENU_LABEL, apply_labels  # noqa: E402
 
 apply_labels()
 check(FAKE.translations.get(MENU_HOTKEY_ID) == MENU_LABEL,
@@ -93,6 +104,37 @@ with open(os.path.join(COAT_SIDE, "actions", "CoatMenu_Show.py"), encoding="utf-
 check("if __name__" not in entry_source,
       "action entry has no __name__ guard (3DCoat imports by module name)")
 check("main()\n" in entry_source, "action entry calls main() unconditionally")
+
+print("== internal packages are namespaced ==")
+# Every cExtension shares one interpreter: a top-level 'core' or 'ui' package
+# collides with another add-on's (LKS ships its own 'ui', and it wins because it
+# imported first). This test exists because that bug broke the first release.
+top_dirs = {n for n in os.listdir(COAT_SIDE)
+            if os.path.isdir(os.path.join(COAT_SIDE, n)) and not n.startswith(".")}
+check("core" not in top_dirs and "ui" not in top_dirs,
+      f"no generic top-level package ({sorted(top_dirs)})")
+check("coatmenu" in top_dirs, "code lives under the coatmenu package")
+
+bad: list[str] = []
+for dirpath, dirnames, filenames in os.walk(COAT_SIDE):
+    dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+    for name in filenames:
+        if not name.endswith(".py"):
+            continue
+        path = os.path.join(dirpath, name)
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for needle in ("from core import", "from core.", "from ui import", "from ui."):
+            if needle in text:
+                bad.append(f"{os.path.relpath(path, COAT_SIDE)}: {needle}")
+check(not bad, f"no bare core/ui imports anywhere ({bad[:3]})")
+
+print("== entry scripts survive a broken package ==")
+for entry in ("CoatMenu_Show.py", "CoatMenu_Editor.py"):
+    with open(os.path.join(COAT_SIDE, "actions", entry), encoding="utf-8") as fh:
+        source = fh.read()
+    check("_log_raw" in source and "IMPORT FAILED" in source,
+          f"{entry} reports import failures to the log file itself")
 
 print()
 if failures:

@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import os
 
-from core import paths
-from core.config import MenuConfig, starter_config
-from core.lists_registry import MAIN_MENU_ID, menu_entries, sync
-from core.log import log
+from coatmenu.core import paths
+from coatmenu.core.config import MenuConfig, starter_config
+from coatmenu.core.lists_registry import MAIN_MENU_ID, menu_entries, sync
+from coatmenu.core.log import log
 
 # Where our menu items appear in 3DCoat's main menu (see menu_sections.txt).
 MENU_NAME = "Scripts"

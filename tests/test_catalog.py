@@ -49,8 +49,8 @@ with open(os.path.join(USERPREF, "Scripts", "sub", "helper.py"), "w", encoding="
 
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
-from core import catalog  # noqa: E402
-from core.hotkeys import code_to_vk, find_trigger_vk, read_bindings  # noqa: E402
+from coatmenu.core import catalog  # noqa: E402
+from coatmenu.core.hotkeys import code_to_vk, find_trigger_vk, read_bindings  # noqa: E402
 
 failures: list[str] = []
 
@@ -94,7 +94,7 @@ check(any(b["id"] == "UNDO" and b["ctrl"] for b in bindings), "modifier flags pa
 print("== find_trigger_vk ==")
 check(find_trigger_vk(["CoatMenu_Show"]) == ord("Q"), "finds the key bound to our menu id")
 
-from ui import popup  # noqa: E402
+from coatmenu.ui import popup  # noqa: E402
 
 popup.is_key_down = lambda _vk: False
 check(find_trigger_vk(["Nope", "execute:C:\\t\\actions\\CoatMenu_Show.py"]) == 0,
