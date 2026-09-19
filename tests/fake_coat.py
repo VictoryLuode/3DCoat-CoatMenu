@@ -16,11 +16,15 @@ class FakeCoat:
     def __init__(self, documents: str):
         self.calls: list[tuple[str, str]] = []
         self.translations: dict[str, str] = {}
+        self.menu_items: dict[str, tuple[str, str]] = {}
         self._documents = documents
         self.ui = types.SimpleNamespace(
             cmd=self._cmd,
             presentInUI=lambda _id: True,
             addTranslation=self._add_translation,
+            insertInMenu=self._insert_in_menu,
+            checkIfMenuItemInserted=self._check_menu_item,
+            removeCommandFromMenu=self._remove_command_from_menu,
         )
         self.io = types.SimpleNamespace(
             documents=lambda: self._documents,
@@ -40,6 +44,17 @@ class FakeCoat:
 
     def _add_translation(self, key, text):
         self.translations[str(key)] = str(text)
+        return True
+
+    def _insert_in_menu(self, menu, menu_id, script_path):
+        self.menu_items[str(menu_id)] = (str(menu), str(script_path))
+        return True
+
+    def _check_menu_item(self, menu_id):
+        return str(menu_id) in self.menu_items
+
+    def _remove_command_from_menu(self, menu_id):
+        self.menu_items.pop(str(menu_id), None)
         return True
 
     def _script(self, path):

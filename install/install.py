@@ -8,8 +8,9 @@ What it does, all inside ``<Documents>/3DCoat/UserPrefs`` (never the 3DCoat
 program folder, never another add-on's files):
 
 1. copies ``coat_side/`` into ``Scripts/cExtensions/CoatMenu/``
-2. writes ``Scripts/ExtraMenuItems/CoatMenu.xml`` (absolute script path, because
-   3DCoat does not accept relative paths there)
+2. regenerates the per-list launcher scripts and ``Scripts/ExtraMenuItems/CoatMenu.xml``
+   from the user's ``data/lists.json`` (absolute script paths - 3DCoat does not
+   accept relative ones there)
 3. appends ``CoatMenu`` to ``Scripts/cExtensions/startup.txt`` (backed up first)
 
 Usage::
@@ -32,16 +33,11 @@ EXTENSION_NAME = "CoatMenu"
 MENU_ID = "CoatMenu_Show"
 MENU_LABEL = "Show CoatMenu"
 
-_MENU_XML = """<ClassArray.ExtraMenuItem>
-\t<ExtraMenuItem>
-\t\t<MenuPath>Scripts</MenuPath>
-\t\t<MenuItem>{menu_id}</MenuItem>
-\t\t<inRoom></inRoom>
-\t\t<inSection></inSection>
-\t\t<Command>script:{script_path}</Command>
-\t</ExtraMenuItem>
-</ClassArray.ExtraMenuItem>
-"""
+if SOURCE_DIR not in sys.path:
+    sys.path.insert(0, SOURCE_DIR)
+
+from core import lists_registry  # noqa: E402
+from core.config import MenuConfig, starter_config  # noqa: E402
 
 
 def default_documents() -> str:
@@ -75,6 +71,41 @@ def _iter_source_files() -> list[tuple[str, str]]:
     return out
 
 
+def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
+    """Delete modules that a previous version left behind.
+
+    Only python files directly part of the extension are considered: ``data/``
+    holds the user's lists and ``actions/lists/`` holds generated launchers (both
+    managed elsewhere and never pruned here).
+    """
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(ext_dir):
+        dirnames[:] = [d for d in dirnames if d not in ("__pycache__", "data")]
+        rel_dir = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
+        for name in filenames:
+            if not name.endswith(".py"):
+                continue
+            rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+            if rel in shipped or rel.startswith("actions/lists/"):
+                continue
+            try:
+                os.remove(os.path.join(dirpath, name))
+                removed.append(rel)
+            except OSError:
+                pass
+    return removed
+
+
+def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
+    """Config from the installed copy when it exists, else a fresh starter."""
+    path = os.path.join(ext_dir, "data", "lists.json")
+    if os.path.exists(path):
+        config = MenuConfig.load(path)
+        if config.lists:
+            return config
+    return starter_config(documents)
+
+
 def install(documents: str) -> int:
     p = paths(documents)
     for key in ("cExtensions", "extra_menu_items"):
@@ -82,28 +113,40 @@ def install(documents: str) -> int:
 
     # 1. extension files -------------------------------------------------
     os.makedirs(p["ext"], exist_ok=True)
+    files = _iter_source_files()
     copied = 0
-    for src, rel in _iter_source_files():
+    for src, rel in files:
         dst = os.path.join(p["ext"], rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
         copied += 1
+    stale = _prune_stale(p["ext"], {rel.replace("\\", "/") for _src, rel in files})
 
-    # 2. menu item (absolute path - 3DCoat rejects relative here) --------
-    script_path = os.path.join(p["ext"], "actions", "CoatMenu_Show.py").replace("\\", "/")
-    with open(p["menu_xml"], "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(_MENU_XML.format(menu_id=MENU_ID, script_path=script_path))
+    # 2. launcher scripts + menu XML from the user's config ---------------
+    config = _load_or_create_config(p["ext"], documents)
+    config_path = os.path.join(p["ext"], "data", "lists.json")
+    if not os.path.exists(config_path):
+        config.save(config_path)
+    info = lists_registry.sync(
+        config,
+        p["ext"],
+        os.path.join(p["ext"], "actions", "lists"),
+        p["menu_xml"],
+    )
 
     # 3. startup entry --------------------------------------------------
     added = _ensure_startup_entry(p["startup"])
 
     print(f"CoatMenu installed -> {p['ext']}")
     print(f"  files copied   : {copied}")
-    print(f"  menu item      : {p['menu_xml']}  ({MENU_LABEL})")
+    if stale:
+        print(f"  stale removed  : {', '.join(stale)}")
+    print(f"  lists          : {info['lists']} ({', '.join(lst.name for lst in config.lists)})")
+    print(f"  menu items     : {info['lists'] + 2} written to {p['menu_xml']}")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
-    print("then use Scripts > CoatMenu > Show CoatMenu; bind a key to it in")
-    print("Preferences > Hotkeys if you want the hold-to-open behaviour.")
+    print("then use Scripts > CoatMenu > Show CoatMenu. Every list can get its own")
+    print("hotkey in Preferences > Hotkeys (hold it, move, release to run).")
     return 0
 
 
@@ -128,6 +171,17 @@ def _ensure_startup_entry(startup_path: str) -> bool:
 def uninstall(documents: str) -> int:
     p = paths(documents)
     removed: list[str] = []
+
+    # Keep the user's lists - an uninstall should not throw away their work.
+    config_path = os.path.join(p["ext"], "data", "lists.json")
+    if os.path.exists(config_path):
+        backup = os.path.join(documents, "3DCoat", f"{EXTENSION_NAME}-lists-backup.json")
+        try:
+            os.makedirs(os.path.dirname(backup), exist_ok=True)
+            shutil.copy2(config_path, backup)
+            removed.append(f"your lists were backed up to {backup}")
+        except OSError:
+            pass
 
     if os.path.isdir(p["ext"]):
         shutil.rmtree(p["ext"], ignore_errors=True)

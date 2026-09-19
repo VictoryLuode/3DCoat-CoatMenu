@@ -71,10 +71,11 @@ class CoatMenuExtension(cPy.cCore.cExtension):
 
     def onStartup(self) -> None:
         try:
-            from core.show import apply_labels
-            apply_labels()
+            from core import lists
+            lists.ensure_config()
+            lists.register_menu_items(lists.get_config())
         except Exception:
-            log("onStartup labels failed", exc=True)
+            log("onStartup list registration failed", exc=True)
         log(f"{EXTENSION_NAME} onStartup")
 
     def onBuildMainMenu(self) -> None:

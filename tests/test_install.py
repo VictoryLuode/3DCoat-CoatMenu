@@ -71,6 +71,16 @@ check(result.returncode == 0, "second install exits 0")
 after = open(STARTUP, encoding="utf-8").read()
 check(before == after, "startup.txt is not duplicated on reinstall")
 
+print("== stale modules from an older version are pruned ==")
+stale = os.path.join(ext, "core", "menu_data.py")
+with open(stale, "w", encoding="utf-8") as fh:
+    fh.write("# left over from an older version\n")
+result = run()
+check(not os.path.exists(stale), "stale module removed by the next install")
+check(os.path.isfile(os.path.join(ext, "data", "lists.json")),
+      "lists.json materialised on first install")
+check(os.path.isdir(os.path.join(ext, "actions", "lists")), "launcher folder created")
+
 print("== uninstall ==")
 result = run("--uninstall")
 check(result.returncode == 0, "uninstall exits 0")

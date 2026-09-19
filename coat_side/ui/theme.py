@@ -35,3 +35,9 @@ SEPARATOR = (255, 255, 255, 24)
 # --- behaviour ---
 POLL_MS = 20          # key-poll interval while the popup is open
 FADE_IN = True
+SUBMENU_OVERLAP = 6   # px the child panel overlaps its parent (no dead gap)
+SUBMENU_GRACE_MS = 160  # leave grace before a child panel closes
+
+# --- submenu arrow (drawn, not a font glyph) ---
+ARROW_WIDTH = 5
+ARROW_HEIGHT = 8

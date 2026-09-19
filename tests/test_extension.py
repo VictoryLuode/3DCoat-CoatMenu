@@ -26,6 +26,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from fake_coat import install_fake_coat  # noqa: E402
 
 DOCS = tempfile.mkdtemp(prefix="coatmenu-ext-")
+os.environ["COATMENU_DATA_DIR"] = tempfile.mkdtemp(prefix="coatmenu-ext-data-")
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
 # --- fake cPy.cCore --------------------------------------------------------

@@ -1,53 +1,99 @@
 """
-CoatMenu - entry points used by the menu items.
+CoatMenu - entry points used by the menu items and the editor's preview.
 
-Both the menu item (``actions/CoatMenu_Show.py``) and any future hotkey path
-funnel through here, so there is exactly one place that decides which list to
-show and which trigger key to watch.
+Two shapes:
+
+* ``show_main_menu`` - the index: one row per configured list, each row a
+  submenu, so hovering it opens that list.
+* ``show_list`` - one list, flat - what each generated launcher script calls.
 """
 from __future__ import annotations
 
-from core import menu_data
+import os
+
+from core import lists, paths
+from core.config import MenuConfig
 from core.hotkeys import find_trigger_vk
+from core.lists_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
 from core.log import log
+from core.menu_model import MenuItem, separator, submenu
 from ui import popup
 
-# Id we register our menu item under (see install/install.py -> ExtraMenuItems)
-MENU_HOTKEY_ID = "CoatMenu_Show"
-MENU_LABEL = "Show CoatMenu"
+# Main entry id/label (kept as module constants for callers and tests).
+MENU_HOTKEY_ID = MAIN_MENU_ID
+MENU_LABEL = MAIN_MENU_LABEL
 
 
 def apply_labels() -> None:
-    """Give our menu item a readable label.
+    """Give our menu items readable labels.
 
-    3DCoat shows the raw id unless the id has a translation entry - so this has
-    to be (re)applied at startup and on every invocation, not just once at
-    install time.
+    3DCoat shows the raw id unless the id has a translation entry, so this is
+    (re)applied at startup, when the main menu is built and on every invocation.
     """
     try:
         import coat  # type: ignore
-        coat.ui.addTranslation(MENU_HOTKEY_ID, MENU_LABEL)
-    except Exception as exc:
-        log(f"apply_labels failed: {exc}")
+    except Exception:
+        return
+    config = lists.get_config()
+    for menu_id, label, _script in menu_entries(
+        config, paths.extension_root(), paths.entry_scripts_dir()
+    ):
+        try:
+            coat.ui.addTranslation(menu_id, label)
+        except Exception as exc:
+            log(f"addTranslation({menu_id}) failed: {exc}")
+
+
+def _config() -> MenuConfig:
+    # ensure_config also regenerates launchers + menu XML if the config changed
+    # on disk (e.g. the file was copied in by hand).
+    return lists.ensure_config()
 
 
 def show_main_menu(script_path: str = "") -> None:
-    """Show the CoatMenu overlay at the cursor."""
+    """Show the list index at the cursor."""
     try:
-        items = menu_data.demo_items()
-        if not items:
-            log("show_main_menu: no items to show")
+        config = _config()
+        rows: list[MenuItem] = [submenu(lst.name, lst.items) for lst in config.lists]
+        if not rows:
+            log("show_main_menu: no lists configured")
             return
-
-        candidates = [MENU_HOTKEY_ID]
+        # The editor is one row away, so the flow is: open menu, tweak, save.
+        rows.append(separator())
+        rows.append(
+            MenuItem(
+                label="Edit lists\u2026",
+                kind="script",
+                path=os.path.join(paths.extension_root(), "actions", "CoatMenu_Editor.py"),
+            )
+        )
+        candidates = [MAIN_MENU_ID]
         if script_path:
             candidates.append("execute:" + script_path)
         vk = find_trigger_vk(candidates)
-        log(f"show_main_menu: {len(items)} rows, trigger_vk={vk} ({menu_data.stats_line()})")
-
-        popup.show_menu(items, trigger_vk=vk, title="CoatMenu")
+        log(f"show_main_menu: {len(rows)} list(s), trigger_vk={vk}")
+        popup.show_menu(rows, trigger_vk=vk, title="CoatMenu")
     except Exception:
         log("show_main_menu failed", exc=True)
+
+
+def show_list(key: str, script_path: str = "") -> None:
+    """Show one configured list flat (called by its generated launcher)."""
+    try:
+        config = _config()
+        target = config.find(key)
+        if target is None:
+            log(f"show_list: unknown list {key!r} - showing the index instead")
+            show_main_menu(script_path)
+            return
+        candidates = [target.hotkey_id]
+        if script_path:
+            candidates.append("execute:" + script_path)
+        vk = find_trigger_vk(candidates)
+        log(f"show_list: {target.name} ({len(target.items)} rows), trigger_vk={vk}")
+        popup.show_menu(target.items, trigger_vk=vk, title=target.name)
+    except Exception:
+        log("show_list failed", exc=True)
 
 
 def hide_menu() -> None:

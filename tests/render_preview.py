@@ -1,7 +1,12 @@
 """
-Renders the popup offscreen against the *real* 3DCoat data on this machine and
-writes PNG previews (default + hover). Used to show the look without launching
+Renders the overlay offscreen against the *real* 3DCoat data on this machine and
+writes the PNGs used in the README. Lets the look be reviewed without launching
 3DCoat.
+
+Writes:
+* ``preview-popup.png``     - the list index (one row per configured list)
+* ``preview-submenu.png``   - the index with a list opened as a child panel
+* ``preview-list.png``      - a single list shown flat
 
 Run:  QT_QPA_PLATFORM=offscreen python tests/render_preview.py
 """
@@ -9,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -21,56 +27,94 @@ from fake_coat import install_fake_coat  # noqa: E402
 
 DOCS = os.path.join(os.path.expanduser("~"), "Documents")
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
+# Never touch the extension's own data folder while rendering previews.
+os.environ["COATMENU_DATA_DIR"] = tempfile.mkdtemp(prefix="coatmenu-preview-")
 
-from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from PySide6.QtCore import QPoint  # noqa: E402
 from PySide6.QtGui import QColor, QFontDatabase, QImage, QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
 
 # The offscreen QPA ships no font database at all (families() == []), so text
-# would render as tofu boxes; load the system fonts explicitly for the preview.
+# renders as tofu boxes unless the system fonts are loaded explicitly.
 for _font_file in ("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/msyh.ttc"):
     if os.path.exists(_font_file):
         QFontDatabase.addApplicationFont(_font_file)
 print(f"font families available: {len(QFontDatabase.families())}")
 
-from core import menu_data  # noqa: E402
+from core.config import starter_config  # noqa: E402
+from core.menu_model import submenu  # noqa: E402
 from ui import popup  # noqa: E402
 
 OUT_DIR = os.path.join(ROOT, "docs")
 os.makedirs(OUT_DIR, exist_ok=True)
-
-items = menu_data.demo_items()
-print(f"rows from real data: {len(items)}")
-for item in items:
-    print(f"  [{item.kind:9}] {item.label or ''} {item.cid}")
-
-manager = popup.get_manager()
-manager.show_menu(items, anchor=QPoint(80, 80), title="CoatMenu")
-widget = manager.popup
-app.processEvents()
-
 PAD = 26
+BACKDROP = QColor(43, 44, 47)  # stand-in for a 3DCoat viewport
 
 
-def compose(path: str) -> None:
-    shot = widget.grab()
-    canvas = QImage(shot.width() + PAD * 2, shot.height() + PAD * 2, QImage.Format_ARGB32_Premultiplied)
+def compose(path: str, panels: list) -> None:
+    """Draw one or more widgets (parent first) onto a dark backdrop."""
+    shots = [(w.x(), w.y(), w.grab()) for w in panels]
+    min_x = min(x for x, _y, _s in shots)
+    min_y = min(y for _x, y, _s in shots)
+    max_x = max(x + s.width() for x, _y, s in shots)
+    max_y = max(y + s.height() for _x, y, s in shots)
+
+    canvas = QImage(max_x - min_x + PAD * 2, max_y - min_y + PAD * 2,
+                    QImage.Format_ARGB32_Premultiplied)
     painter = QPainter(canvas)
-    # stand-in for a 3DCoat viewport (dark grey)
-    painter.fillRect(canvas.rect(), QColor(43, 44, 47))
-    painter.drawPixmap(PAD, PAD, shot)
+    painter.fillRect(canvas.rect(), BACKDROP)
+    for x, y, shot in shots:
+        painter.drawPixmap(x - min_x + PAD, y - min_y + PAD, shot)
     painter.end()
     canvas.save(path)
-    print(f"wrote {path}")
+    print(f"wrote {path}  ({canvas.width()}x{canvas.height()})")
 
 
-compose(os.path.join(OUT_DIR, "preview-popup.png"))
+config = starter_config(DOCS)
+config.add_list("Paint")
+print(f"lists: {[lst.name for lst in config.lists]}")
+for lst in config.lists:
+    print(f"  {lst.hotkey_id:24} {lst.name:10} {len(lst.items)} row(s)")
 
-# hovered state: highlight the first clickable row (set_items already picks it,
-# so blank it first to make the two previews actually differ)
-widget._hover = -1
-widget.repaint()
+manager = popup.get_manager()
+
+# 1. the index
+index_rows = [submenu(lst.name, lst.items) for lst in config.lists]
+manager.show_menu(index_rows, anchor=QPoint(80, 80), title="CoatMenu")
+widget = manager.popup
 app.processEvents()
-compose(os.path.join(OUT_DIR, "preview-popup-no-hover.png"))
+compose(os.path.join(OUT_DIR, "preview-popup.png"), [widget])
+
+# 2. index with the first list opened as a child panel
+branch_row = widget._first_branch()
+widget._hover = branch_row
+widget._open_child(branch_row)
+app.processEvents()
+child = widget._child
+print(f"child panel open: {child is not None}")
+if child is not None:
+    compose(os.path.join(OUT_DIR, "preview-submenu.png"), [widget, child])
+
+# 3. a single list shown flat
+widget.dismiss()
+app.processEvents()
+manager.show_menu(config.lists[0].items, anchor=QPoint(80, 80), title=config.lists[0].name)
+widget = manager.popup
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-list.png"), [widget])
+
+# 4. the editor panel
+from ui.editor import CoatMenuEditor  # noqa: E402
+
+editor_config = starter_config(DOCS)
+editor_config.add_list("Paint")
+editor = CoatMenuEditor(config=editor_config)
+editor.show_editor()
+editor._source_kind.setCurrentIndex(1)
+editor.reload_sources()
+editor.move(QPoint(60, 60))
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-editor.png"), [editor])
+editor.close_editor()

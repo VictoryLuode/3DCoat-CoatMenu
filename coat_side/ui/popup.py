@@ -1,8 +1,9 @@
 """
 CoatMenu - the popup itself.
 
-One frameless, always-on-top overlay that shows a linear list of actions at the
-cursor. Deliberately *not* a normal window:
+A frameless, always-on-top overlay showing a linear list of actions at the
+cursor, with submenus opening as further panels beside the hovered row.
+Deliberately *not* a normal window:
 
 * ``Qt.ToolTip | FramelessWindowHint | WindowStaysOnTopHint`` - no title bar, no
   taskbar entry, never steals activation from 3DCoat.
@@ -17,14 +18,33 @@ a raised exception here is a crash there.
 from __future__ import annotations
 
 import ctypes
-import traceback
-from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QPainter, QPen
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QPainter,
+    QPainterPath,
+    QPen,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 
 from core.log import log
+from core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
+    COMMAND,
+    HEADER,
+    SCRIPT,
+    SEPARATOR,
+    SUBMENU,
+    TITLE,
+    MenuItem,
+    header,
+    separator,
+    submenu,
+    title_item,
+)
 from ui import theme
 
 # ---------------------------------------------------------------------------
@@ -53,49 +73,6 @@ def is_key_down(vk: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class MenuItem:
-    """One row of a CoatMenu list.
-
-    kind: ``command`` (3DCoat command id), ``script`` (python file),
-    ``separator``, ``header`` (group label, dim), ``title`` (list title).
-    """
-
-    label: str = ""
-    kind: str = "command"
-    cid: str = ""
-    hint: str = ""
-    enabled: bool = True
-    children: list["MenuItem"] = field(default_factory=list)
-
-    @property
-    def clickable(self) -> bool:
-        return self.kind in ("command", "script") and self.enabled
-
-    @property
-    def is_branch(self) -> bool:
-        return bool(self.children)
-
-
-def separator() -> MenuItem:
-    return MenuItem(kind="separator")
-
-
-def header(text: str) -> MenuItem:
-    return MenuItem(label=text, kind="header")
-
-
-def title_item(text: str) -> MenuItem:
-    """List title row (highlighted, underlined) - named _item to avoid clashing
-    with the ``title`` string argument of :func:`show_menu`."""
-    return MenuItem(label=text, kind="title")
-
-
-# ---------------------------------------------------------------------------
 # The widget
 # ---------------------------------------------------------------------------
 
@@ -103,13 +80,15 @@ def title_item(text: str) -> MenuItem:
 class MenuPopup(QWidget):
     """Frameless overlay drawing a vertical list of :class:`MenuItem`."""
 
-    def __init__(self) -> None:
+    def __init__(self, parent_popup: "MenuPopup | None" = None) -> None:
         super().__init__(None)
         self._items: list[MenuItem] = []
         self._rows: list[tuple[int, MenuItem, int]] = []  # (y, item, height)
         self._hover: int = -1
         self._trigger_vk: int = 0
-        self._fade_started = False
+        self._parent = parent_popup
+        self._child: "MenuPopup | None" = None
+        self._child_row: int = -1
 
         self.setWindowFlags(
             Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
@@ -129,9 +108,44 @@ class MenuPopup(QWidget):
         self._poll.setInterval(theme.POLL_MS)
         self._poll.timeout.connect(self._on_poll)
 
+        self._grace = QTimer(self)
+        self._grace.setSingleShot(True)
+        self._grace.setInterval(theme.SUBMENU_GRACE_MS)
+        self._grace.timeout.connect(self._maybe_close_child)
+
+    # -- tree bookkeeping -------------------------------------------------
+
+    @property
+    def is_child(self) -> bool:
+        return self._parent is not None
+
+    def _root(self) -> "MenuPopup":
+        node = self
+        while node._parent is not None:
+            node = node._parent
+        return node
+
+    def _cancel_grace(self) -> None:
+        self._root()._grace.stop()
+
+    def _start_grace(self) -> None:
+        root = self._root()
+        if root._child is not None:
+            root._grace.start()
+
+    def child_panels(self) -> list["MenuPopup"]:
+        """This panel plus every open panel below it."""
+        out = [self]
+        node = self._child
+        while node is not None:
+            out.append(node)
+            node = node._child
+        return out
+
     # -- geometry ---------------------------------------------------------
 
     def set_items(self, items: list[MenuItem]) -> None:
+        self._close_child()
         self._items = list(items)
         self._rebuild_rows()
         self._hover = self._first_clickable()
@@ -141,20 +155,19 @@ class MenuPopup(QWidget):
         y = theme.PADDING
         width = 120
         for item in self._items:
-            if item.kind == "separator":
+            if item.kind == SEPARATOR:
                 h = theme.SEPARATOR_HEIGHT
-            elif item.kind == "header":
+            elif item.kind == HEADER:
                 h = theme.HEADER_HEIGHT
                 width = max(width, self._fm.horizontalAdvance(item.label) + theme.ROW_PADDING_H * 2)
-            elif item.kind == "title":
+            elif item.kind == TITLE:
                 h = theme.TITLE_HEIGHT
                 width = max(width, self._bold_fm.horizontalAdvance(item.label) + theme.ROW_PADDING_H * 2)
             else:
                 h = theme.ROW_HEIGHT
                 text = item.label
-                if item.is_branch:
-                    text += "    \u25b8"
-                width = max(width, self._fm.horizontalAdvance(text) + theme.ROW_PADDING_H * 3 + 18)
+                width = max(width, self._fm.horizontalAdvance(text) + theme.ROW_PADDING_H * 2
+                            + (theme.ARROW_WIDTH + theme.ROW_PADDING_H if item.is_branch else 0))
             rows.append((y, item, h))
             y += h
         self._rows = rows
@@ -163,6 +176,12 @@ class MenuPopup(QWidget):
     def _first_clickable(self) -> int:
         for idx, (_y, item, _h) in enumerate(self._rows):
             if item.clickable:
+                return idx
+        return -1
+
+    def _first_branch(self) -> int:
+        for idx, (_y, item, _h) in enumerate(self._rows):
+            if item.is_branch:
                 return idx
         return -1
 
@@ -180,7 +199,111 @@ class MenuPopup(QWidget):
             return point.toPoint()
         return QPoint(int(point.x()), int(point.y()))
 
+    # -- submenus ---------------------------------------------------------
+
+    def _open_child(self, row_index: int) -> None:
+        """Open (or re-target) the child panel for a branch row."""
+        try:
+            if row_index < 0 or row_index >= len(self._rows):
+                return
+            item = self._rows[row_index][1]
+            if not item.is_branch:
+                self._close_child()
+                return
+            if self._child is not None and self._child_row == row_index and self._child.isVisible():
+                return
+            self._close_child()
+            if not item.children:
+                return
+
+            child = MenuPopup(parent_popup=self)
+            child.set_items(item.children)
+            # Nothing is highlighted until the cursor actually enters the child,
+            # otherwise it would look like release-to-run would fire that row.
+            child._hover = -1
+            child.setWindowOpacity(1.0)
+            child.show()
+            child.move(self._child_position(row_index, child))
+            child.update()
+            self._child = child
+            self._child_row = row_index
+            self._grace.stop()
+            self.update()
+        except Exception:
+            log("popup._open_child failed", exc=True)
+
+    def _child_position(self, row_index: int, child: "MenuPopup") -> QPoint:
+        row_y = self._rows[row_index][0]
+        x = self.x() + self.width() - theme.SUBMENU_OVERLAP
+        screen = QGuiApplication.screenAt(QPoint(self.x() + 10, self.y() + 10)) \
+            or QGuiApplication.primaryScreen()
+        try:
+            area = screen.availableGeometry()
+        except AttributeError:
+            area = screen.geometry()
+        if x + child.width() > area.right():
+            x = self.x() - child.width() + theme.SUBMENU_OVERLAP
+        # Align the child's first row with the parent row it belongs to, so the
+        # two panels read as one menu (PADDING is the panel's inner margin).
+        y = self.y() + row_y - theme.PADDING
+        if y + child.height() > area.bottom():
+            y = max(area.top(), area.bottom() - child.height())
+        return QPoint(int(x), int(y))
+
+    def _close_child(self) -> None:
+        child = self._child
+        self._child = None
+        self._child_row = -1
+        if child is not None:
+            child.dismiss()
+        self.update()
+
+    def _maybe_close_child(self) -> None:
+        child = self._child
+        if child is None:
+            return
+        try:
+            if child.underMouse():
+                return
+        except Exception:
+            pass
+        self._close_child()
+
+    def _deepest_hover(self) -> MenuItem | None:
+        """Row the user is really pointing at, following visible child panels."""
+        popup: MenuPopup | None = self
+        found: MenuItem | None = None
+        while popup is not None:
+            if 0 <= popup._hover < len(popup._rows):
+                candidate = popup._rows[popup._hover][1]
+                if candidate.clickable:
+                    found = candidate
+            child = popup._child
+            if child is None or not child.isVisible():
+                break
+            try:
+                if not child.underMouse():
+                    break
+            except Exception:
+                break
+            popup = child
+        return found
+
     # -- painting ---------------------------------------------------------
+
+    def _draw_arrow(self, painter: QPainter, centre_y: float, colour: QColor) -> None:
+        """Right-pointing triangle for submenu rows.
+
+        Drawn rather than typed: Unicode ▸ is missing from plenty of fonts and
+        would show up as a tofu box.
+        """
+        tip_x = self.width() - theme.ROW_PADDING_H - 3
+        path = QPainterPath()
+        path.moveTo(tip_x - theme.ARROW_WIDTH, centre_y - theme.ARROW_HEIGHT / 2.0)
+        path.lineTo(tip_x, centre_y)
+        path.lineTo(tip_x - theme.ARROW_WIDTH, centre_y + theme.ARROW_HEIGHT / 2.0)
+        path.closeSubpath()
+        painter.fillPath(path, colour)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
@@ -194,14 +317,14 @@ class MenuPopup(QWidget):
             painter.drawRoundedRect(rect, theme.CORNER_RADIUS, theme.CORNER_RADIUS)
 
             for idx, (y, item, h) in enumerate(self._rows):
-                if item.kind == "separator":
+                if item.kind == SEPARATOR:
                     painter.setPen(QPen(QColor(*theme.SEPARATOR), 1))
                     painter.drawLine(
                         theme.PADDING, y + h // 2, self.width() - theme.PADDING, y + h // 2
                     )
                     continue
 
-                if item.kind == "header":
+                if item.kind == HEADER:
                     painter.setFont(self._bold)
                     painter.setPen(QColor(*theme.TEXT_DIM))
                     painter.drawText(
@@ -214,7 +337,7 @@ class MenuPopup(QWidget):
                     )
                     continue
 
-                if item.kind == "title":
+                if item.kind == TITLE:
                     painter.setFont(self._bold)
                     painter.setPen(QColor(*theme.ACCENT))
                     painter.drawText(
@@ -234,7 +357,8 @@ class MenuPopup(QWidget):
                     )
                     continue
 
-                if idx == self._hover and item.clickable:
+                highlighted = idx == self._hover and (item.clickable or item.is_branch)
+                if highlighted:
                     painter.setPen(Qt.NoPen)
                     painter.setBrush(QColor(*theme.HOVER_BG))
                     painter.drawRoundedRect(
@@ -249,7 +373,7 @@ class MenuPopup(QWidget):
                     )
 
                 painter.setFont(self._font)
-                if idx == self._hover and item.clickable:
+                if highlighted:
                     painter.setPen(QColor(*theme.HOVER_TEXT))
                 elif item.enabled:
                     painter.setPen(QColor(*theme.TEXT))
@@ -257,8 +381,6 @@ class MenuPopup(QWidget):
                     painter.setPen(QColor(*theme.TEXT_DIM))
 
                 text = item.label
-                if item.is_branch:
-                    text += "    \u25b8"
                 painter.drawText(
                     theme.ROW_PADDING_H,
                     y,
@@ -267,6 +389,12 @@ class MenuPopup(QWidget):
                     Qt.AlignVCenter | Qt.AlignLeft,
                     text,
                 )
+                if item.is_branch:
+                    self._draw_arrow(
+                        painter,
+                        y + h / 2.0,
+                        QColor(*theme.HOVER_TEXT) if highlighted else QColor(*theme.TEXT_DIM),
+                    )
         except Exception:
             log("popup.paintEvent failed", exc=True)
         finally:
@@ -275,33 +403,49 @@ class MenuPopup(QWidget):
     # -- input ------------------------------------------------------------
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        self._cancel_grace()
         idx = self._row_at(self._event_pos(event))
         if idx != self._hover:
             self._hover = idx
             self.update()
+        if idx < 0:
+            self._close_child()
+            return
+        if self._rows[idx][1].is_branch:
+            self._open_child(idx)
+        elif self._child is not None and self._child_row != idx:
+            self._close_child()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         idx = self._row_at(self._event_pos(event))
         if idx < 0 or idx >= len(self._rows):
-            self.dismiss()
+            self._root().dismiss()
             return
         item = self._rows[idx][1]
+        if item.is_branch:
+            self._open_child(idx)
+            return
         if not item.clickable:
             # headers and separators are not click targets: clicking one closes
-            self.dismiss()
+            self._root().dismiss()
             return
-        self.dismiss()
+        self._root().dismiss()
         run_item(item)
 
     def leaveEvent(self, _event) -> None:  # noqa: N802
         self._hover = self._first_clickable()
         self.update()
+        self._start_grace()
+
+    def enterEvent(self, _event) -> None:  # noqa: N802
+        self._cancel_grace()
 
     # -- lifecycle --------------------------------------------------------
 
     def show_at(self, anchor: QPoint, trigger_vk: int = 0) -> None:
         """Show at *anchor* (screen coords), clamped to the screen."""
         self.set_trigger_vk(trigger_vk)
+        self._close_child()
         pos = self._clamped_position(anchor)
         self.move(pos)
         self.setWindowOpacity(0.0 if theme.FADE_IN else 1.0)
@@ -309,9 +453,8 @@ class MenuPopup(QWidget):
         self.update()
         if theme.FADE_IN:
             self._fade_tick()
-
-        self._fade_started = theme.FADE_IN
-        self._poll.start()
+        if not self.is_child:
+            self._poll.start()
 
     def _clamped_position(self, anchor: QPoint) -> QPoint:
         off = 10
@@ -337,14 +480,16 @@ class MenuPopup(QWidget):
     def _on_poll(self) -> None:
         """Per-frame health check: Escape cancels, release-of-trigger runs."""
         try:
+            if self.is_child:
+                return
             if is_key_down(VK_ESCAPE):
                 self.dismiss()
                 return
             if self._trigger_vk and not is_key_down(self._trigger_vk):
-                idx = self._hover
+                item = self._deepest_hover()
                 self.dismiss()
-                if 0 <= idx < len(self._rows) and self._rows[idx][1].clickable:
-                    run_item(self._rows[idx][1])
+                if item is not None:
+                    run_item(item)
         except Exception:
             log("popup.poll failed", exc=True)
             self.dismiss()
@@ -354,9 +499,11 @@ class MenuPopup(QWidget):
         self._trigger_vk = int(vk or 0)
 
     def dismiss(self) -> None:
-        """Close without running anything."""
+        """Close this panel and every panel below it, running nothing."""
         try:
             self._poll.stop()
+            self._grace.stop()
+            self._close_child()
             self.hide()
             self._trigger_vk = 0
             self.setWindowOpacity(1.0)
@@ -377,9 +524,9 @@ def run_item(item: MenuItem) -> None:
         log(f"run_item: coat import failed: {exc}")
         return
     try:
-        if item.kind == "script":
-            coat.io.executeScript(item.cid)
-            log(f"ran script: {item.cid}")
+        if item.kind == SCRIPT:
+            coat.io.executeScript(item.path or item.cid)
+            log(f"ran script: {item.path or item.cid}")
         else:
             cmd = item.cid if item.cid.startswith("$") else "$" + item.cid
             coat.ui.cmd(cmd)
@@ -394,7 +541,7 @@ def run_item(item: MenuItem) -> None:
 
 
 class PopupManager:
-    """Owns the single overlay instance and its Qt bootstrap."""
+    """Owns the top-level overlay instance and its Qt bootstrap."""
 
     def __init__(self) -> None:
         self._popup: MenuPopup | None = None

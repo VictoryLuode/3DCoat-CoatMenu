@@ -116,6 +116,76 @@ widget._on_poll()
 check(not widget.isVisible() and FAKE.calls == [],
       "escape closed the popup without running anything")
 
+print("== submenus ==")
+FAKE.calls.clear()
+popup.is_key_down = lambda _vk: False
+sub_items = [
+    header("Lists"),
+    MenuItem(label="Sculpt", kind="submenu", children=[
+        MenuItem(label="Resample", kind="command", cid="Resample"),
+        MenuItem(label="Smooth", kind="command", cid="SmoothObject"),
+    ]),
+    MenuItem(label="Paint", kind="submenu", children=[
+        MenuItem(label="Fill", kind="command", cid="FillLayer"),
+    ]),
+    MenuItem(label="Plain", kind="command", cid="PlainCmd"),
+]
+manager.show_menu(sub_items, anchor=QPoint(120, 120))
+widget = manager.popup
+app.processEvents()
+
+branch_row = widget._first_branch()
+check(branch_row >= 0, "branch row found")
+check(widget._rows[branch_row][1].label == "Sculpt", "first branch is the first list")
+
+widget._open_child(branch_row)
+app.processEvents()
+child = widget._child
+check(child is not None and child.isVisible(), "child panel opens on a branch row")
+check(child is not None and child.width() > 0, "child panel has a size")
+check(child is not None and widget._child_row == branch_row, "child is bound to its parent row")
+check(child is not None and len(child._rows) == 2, f"child shows the submenu rows ({child and len(child._rows)})")
+check(child is not None and child.x() >= widget.x(), "child sits to the right of its parent")
+check(child is not None and child.is_child, "child knows it is a child (does not run its own key poll)")
+
+print("== clicking a child row runs it and closes the whole stack ==")
+sub_item = child._rows[0][1]
+QTest.mouseClick(child, Qt.LeftButton, Qt.NoModifier, QPoint(20, child._rows[0][0] + 4))
+check(FAKE.commands_run() == ["$" + sub_item.cid],
+      f"child click ran {sub_item.cid} ({FAKE.commands_run()})")
+check(not widget.isVisible() and not child.isVisible(), "both panels closed")
+
+print("== hovering away from a branch closes the child, grace timer ==")
+manager.show_menu(sub_items, anchor=QPoint(120, 120))
+widget = manager.popup
+app.processEvents()
+widget._open_child(widget._first_branch())
+child = widget._child
+plain_row = next(i for i, (_y, item, _h) in enumerate(widget._rows) if item.label == "Plain")
+widget._hover = plain_row
+widget.mouseMoveEvent(type("E", (), {"position": lambda _s, p=QPoint(20, widget._rows[plain_row][0] + 4): p})())
+app.processEvents()
+check(widget._child is None, "moving to a non-branch row closes the child panel")
+
+print("== dismiss closes children too ==")
+widget._open_child(widget._first_branch())
+child = widget._child
+check(child is not None and child.isVisible(), "child open again")
+widget.dismiss()
+app.processEvents()
+check(not widget.isVisible() and (child is None or not child.isVisible()),
+      "dismiss closed parent and child")
+
+print("== a branch row is not treated as an executable action ==")
+FAKE.calls.clear()
+widget.show_at(QPoint(120, 120))
+branch_item = widget._rows[widget._first_branch()][1]
+check(not branch_item.clickable and branch_item.is_branch, "branch rows are not directly clickable")
+widget._hover = widget._first_branch()
+check(widget._deepest_hover() is None,
+      "release with the cursor on a closed branch runs nothing")
+widget.dismiss()
+
 print()
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))
