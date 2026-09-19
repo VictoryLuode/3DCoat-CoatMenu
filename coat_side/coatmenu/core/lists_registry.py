@@ -65,7 +65,8 @@ def _schedule_self_removal() -> None:
 def main() -> None:
     from coatmenu.core.log import log
     from coatmenu.core.show import show_list
-    log("menu item: list {slug}")
+    log("menu item: list {slug} (cExtension " +
+        ("loaded)" if "CoatMenu" in sys.modules else "NOT loaded)"))
     show_list({slug!r}, script_path=os.path.abspath(__file__))
 
 

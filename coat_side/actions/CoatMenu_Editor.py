@@ -65,7 +65,8 @@ def main() -> None:
         _log_raw("IMPORT FAILED\n" + traceback.format_exc())
         raise
 
-    log("menu item: editor")
+    log("menu item: editor (cExtension " +
+        ("loaded)" if "CoatMenu" in sys.modules else "NOT loaded)"))
     show_editor()
 
 

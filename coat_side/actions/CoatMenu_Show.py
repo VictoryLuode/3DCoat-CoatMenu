@@ -73,7 +73,8 @@ def main() -> None:
         _log_raw("IMPORT FAILED\n" + traceback.format_exc())
         raise
 
-    log("menu item: show")
+    log("menu item: show (cExtension " +
+        ("loaded)" if "CoatMenu" in sys.modules else "NOT loaded - restart 3DCoat or start it in Windows > Panels > Extensions)"))
     apply_labels()
     show_main_menu(script_path=os.path.abspath(__file__))
 
