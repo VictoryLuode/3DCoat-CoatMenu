@@ -17,7 +17,7 @@ to make the pick land.
 from __future__ import annotations
 
 from coatmenu.core.config import MenuConfig, MenuList
-from coatmenu.core.menu_model import LIST, MenuItem, sequence, submenu
+from coatmenu.core.menu_model import LIST, MenuItem, separator, sequence, submenu
 
 # --- command ids (from LKS utils/primitives_constants.py) --------------------
 NEUTRALISE = "$SCULPT_TRANSFORM"
@@ -60,6 +60,12 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 ]
 
 
+# Version markers for the lists we ship: bump the number when the preset changes
+# so the installer refreshes the user's copy (a hand-built list of the same name
+# has no marker and is never touched).
+PRESET_MARKERS = {"Prims": "prims/2"}
+
+
 def builtin_row(label: str, param: str) -> MenuItem:
     return sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
 
@@ -82,21 +88,39 @@ def primitive_groups() -> list[tuple[str, list[MenuItem]]]:
 
 
 def primitives_list(mode: str = LIST) -> MenuList:
-    """The ``Prims`` list: one submenu per group, same grouping as LKS."""
-    items: list[MenuItem] = [submenu(label, rows) for label, rows in primitive_groups()]
-    return MenuList(name="Prims", items=items, mode=mode)
+    """The ``Prims`` list.
+
+    The built-in shapes sit straight on the list - they are the ones you reach
+    for constantly - while the mesh and FFD groups stay folded into submenus so
+    the list does not grow past a screenful.
+    """
+    items: list[MenuItem] = [builtin_row(label, param)
+                             for label, param in BUILTIN_PRIMITIVES]
+    items.append(separator())
+    for label, rows in primitive_groups()[1:]:
+        items.append(submenu(label, rows))
+    return MenuList(name="Prims", items=items, mode=mode,
+                    preset=PRESET_MARKERS["Prims"])
 
 
 def install_presets(config: MenuConfig, names: tuple[str, ...] = ("Prims",)) -> list[str]:
-    """Add any missing preset list; returns the names that were added."""
+    """Add missing preset lists, and refresh ones shipped by an older version.
+
+    A preset list is recognised by its ``preset`` marker: a list you built by
+    hand - even one called ``Prims`` - has no marker and is never touched.
+    """
     built = {"Prims": primitives_list}
     added: list[str] = []
     for name in names:
-        if config.find(name) is not None:
-            continue
         make = built.get(name)
         if make is None:
             continue
-        config.lists.append(make())
-        added.append(name)
+        fresh = make()
+        existing = config.find(name)
+        if existing is None:
+            config.lists.append(fresh)
+            added.append(name)
+        elif existing.preset and existing.preset != fresh.preset:
+            config.lists[config.lists.index(existing)] = fresh
+            added.append(f"{name} (refreshed)")
     return added

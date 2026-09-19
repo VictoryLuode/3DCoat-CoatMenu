@@ -6,8 +6,9 @@ CoatMenu is the 3D-Coat sibling of [Krita **MenuBelt**](https://github.com/Victo
 you build your own lists of 3D-Coat commands and scripts, then reach them from a
 frameless overlay that appears where your cursor is.
 
-Hold the hotkey, move to the entry you want, release — it runs.
-`Esc` cancels. Clicking works too, if you prefer the mouse.
+Press the hotkey once: the menu appears at your cursor and **stays** after you
+release the key. Click an entry to run it — in a pie you can also press its
+digit — or click anywhere else / press `Esc` to close.
 
 > **Status: M3.** Multiple lists, submenus, per-list hotkeys, a drag-and-drop
 > editor and a radial **pie** renderer are in.
@@ -26,11 +27,11 @@ that marks a submenu (rest on it for a moment and the child panel unfolds):
 ![CoatMenu pie](docs/preview-pie.png)
 ![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
 
-The `Prims` list (ported from the LKS add-on's Add-Prims menu) and its
-built-in shapes:
+The `Prims` list (ported from the LKS add-on's Add-Prims menu) — the built-in
+shapes sit straight on the menu, while mesh and FFD stay folded into submenus:
 
 ![CoatMenu Prims](docs/preview-prims.png)
-![CoatMenu Prims, built-in shapes](docs/preview-prims-builtin.png)
+![CoatMenu Prims, a group submenu](docs/preview-prims-submenu.png)
 
 The editor:
 
@@ -43,8 +44,10 @@ extension builds on this machine)*
 
 * **Rows at the cursor** — a frameless, always-on-top overlay that never takes
   focus from 3D-Coat.
-* **Hold, move, release** — bind a hotkey and it runs the row you are pointing
-  at when you let go. `Esc` cancels. Clicking works too.
+* **Press once, then click** — the menu opens under the cursor and stays open
+  after you let the key go; it closes when you pick an entry, click away, or
+  press `Esc`. A click away still reaches 3DCoat (the overlay never grabs the
+  mouse or the keyboard).
 * **Multiple lists, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
   want; each becomes its own entry in 3D-Coat's menu (and so in
   Preferences ▸ Hotkeys).

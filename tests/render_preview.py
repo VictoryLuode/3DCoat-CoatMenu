@@ -167,7 +167,8 @@ if pie._child is not None:
 pie.dismiss()
 app.processEvents()
 
-# 6. the Prims preset (a port of the LKS Add-Prims menu) and its first submenu
+# 6. the Prims preset (a port of the LKS Add-Prims menu) and one group submenu
+# The built-in shapes sit straight on the list; mesh and FFD are folded away.
 from coatmenu.core import presets  # noqa: E402
 
 widget.dismiss()
@@ -184,7 +185,7 @@ widget._open_child(prims_branch)
 app.processEvents()
 print(f"prims submenu open: {widget._child is not None}")
 if widget._child is not None:
-    compose(os.path.join(OUT_DIR, "preview-prims-builtin.png"), [widget, widget._child])
+    compose(os.path.join(OUT_DIR, "preview-prims-submenu.png"), [widget, widget._child])
 widget.dismiss()
 app.processEvents()
 

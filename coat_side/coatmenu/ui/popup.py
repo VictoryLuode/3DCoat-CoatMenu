@@ -10,7 +10,7 @@ Deliberately *not* a normal window:
 * Keyboard is read by polling ``GetAsyncKeyState`` (Win32) instead of
   ``grabKeyboard()``. Grabbing the keyboard from inside 3DCoat swallows the
   user's keys (3DCoat misses the OS key-up), so polling is the only safe way to
-  support "hold the hotkey, move, release to run".
+  support "press the hotkey once, then click an entry".
 
 Everything is wrapped in try/except: this code runs inside 3DCoat's process, so
 a raised exception here is a crash there.
@@ -57,6 +57,7 @@ from coatmenu.ui import theme
 # ---------------------------------------------------------------------------
 
 VK_ESCAPE = 0x1B
+VK_LBUTTON = 0x01
 VK_1 = 0x31  # .. VK_9 = 0x39, the digit row (Blender's pie shortcut keys)
 
 
@@ -744,6 +745,27 @@ class MenuPopup(QWidget):
         if value < 1.0 and self.isVisible():
             QTimer.singleShot(theme.FADE_MS // 5, self._fade_tick)
 
+    def _click_outside(self, pos: QPoint | None = None) -> bool:
+        """True when the left button is down somewhere outside our panels.
+
+        The overlay never grabs the mouse (that would stop 3DCoat seeing clicks),
+        so a click away from the menu has to be noticed by polling - that click
+        still reaches 3DCoat and the menu simply closes, as in Blender.
+        """
+        if not is_key_down(VK_LBUTTON):
+            return False
+        if pos is None:
+            try:
+                from PySide6.QtGui import QCursor
+
+                pos = QCursor.pos()
+            except Exception:
+                return False
+        for panel in self.child_panels():
+            if panel.isVisible() and panel.frameGeometry().contains(pos):
+                return False
+        return True
+
     def _check_digits(self) -> bool:
         """Pie only: the 1..9 keys run that button straight away.
 
@@ -762,7 +784,11 @@ class MenuPopup(QWidget):
         return False
 
     def _on_poll(self) -> None:
-        """Per-frame health check: Escape cancels, release-of-trigger runs."""
+        """Per-frame health check: Escape and clicks outside close the menu.
+
+        The menu stays put when the hotkey is released - it closes when you pick
+        something, click away, or press Escape.
+        """
         try:
             if self.is_child:
                 return
@@ -776,17 +802,18 @@ class MenuPopup(QWidget):
                 return
             if self._check_digits():
                 return
-            if self._trigger_vk and not is_key_down(self._trigger_vk):
-                item = self._deepest_hover()
+            if self._click_outside():
                 self.dismiss()
-                if item is not None:
-                    run_item(item)
         except Exception:
             log("popup.poll failed", exc=True)
             self.dismiss()
 
     def set_trigger_vk(self, vk: int) -> None:
-        """Remember which held key should run the highlighted row on release."""
+        """Remember the key that opened the menu.
+
+        Kept for callers (the hotkey id that fired is still useful in logs), but
+        releasing it no longer runs or closes anything.
+        """
         self._trigger_vk = int(vk or 0)
 
     def dismiss(self) -> None:

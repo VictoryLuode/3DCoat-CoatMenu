@@ -110,16 +110,30 @@ print("== script items ==")
 popup.run_item(MenuItem(label="Script", kind="script", cid="C:/tmp/foo.py"))
 check(FAKE.scripts_run() == ["C:/tmp/foo.py"], "script item runs through coat.io.executeScript")
 
-print("== trigger-key release runs the highlighted row ==")
+print("== releasing the hotkey leaves the menu open (it is a click menu now) ==")
 FAKE.calls.clear()
 manager.show_menu(build_items(), anchor=QPoint(120, 120), trigger_vk=0x51)
 widget = manager.popup
 first_clickable = next(i for i, (_y, item, _h) in enumerate(widget._rows) if item.clickable)
 widget._hover = first_clickable
-popup.is_key_down = lambda _vk: False  # simulate "user let go of the key"
+popup.is_key_down = lambda _vk: False  # the user let go of the hotkey
 widget._on_poll()
-check(FAKE.commands_run() == ["$" + widget._rows[first_clickable][1].cid],
-      f"release executed the hovered row ({FAKE.commands_run()})")
+check(widget.isVisible(), "letting go of the hotkey no longer closes the menu")
+check(FAKE.commands_run() == [], f"and release runs nothing ({FAKE.commands_run()})")
+
+print("== a click away from the menu closes it ==")
+popup.is_key_down = lambda vk: vk == popup.VK_LBUTTON
+check(widget._click_outside(QPoint(widget.x() + 5, widget.y() + 5)) is False,
+      "a click inside the panel keeps it open")
+check(widget._click_outside(QPoint(widget.x() - 400, widget.y() - 400)) is True,
+      "a click away from the panel closes the menu")
+popup.is_key_down = lambda _vk: False
+check(widget._click_outside(QPoint(widget.x() - 400, widget.y() - 400)) is False,
+      "without a button press nothing closes")
+widget._on_poll()
+check(widget.isVisible() and FAKE.commands_run() == [],
+      "the menu survives a poll with no input")
+widget.dismiss()
 
 print("== escape dismisses ==")
 FAKE.calls.clear()

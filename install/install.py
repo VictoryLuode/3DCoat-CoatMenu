@@ -204,7 +204,8 @@ def install(documents: str) -> int:
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
     print("then use Scripts > CoatMenu > Show CoatMenu. Every list can get its own")
-    print("hotkey in Preferences > Hotkeys (hold it, move, release to run).")
+    print("hotkey in Preferences > Hotkeys. The menu stays open when you release the")
+    print("key: pick an entry, click away, or press Esc.")
     return 0
 
 

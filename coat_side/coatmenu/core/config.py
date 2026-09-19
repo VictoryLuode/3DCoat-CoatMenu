@@ -64,6 +64,7 @@ class MenuList:
     name: str
     items: list[MenuItem] = field(default_factory=list)
     mode: str = "list"
+    preset: str = ""  # marker ("prims/2") for lists we ship and may refresh
 
     @property
     def slug(self) -> str:
@@ -206,22 +207,28 @@ class MenuConfig:
             if not name:
                 continue
             items = _clean_items([i for i in (item_from_json(r) for r in raw.get("items") or []) if i])
-            lists.append(MenuList(name=name, items=items, mode=str(raw.get("mode") or "list")))
+            lists.append(MenuList(name=name, items=items, mode=str(raw.get("mode") or "list"),
+                                  preset=str(raw.get("preset") or "")))
             if len(lists) >= MAX_LISTS:
                 break
         return cls(lists=lists)
 
     def to_json(self) -> dict:
+        out: list[dict] = []
+        for lst in self.lists:
+            data = {
+                "name": lst.name,
+                "mode": lst.mode,
+                "items": [item_to_json(i) for i in lst.items],
+            }
+            if lst.preset:
+                # Only shipped lists carry this; it lets the installer refresh
+                # them without ever touching a hand-built list of the same name.
+                data["preset"] = lst.preset
+            out.append(data)
         return {
             "version": CONFIG_VERSION,
-            "lists": [
-                {
-                    "name": lst.name,
-                    "mode": lst.mode,
-                    "items": [item_to_json(i) for i in lst.items],
-                }
-                for lst in self.lists
-            ],
+            "lists": out,
         }
 
     @classmethod

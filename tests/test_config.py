@@ -30,6 +30,7 @@ FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
 from coatmenu.core import lists_registry as registry  # noqa: E402
 from coatmenu.core.config import MenuConfig, MenuList, item_from_json, item_to_json, slugify, starter_config  # noqa: E402
+from coatmenu.core.menu_model import MenuItem  # noqa: E402
 
 failures: list[str] = []
 
@@ -152,33 +153,49 @@ check([len(rows) for _label, rows in groups] == [12, 5, 8],
 
 preset_list = presets.primitives_list()
 check(preset_list.mode == "list", f"opens as a list ({preset_list.mode})")
-check([i.kind for i in preset_list.items] == ["submenu"] * 3,
-      "one submenu per group")
+kinds = [i.kind for i in preset_list.items]
+check(kinds[:12] == ["command"] * 12,
+      "the built-in shapes sit straight on the list (no submenu)")
+check(kinds[12] == "separator", "then a separator")
+check(kinds[13:] == ["submenu", "submenu"], "mesh and FFD stay folded into submenus")
+check(len(preset_list.items) == 15, f"15 rows in total ({len(preset_list.items)})")
 
-sphere = preset_list.items[0].children[0]
-check(sphere.label == "Sphere", f"first built-in entry ({sphere.label})")
+sphere = preset_list.items[0]
+check(sphere.label == "Sphere", f"first row is the built-in Sphere ({sphere.label})")
 check(sphere.cmds == ["$SCULPT_TRANSFORM", "$SCULP_PRIM",
                       "$VoxelSculptTool::prm_SpherePrim"],
       f"three-step sequence, same order 3DCoat needs ({sphere.cmds})")
-check(preset_list.items[0].children[1].cmds[-1] == "$VoxelSculptTool::prm_CubPrim",
+check(preset_list.items[1].cmds[-1] == "$VoxelSculptTool::prm_CubPrim",
       "Cube keeps 3DCoat's own abbreviation (prm_CubPrim)")
 
-mesh = preset_list.items[1].children[0]
+mesh = preset_list.items[13].children[0]
 check(mesh.cmds == ["$SCULPT_TRANSFORM", "$SCULP_MERGE",
                     "$select_UserPrefs/Models/SculptModels/Cube.obj"],
       f"mesh prims go through the merge tool ({mesh.cmds})")
-check(preset_list.items[2].children[0].cmds[-1] == "$VoxelSculptTool::ffBlob",
+check(preset_list.items[14].children[0].cmds[-1] == "$VoxelSculptTool::ffBlob",
       "FFD entry uses the ff* id")
 
 preset_cfg = MenuConfig()
 check(presets.install_presets(preset_cfg) == ["Prims"], "preset list added")
+check(preset_cfg.find("Prims").preset == "prims/2",
+      f"a shipped list carries its version marker ({preset_cfg.find('Prims').preset})")
 check(presets.install_presets(preset_cfg) == [], "adding it twice does nothing")
-check(len(preset_cfg.lists) == 1, "one list after the second call")
+
+older = MenuConfig(lists=[MenuList(name="Prims", preset="prims/1")])
+check(presets.install_presets(older) == ["Prims (refreshed)"],
+      "an older shipped version is refreshed in place")
+check(len(older.find("Prims").items) == 15, "and gets the current rows")
+
+handmade = MenuConfig(lists=[MenuList(name="Prims", items=[MenuItem(label="Mine", cid="MINE")])])
+check(presets.install_presets(handmade) == [],
+      "a hand-built list with the same name is left alone")
+check(len(handmade.find("Prims").items) == 1, "and keeps its own rows")
 
 round_trip = MenuConfig.from_json(preset_cfg.to_json())
-back = round_trip.find("Prims").items[0].children[0]
+back = round_trip.find("Prims").items[0]
 check(back.cmds == sphere.cmds, f"sequences survive a JSON round trip ({back.cmds})")
-check(isinstance(round_trip.to_json()["lists"][0]["items"][0]["items"][0], dict),
+check(round_trip.find("Prims").preset == "prims/2", "the preset marker survives too")
+check(isinstance(round_trip.to_json()["lists"][0]["items"][0], dict),
       "a multi-command row is written as an object, not a bare id")
 
 print()
