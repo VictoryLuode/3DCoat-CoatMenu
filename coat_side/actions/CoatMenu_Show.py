@@ -18,11 +18,12 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from core.log import log  # noqa: E402
-from core.show import show_main_menu  # noqa: E402
+from core.show import apply_labels, show_main_menu  # noqa: E402
 
 
 def main() -> None:
     log("menu item: show")
+    apply_labels()
     show_main_menu(script_path=os.path.abspath(__file__))
 
 

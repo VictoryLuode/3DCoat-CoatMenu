@@ -28,9 +28,18 @@ if _HERE not in sys.path:
 import cPy.cCore  # noqa: E402
 
 from core.log import log  # noqa: E402
-from ui import popup  # noqa: E402
 
 EXTENSION_NAME = "CoatMenu"
+
+
+def _popup():
+    """Import the overlay lazily.
+
+    Keeping Qt out of the module-level import graph means a Qt problem degrades
+    to "no overlay" instead of blocking the extension from loading at all.
+    """
+    from ui import popup  # noqa: PLC0415
+    return popup
 
 
 def _clear_queued_modules() -> None:
@@ -61,12 +70,30 @@ class CoatMenuExtension(cPy.cCore.cExtension):
     # -- lifecycle --------------------------------------------------------
 
     def onStartup(self) -> None:
+        try:
+            from core.show import apply_labels
+            apply_labels()
+        except Exception:
+            log("onStartup labels failed", exc=True)
         log(f"{EXTENSION_NAME} onStartup")
+
+    def onBuildMainMenu(self) -> None:
+        """Menu labels come from the translation table - make sure ours is in it."""
+        try:
+            from core.show import apply_labels
+            apply_labels()
+        except Exception:
+            pass
 
     def preprocess(self) -> None:
         """Once per frame, before tool processing: pump the Qt event loop."""
         self._frames += 1
-        popup.tick()
+        try:
+            _popup().tick()
+        except Exception:
+            # Never spam: report at most once every ~300 frames.
+            if self._frames % 300 == 0:
+                log("qt pump failed", exc=True)
 
     def postprocess(self) -> None:
         """Once per frame, after tool processing: housekeeping only."""
@@ -74,12 +101,15 @@ class CoatMenuExtension(cPy.cCore.cExtension):
 
     def onChangeRoom(self) -> None:
         # The overlay is transient; a room switch must not leave it floating.
-        popup.hide_menu()
+        try:
+            _popup().hide_menu()
+        except Exception:
+            pass
 
     def onExit(self) -> None:
         log(f"{EXTENSION_NAME} exiting")
         try:
-            popup.hide_menu()
+            _popup().hide_menu()
         except Exception:
             pass
 

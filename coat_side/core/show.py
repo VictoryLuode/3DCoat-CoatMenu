@@ -14,6 +14,21 @@ from ui import popup
 
 # Id we register our menu item under (see install/install.py -> ExtraMenuItems)
 MENU_HOTKEY_ID = "CoatMenu_Show"
+MENU_LABEL = "Show CoatMenu"
+
+
+def apply_labels() -> None:
+    """Give our menu item a readable label.
+
+    3DCoat shows the raw id unless the id has a translation entry - so this has
+    to be (re)applied at startup and on every invocation, not just once at
+    install time.
+    """
+    try:
+        import coat  # type: ignore
+        coat.ui.addTranslation(MENU_HOTKEY_ID, MENU_LABEL)
+    except Exception as exc:
+        log(f"apply_labels failed: {exc}")
 
 
 def show_main_menu(script_path: str = "") -> None:

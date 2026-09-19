@@ -15,8 +15,13 @@ import types
 class FakeCoat:
     def __init__(self, documents: str):
         self.calls: list[tuple[str, str]] = []
+        self.translations: dict[str, str] = {}
         self._documents = documents
-        self.ui = types.SimpleNamespace(cmd=self._cmd, presentInUI=lambda _id: True)
+        self.ui = types.SimpleNamespace(
+            cmd=self._cmd,
+            presentInUI=lambda _id: True,
+            addTranslation=self._add_translation,
+        )
         self.io = types.SimpleNamespace(
             documents=lambda: self._documents,
             executeScript=self._script,
@@ -32,6 +37,10 @@ class FakeCoat:
         self.calls.append(("cmd", str(cid)))
         if callback:
             callback()
+
+    def _add_translation(self, key, text):
+        self.translations[str(key)] = str(text)
+        return True
 
     def _script(self, path):
         self.calls.append(("script", str(path)))
