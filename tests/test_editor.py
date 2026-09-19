@@ -36,7 +36,7 @@ for name, cid in (("Resample", "$Resample"), ("Smooth", "$SmoothObject")):
 
 FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
@@ -171,6 +171,34 @@ check(reloaded._tree.topLevelItemCount() == len(saved["lists"][0]["items"]),
       f"reload keeps rows ({reloaded._tree.topLevelItemCount()})")
 reloaded.close_editor()
 editor.close_editor()
+
+print("== panel chrome + pointer ==")
+from coatmenu.ui import cursor as cursor_mod  # noqa: E402
+
+chrome = fresh_editor()
+chrome.show_editor()
+app.processEvents()
+start_shot = chrome.grab().toImage()
+sample = start_shot.pixelColor(20, 20)
+check(sample.alpha() > 200, f"panel background is painted, not transparent (alpha={sample.alpha()})")
+check(sample.red() < 90 and sample.green() < 90 and sample.blue() < 90,
+      f"panel background is dark (rgb={sample.getRgb()})")
+
+cursor_mod.system_cursor_visible = lambda: False
+chrome._cursor_local = QPoint(40, 40)
+chrome.repaint()
+app.processEvents()
+with_pointer = chrome.grab().toImage()
+
+cursor_mod.system_cursor_visible = lambda: True
+chrome.repaint()
+app.processEvents()
+without_pointer = chrome.grab().toImage()
+check(with_pointer != without_pointer,
+      "editor draws its own pointer only while the system pointer is hidden")
+
+chrome.close_editor()
+check(not chrome._cursor_timer.isActive(), "pointer polling stops when the editor closes")
 
 print()
 if failures:

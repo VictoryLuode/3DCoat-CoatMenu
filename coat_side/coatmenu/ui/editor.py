@@ -18,7 +18,8 @@ from __future__ import annotations
 import json
 import os
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -39,6 +40,7 @@ from coatmenu.core import catalog, lists
 from coatmenu.core.config import MenuConfig, MenuList, item_to_json
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import COMMAND, HEADER, SCRIPT, SEPARATOR, SUBMENU, MenuItem
+from coatmenu.ui import cursor as cursor_tool
 from coatmenu.ui import theme
 
 ROLE_KIND = Qt.UserRole + 1
@@ -49,12 +51,10 @@ _TITLE_ROW_HEIGHT = 30
 
 def _css() -> str:
     """Dark styling that matches the overlay (3DCoat's chrome is dark too)."""
+    # The panel's own background and border are painted in paintEvent: a plain
+    # QWidget never draws a stylesheet background, which is why the panel used to
+    # look transparent outside the child widgets.
     return f"""
-    QWidget#coatmenuEditor {{
-        background: rgba(43, 43, 43, 245);
-        border: 1px solid rgba(85, 85, 85, 220);
-        border-radius: 8px;
-    }}
     QLabel {{ color: rgb(224, 224, 224); font-size: 9pt; }}
     QLabel#coatmenuTitle {{ color: rgb(144, 202, 249); font-weight: bold; }}
     QLabel#coatmenuHint {{ color: rgb(136, 136, 136); }}
@@ -97,6 +97,7 @@ class CoatMenuEditor(QWidget):
         self._sources_loaded = False
         self._drag_offset: QPoint | None = None
         self._dirty = False
+        self._cursor_local: QPoint | None = None
 
         self.setObjectName("coatmenuEditor")
         self.setWindowTitle("CoatMenu")
@@ -107,6 +108,13 @@ class CoatMenuEditor(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setStyleSheet(_css())
         self.resize(620, 420)
+
+        # The drawn pointer has to follow the real one even while it sits still
+        # (3DCoat shows nothing at all in brush mode) - so poll for it rather than
+        # relying on mouse-move events, which the child widgets swallow anyway.
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.setInterval(theme.CURSOR_POLL_MS)
+        self._cursor_timer.timeout.connect(self._sync_cursor)
 
         self._build()
 
@@ -243,6 +251,49 @@ class CoatMenuEditor(QWidget):
         return row
 
     # ------------------------------------------------------------------
+    # painting
+    # ------------------------------------------------------------------
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        """Panel chrome + our own pointer.
+
+        A plain QWidget draws neither a stylesheet background nor a border, and
+        3DCoat may have hidden the system cursor - both are drawn here.
+        """
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+
+            rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            painter.setPen(QPen(QColor(*theme.BORDER), theme.BORDER_WIDTH))
+            painter.setBrush(QColor(*theme.BG))
+            painter.drawRoundedRect(rect, theme.CORNER_RADIUS, theme.CORNER_RADIUS)
+
+            # a hairline under the title strip, so the panel reads as a window
+            separator_y = 6 + _TITLE_ROW_HEIGHT
+            painter.setPen(QPen(QColor(*theme.SEPARATOR), 1))
+            painter.drawLine(int(theme.PADDING * 1.5), separator_y,
+                             self.width() - int(theme.PADDING * 1.5), separator_y)
+
+            cursor_tool.draw(painter, self._cursor_local)
+        except Exception:
+            log("editor.paintEvent failed", exc=True)
+        finally:
+            painter.end()
+
+    def _sync_cursor(self) -> None:
+        """Keep the drawn pointer in step with the real one."""
+        try:
+            if not self.isVisible():
+                return
+            value = cursor_tool.local_position(self)
+            if value != self._cursor_local:
+                self._cursor_local = value
+                self.update()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
     # window behaviour
     # ------------------------------------------------------------------
 
@@ -256,8 +307,11 @@ class CoatMenuEditor(QWidget):
         self.show()
         self.raise_()
         self.setWindowOpacity(1.0)
+        self._cursor_timer.start()
 
     def close_editor(self) -> None:
+        self._cursor_timer.stop()
+        self._cursor_local = None
         self.hide()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802

@@ -37,6 +37,7 @@ POLL_MS = 20          # key-poll interval while the popup is open
 FADE_IN = True
 SUBMENU_OVERLAP = 6   # px the child panel overlaps its parent (no dead gap)
 SUBMENU_GRACE_MS = 160  # leave grace before a child panel closes
+CURSOR_POLL_MS = 40   # how often a panel re-reads the real pointer position
 
 # --- submenu arrow (drawn, not a font glyph) ---
 ARROW_WIDTH = 5

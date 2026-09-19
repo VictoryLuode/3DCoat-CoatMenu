@@ -189,6 +189,8 @@ widget.dismiss()
 print("== pointer: drawn only while the system cursor is hidden ==")
 # 3DCoat hides the system pointer in brush/pen modes, so the overlay draws its
 # own. Detection is mocked here (offscreen has no real cursor state).
+from coatmenu.ui import cursor as cursor_mod  # noqa: E402
+
 manager.show_menu(build_items(), anchor=QPoint(120, 120))
 widget = manager.popup
 app.processEvents()
@@ -197,12 +199,12 @@ widget.mouseMoveEvent(type("E", (), {"position": lambda _s, p=QPointF(20, row_y)
 check(widget._cursor_local is not None and widget._cursor_local.y() == row_y,
       f"pointer position is tracked ({widget._cursor_local})")
 
-popup.system_cursor_visible = lambda: True
+cursor_mod.system_cursor_visible = lambda: True
 widget.repaint()
 app.processEvents()
 visible_shot = widget.grab().toImage()
 
-popup.system_cursor_visible = lambda: False
+cursor_mod.system_cursor_visible = lambda: False
 widget.repaint()
 app.processEvents()
 hidden_shot = widget.grab().toImage()
@@ -210,7 +212,7 @@ hidden_shot = widget.grab().toImage()
 check(visible_shot != hidden_shot,
       "an arrow is drawn only when the real pointer is hidden (no double cursor)")
 
-popup.system_cursor_visible = lambda: True
+cursor_mod.system_cursor_visible = lambda: True
 widget.leaveEvent(None)
 check(widget._cursor_local is None, "leaving the panel stops drawing the pointer")
 widget.dismiss()

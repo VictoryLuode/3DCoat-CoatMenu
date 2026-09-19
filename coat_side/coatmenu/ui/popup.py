@@ -18,7 +18,6 @@ a raised exception here is a crash there.
 from __future__ import annotations
 
 import ctypes
-import os
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import (
@@ -46,6 +45,7 @@ from coatmenu.core.menu_model import (  # noqa: F401  (re-exported for callers/t
     submenu,
     title_item,
 )
+from coatmenu.ui import cursor as cursor_tool
 from coatmenu.ui import theme
 
 # ---------------------------------------------------------------------------
@@ -74,50 +74,8 @@ def is_key_down(vk: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Is the real mouse pointer even visible?
+# Is the real mouse pointer even visible? (see coatmenu/ui/cursor.py)
 # ---------------------------------------------------------------------------
-
-
-class _POINT(ctypes.Structure):
-    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-
-
-class _CURSORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", ctypes.c_uint32),
-        ("flags", ctypes.c_uint32),
-        ("hCursor", ctypes.c_void_p),
-        ("ptScreenPos", _POINT),
-    ]
-
-
-CURSOR_SHOWING = 0x00000001
-
-
-def system_cursor_visible() -> bool:
-    """True when Windows is actually drawing the mouse pointer.
-
-    3DCoat hides the system cursor in brush/pen modes, so the overlay would show
-    no pointer at all while someone is sculpting. In exactly that case we draw
-    our own arrow; when the real pointer is visible we draw nothing, so there is
-    never a double cursor.
-
-    ``COATMENU_FORCE_CURSOR`` overrides the detection (previews, tests).
-    """
-    force = os.environ.get("COATMENU_FORCE_CURSOR")
-    if force:
-        return force.strip().lower() not in ("0", "false", "off", "no")
-    u = _user32()
-    if u is None:
-        return True
-    try:
-        info = _CURSORINFO()
-        info.cbSize = ctypes.sizeof(_CURSORINFO)
-        if not u.GetCursorInfo(ctypes.byref(info)):
-            return True
-        return bool(info.flags & CURSOR_SHOWING)
-    except Exception:
-        return True
 
 
 # ---------------------------------------------------------------------------
@@ -347,22 +305,7 @@ class MenuPopup(QWidget):
 
     def _draw_cursor(self, painter: QPainter) -> None:
         """Draw our own pointer when 3DCoat has hidden the system one."""
-        pos = self._cursor_local
-        if pos is None or system_cursor_visible():
-            return
-        x, y = float(pos.x()), float(pos.y())
-        arrow = QPainterPath()
-        arrow.moveTo(x, y)
-        arrow.lineTo(x, y + 17.0)
-        arrow.lineTo(x + 4.3, y + 12.7)
-        arrow.lineTo(x + 7.4, y + 18.8)
-        arrow.lineTo(x + 10.3, y + 17.3)
-        arrow.lineTo(x + 7.2, y + 11.4)
-        arrow.lineTo(x + 12.8, y + 11.0)
-        arrow.closeSubpath()
-        painter.setPen(QPen(QColor(18, 18, 18, 235), 1.4))
-        painter.setBrush(QColor(252, 252, 252, 250))
-        painter.drawPath(arrow)
+        cursor_tool.draw(painter, self._cursor_local)
 
     def _sync_cursor(self) -> None:
         """Follow the real pointer position (driven by the poll timer).
@@ -370,14 +313,8 @@ class MenuPopup(QWidget):
         Needed because a hidden system cursor gives no feedback at all: the mouse
         can sit still, and the overlay still has to show where it is.
         """
-        try:
-            from PySide6.QtGui import QCursor
-            screen_pos = QCursor.pos()
-        except Exception:
-            return
         for panel in self.child_panels():
-            local = panel.mapFromGlobal(screen_pos)
-            value = local if panel.rect().contains(local) else None
+            value = cursor_tool.local_position(panel)
             if value != panel._cursor_local:
                 panel._cursor_local = value
                 panel.update()
