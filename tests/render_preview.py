@@ -202,4 +202,17 @@ editor.move(QPoint(60, 60))
 editor._cursor_layer.set_position(QPoint(170, 132))
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-editor.png"), [editor])
+
+# 8. the editor with its live preview beside it (un-saved rows included)
+editor.preview_list()
+app.processEvents()
+live = editor._preview
+print(f"editor preview open: {live is not None}")
+if live is not None:
+    # Offscreen screens are narrow, so the panel was clamped on top of the
+    # editor; put it back beside the window for the picture.
+    live.move(editor.x() + editor.width() + 18, editor.y() + 70)
+    app.processEvents()
+    compose(os.path.join(OUT_DIR, "preview-editor-live.png"), [editor, live])
+editor.close_preview()
 editor.close_editor()

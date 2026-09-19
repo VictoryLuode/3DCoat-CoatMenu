@@ -103,6 +103,7 @@ class MenuPopup(QWidget):
         self._title: str = ""
         self._hover: int = -1
         self._trigger_vk: int = 0
+        self._transient: bool = True
         self._parent = parent_popup
         self._child: "MenuPopup | None" = None
         self._child_index: int = -1
@@ -182,6 +183,10 @@ class MenuPopup(QWidget):
         does not draw one either) - the title is kept for tooltips and callers.
         """
         self._title = text or ""
+
+    def set_transient(self, transient: bool) -> None:
+        """A preview panel never closes itself - the editor owns its lifetime."""
+        self._transient = bool(transient)
 
     def _rebuild_rows(self) -> None:
         rows: list[tuple[int, MenuItem, int]] = []
@@ -792,6 +797,11 @@ class MenuPopup(QWidget):
         try:
             if self.is_child:
                 return
+            if not self._transient:
+                # A preview shown by the editor: it stays until the editor closes
+                # it, and it never runs anything (no digit keys, no click-away).
+                self._sync_cursor()
+                return
             if not system.foreground_is_current_process():
                 # The user switched to another application - don't linger on top.
                 self.dismiss()
@@ -882,6 +892,11 @@ class PopupManager:
     def popup(self) -> MenuPopup | None:
         return self._popup
 
+    def set_transient(self, transient: bool) -> None:
+        """Forward to the overlay (a preview panel never closes itself)."""
+        if self._popup is not None:
+            self._popup.set_transient(transient)
+
     def is_visible(self) -> bool:
         try:
             return bool(self._popup and self._popup.isVisible())
@@ -895,10 +910,13 @@ class PopupManager:
         trigger_vk: int = 0,
         title: str = "",
         mode: str = LIST,
+        transient: bool = True,
     ) -> None:
         """Show (or refresh) the overlay at *anchor* (defaults to the cursor).
 
         *mode* picks the layout: ``LIST`` (vertical rows) or ``PIE`` (radial).
+        ``transient=False`` is for the editor's preview: such a panel stays put
+        until it is dismissed explicitly and never runs anything.
         """
         try:
             self._ensure_app()
@@ -907,6 +925,7 @@ class PopupManager:
 
             popup = self._popup
             popup.set_mode(mode)
+            popup.set_transient(transient)
 
             show_items = list(items)
             if title and mode != PIE:

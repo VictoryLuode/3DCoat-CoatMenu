@@ -229,6 +229,30 @@ chrome.close_editor()
 check(not chrome._cursor_timer.isActive(), "pointer polling stops when the editor closes")
 check(layer._position is None, "the drawn pointer is cleared on close")
 
+print("== live preview ==")
+from coatmenu.ui import popup as popup_mod  # noqa: E402
+
+editor.select_list(0)
+editor.preview_list()
+check(editor._preview is not None and editor._preview.isVisible(), "preview panel opens")
+check(editor._preview._transient is False, "a preview never closes itself")
+check(editor._preview._items != [], "the preview has the current rows")
+
+popup_mod.is_key_down = lambda vk: vk == popup_mod.VK_LBUTTON
+editor._preview._on_poll()
+check(editor._preview.isVisible(), "a click outside does not close a preview")
+popup_mod.is_key_down = lambda vk: vk == popup_mod.VK_ESCAPE
+editor._preview._on_poll()
+check(editor._preview.isVisible(), "escape does not close a preview either")
+popup_mod.is_key_down = lambda _vk: False
+
+editor.preview_list()  # pressing it twice must not stack panels
+panel = editor._preview
+editor.close_editor()
+check(panel is not None and not panel.isVisible(), "closing the editor closes the preview")
+check(editor._preview is None, "and forgets it")
+editor.show_editor()
+
 print()
 if failures:
     print(f"EDITOR FAILED ({len(failures)}): " + "; ".join(failures))

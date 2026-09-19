@@ -132,6 +132,7 @@ class CoatMenuEditor(QWidget):
         self._sources_loaded = False
         self._drag_offset: QPoint | None = None
         self._dirty = False
+        self._preview = None
 
         self.setObjectName("coatmenuEditor")
         self.setWindowTitle("CoatMenu")
@@ -308,6 +309,7 @@ class CoatMenuEditor(QWidget):
             row.addWidget(button)
         row.addStretch(1)
         for label, slot in (
+            ("Preview", self.preview_list),
             ("Import", self.import_config),
             ("Export", self.export_config),
             ("Save & apply", self.save),
@@ -390,7 +392,46 @@ class CoatMenuEditor(QWidget):
     def close_editor(self) -> None:
         self._cursor_timer.stop()
         self._cursor_layer.set_position(None)
+        self.close_preview()
         self.hide()
+
+    # ------------------------------------------------------------------
+    # live preview
+    # ------------------------------------------------------------------
+
+    def preview_list(self) -> None:
+        """Show the current rows exactly as the menu will open them.
+
+        A separate overlay instance (not the singleton the hotkeys use), so a
+        preview and a real menu never fight over one window. It uses the tree's
+        *current* rows, so an un-saved edit can be looked at before committing.
+        """
+        target = self.current_list
+        if target is None:
+            return
+        from coatmenu.ui.popup import MenuPopup, title_item
+
+        rows = self.tree_to_items()
+        if not rows:
+            self.set_status("nothing to preview yet")
+            return
+        mode = "pie" if target.mode == "pie" else "list"
+        panel = self._preview
+        if panel is None:
+            panel = MenuPopup()
+            self._preview = panel
+        panel.set_mode(mode)
+        panel.set_transient(False)
+        panel.set_title(target.name)
+        panel.set_items(rows if mode == "pie" else [title_item(target.name)] + rows)
+        panel.show_at(QPoint(self.x() + self.width() + 18, self.y() + 70))
+        self.set_status(f"previewing '{target.name}' ({mode}) - it never runs anything")
+
+    def close_preview(self) -> None:
+        panel = self._preview
+        self._preview = None
+        if panel is not None:
+            panel.dismiss()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         # drag the panel by its title strip
@@ -681,6 +722,9 @@ class CoatMenuEditor(QWidget):
             self._config = config
             self._dirty = False
             self.reload_lists()
+            if self._preview is not None:
+                # Keep the preview honest: the rows may have just changed.
+                self.preview_list()
             self.set_status(
                 f"Saved: {info['lists']} list(s), {info['registered']} menu item(s) registered"
             )

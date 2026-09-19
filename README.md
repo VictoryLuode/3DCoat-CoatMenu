@@ -68,6 +68,9 @@ extension builds on this machine)*
   entries, tool presets, scripts), with readable names taken from `English.xml`;
   drag to reorder, double-click to rename, nest submenus, import/export, save &
   apply.
+* **Live preview** — the editor's `Preview` button opens the current list exactly
+  as it will appear (list or pie, un-saved edits included). That panel never runs
+  anything, so it is safe to poke at the layout while editing.
 * **Diagnostics built in** — the editor shows each list's hotkey next to its name
   and flags two lists fighting over one key, and `Scripts ▸ CoatMenu ▸
   CoatMenu_Doctor` writes a full report (paths, startup state, catalog sizes,
