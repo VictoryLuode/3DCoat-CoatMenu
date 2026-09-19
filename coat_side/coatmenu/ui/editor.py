@@ -18,8 +18,8 @@ from __future__ import annotations
 import json
 import os
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -50,6 +50,20 @@ ROLE_CID = Qt.UserRole + 2
 ROLE_CMDS = Qt.UserRole + 3
 
 _TITLE_ROW_HEIGHT = 30
+
+# The editor is mostly tree + catalog list, so it wants room: twice the original
+# panel, capped to whatever screen it lands on (3DCoat is usually full-screen).
+EDITOR_SIZE = QSize(1240, 840)
+
+
+def _fit_to_screen(wanted: QSize) -> QSize:
+    """*wanted* shrunk to fit the available screen area, if it does not."""
+    try:
+        area = QGuiApplication.primaryScreen().availableGeometry()
+        return QSize(min(wanted.width(), int(area.width() * 0.95)),
+                     min(wanted.height(), int(area.height() * 0.95)))
+    except Exception:
+        return wanted
 
 
 def _css() -> str:
@@ -148,7 +162,7 @@ class CoatMenuEditor(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setStyleSheet(_css())
-        self.resize(620, 420)
+        self.resize(_fit_to_screen(EDITOR_SIZE))
 
         # The drawn pointer has to follow the real one even while it sits still
         # (3DCoat shows nothing at all in brush mode) - so poll for it rather than
@@ -402,12 +416,24 @@ class CoatMenuEditor(QWidget):
         self.reload_lists()
         if self._dirty:
             self.set_status("un-saved edits kept - press Save & apply")
+        self._clamp_to_screen()
         self.show()
         self.raise_()
         self.setWindowOpacity(1.0)
         self._cursor_layer.setGeometry(self.rect())
         self._cursor_layer.raise_()
         self._cursor_timer.start()
+
+    def _clamp_to_screen(self) -> None:
+        """Keep the panel on screen - at 1240px it can hang off the right edge."""
+        try:
+            area = QGuiApplication.primaryScreen().availableGeometry()
+        except Exception:
+            return
+        x = min(max(self.x(), area.left()), max(area.left(), area.right() - self.width()))
+        y = min(max(self.y(), area.top()), max(area.top(), area.bottom() - self.height()))
+        if (x, y) != (self.x(), self.y()):
+            self.move(x, y)
 
     def close_editor(self) -> None:
         self._cursor_timer.stop()
@@ -457,8 +483,25 @@ class CoatMenuEditor(QWidget):
         panel.set_transient(False)
         panel.set_title(target.name)
         panel.set_items(rows if mode == "pie" else [title_item(target.name)] + rows)
-        panel.show_at(QPoint(self.x() + self.width() + 18, self.y() + 70))
+        panel.show_at(self._preview_anchor())
         self.set_status(f"previewing '{target.name}' ({mode}) - it never runs anything")
+
+    def _preview_anchor(self) -> QPoint:
+        """Beside the editor when the screen has room, otherwise on its left.
+
+        At 1240px wide the editor usually eats the right half of the screen, so
+        the preview has to be able to fall back to the other side.
+        """
+        x = self.x() + self.width() + 18
+        y = self.y() + 70
+        try:
+            area = QGuiApplication.primaryScreen().availableGeometry()
+            if x + 260 > area.right():
+                x = max(area.left(), self.x() - 260)
+            y = min(y, max(area.top(), area.bottom() - 240))
+        except Exception:
+            pass
+        return QPoint(int(x), int(y))
 
     def close_preview(self) -> None:
         panel = self._preview

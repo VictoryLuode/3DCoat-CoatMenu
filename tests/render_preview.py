@@ -199,12 +199,15 @@ widget.dismiss()
 app.processEvents()
 
 # 7. the editor panel
-from coatmenu.ui.editor import CoatMenuEditor  # noqa: E402
+from coatmenu.ui.editor import EDITOR_SIZE, CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)
 editor_config.add_list("Paint")
 editor = CoatMenuEditor(config=editor_config)
 editor.show_editor()
+# Offscreen screens are small, so _fit_to_screen would shrink it: force the real
+# target size for the picture.
+editor.resize(EDITOR_SIZE)
 editor._source_kind.setCurrentIndex(0)  # the combined 3DCoat command list
 editor.reload_sources()
 editor.move(QPoint(60, 60))
