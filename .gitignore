@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# local scratch
+*.log

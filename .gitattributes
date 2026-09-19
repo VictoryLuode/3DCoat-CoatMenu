@@ -1,0 +1,7 @@
+# Normalise line endings on commit; keep each file type in its native form.
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.xml text eol=crlf

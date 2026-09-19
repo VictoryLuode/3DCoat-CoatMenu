@@ -1,0 +1,1 @@
+"""CoatMenu - UI package."""
