@@ -91,28 +91,38 @@ class CoatMenuExtension(cPy.cCore.cExtension):
             # reads both at startup, so bring them up to date here. Nothing is
             # rewritten when it is already current.
             menus.sync_config(config, register=False)
+            # Menu items (and the keys set in the editor) go in here, not from the
+            # menu-building hook: see onExtendMenu.
             menus.register_menu_items(config)
         except Exception:
             log("onStartup list registration failed", exc=True)
         log(f"{EXTENSION_NAME} onStartup")
 
+    def onExtendMenu(self) -> None:
+        """Menu-building hook, for diagnosis.
+
+        ``cCore.pyi`` calls this one "insert some menu items to main menu", and
+        ``coat.menu_item`` / ``coat.menu_hotkey`` are documented as callable "only
+        from the menu making script". It never ran on this machine though - the log
+        said so - so the entries are registered from ``onStartup`` through
+        ``coat.ui.insertInMenu`` instead, the path that demonstrably works. This
+        hook only records that 3DCoat got here, in case that changes.
+        """
+        log("onExtendMenu reached")
+
     def onBuildMainMenu(self) -> None:
         """Menu labels come from the translation table - make sure ours is in it.
 
-        Also the one moment 3DCoat lets us add menu entries through its own API,
-        which is how a menu gets the key set in the editor (see
-        ``menus.register_menu_api``).
+        Logged too: only one of the two hooks is actually run by 3DCoat, and the
+        log is how we find out which. Registering the entries here as well as in
+        onExtendMenu would list every menu twice, so this one stays labels-only.
         """
+        log("onBuildMainMenu reached")
         try:
             from coatmenu.core.show import apply_labels
             apply_labels()
         except Exception:
             pass
-        try:
-            from coatmenu.core import menus
-            menus.register_menu_api()
-        except Exception:
-            log("menu api registration failed", exc=True)
 
     def preprocess(self) -> None:
         """Once per frame, before tool processing: pump the Qt event loop."""

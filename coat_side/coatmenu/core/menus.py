@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 
 from coatmenu.core import paths
+from coatmenu.core import menus_registry
 from coatmenu.core.config import MenuConfig, starter_config
 from coatmenu.core.menus_registry import (
     MAIN_MENU_ID,
@@ -110,11 +111,13 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
 
 
 def register_menu_items(config: MenuConfig) -> int:
-    """Insert/refresh the three fixed menu items in the running 3DCoat instance.
+    """Insert/refresh every menu item in the running 3DCoat instance.
 
-    Only the fixed ones (Show CoatMenu / Edit menus / doctor): the one-per-menu
-    entries are registered by ``register_menu_api`` at menu-build time so they can
-    carry a hotkey, and doing it in both places would list every menu twice.
+    Runtime insertion via ``coat.ui.insertInMenu`` is the path that is known to
+    work here: it is how these entries got into the Scripts menu in the first
+    place. A key (if the editor set one) goes immediately after its own item,
+    because ``coat.menu_hotkey`` applies to the entry it follows - never to an
+    entry that was already there, whose key is not ours to decide.
 
     Returns how many items were newly inserted. Never raises.
     """
@@ -123,7 +126,21 @@ def register_menu_items(config: MenuConfig) -> int:
     except Exception:
         return 0
 
+    from coatmenu.core import hotkeys as hotkeys_mod
+    try:
+        user_set = hotkeys_mod.user_defined_ids()
+    except Exception:
+        user_set = set()
+
+    wanted_keys: dict[str, dict] = {
+        lst.hotkey_id: lst.hotkey for lst in config.menus if getattr(lst, "hotkey", None)
+    }
+    for _menu_name, item_id, _script_name, row in menus_registry.shortcut_rows(config):
+        if row.hotkey:
+            wanted_keys[item_id] = row.hotkey
+
     inserted = 0
+    keys_set = 0
     # Drop entries left behind by earlier id schemes first, otherwise a menu shows
     # up twice in 3DCoat's Scripts list for the rest of the session.
     for menu_id in legacy_hotkey_ids(config):
@@ -135,16 +152,33 @@ def register_menu_items(config: MenuConfig) -> int:
             log(f"legacy menu item {menu_id} not removed: {exc}")
 
     for menu_id, label, script in menu_entries(
-        config, paths.extension_root(), paths.entry_scripts_dir(), include="fixed"
+        config, paths.extension_root(), paths.entry_scripts_dir()
     ):
         try:
-            # Only the label. The entry itself comes from CoatMenu.xml, which
-            # 3DCoat reads at startup - inserting it at runtime as well made
-            # 3DCoat persist its own ``<menu_id>.xml`` copy next to our file, and
-            # two copies of one entry is how a menu ends up listed twice.
             coat.ui.addTranslation(menu_id, label)
+            if coat.ui.checkIfMenuItemInserted(menu_id):
+                # Already in the menu: leave its binding exactly as it is.
+                continue
+            coat.ui.insertInMenu(MENU_NAME, menu_id, script)
+            inserted += 1
         except Exception as exc:
             log(f"menu item {menu_id} failed: {exc}")
+            continue
+
+        hotkey = wanted_keys.get(menu_id) or {}
+        if not hotkey.get("key") or menu_id in user_set:
+            continue
+        try:
+            coat.menu_hotkey(str(hotkey["key"]).upper(),
+                             1 if hotkey.get("shift") else 0,
+                             1 if hotkey.get("ctrl") else 0,
+                             1 if hotkey.get("alt") else 0)
+            keys_set += 1
+        except Exception as exc:
+            # The entry is in the menu either way; only its key was refused.
+            log(f"menu key for {menu_id} refused: {exc}")
+    log(f"menu items: inserted={inserted} keys={keys_set} "
+        f"user-set={len(user_set)} configured={len(wanted_keys)}")
     return inserted
 
 
@@ -162,11 +196,12 @@ def register_menu_api() -> dict:
     report = menus_registry.register_menus_via_api(
         config, paths.extension_root(), paths.entry_scripts_dir()
     )
-    if report.get("registered") or report.get("error"):
-        log(f"menu api: registered={report.get('registered')} "
-            f"hotkeys={len(report.get('hotkeys') or [])} "
-            f"kept-user-keys={len(report.get('kept_user_keys') or [])} "
-            f"error={report.get('error') or 'none'}")
+    # Always logged: this line is the only evidence that 3DCoat ran the menu pass,
+    # and which keys it accepted.
+    log(f"menu api: registered={report.get('registered')} "
+        f"hotkeys={len(report.get('hotkeys') or [])} "
+        f"kept-user-keys={len(report.get('kept_user_keys') or [])} "
+        f"error={report.get('error') or 'none'}")
     return report
 
 
