@@ -22,6 +22,25 @@ MAIN_MENU_ID = "CoatMenu_Show"
 MAIN_MENU_LABEL = "Show CoatMenu"
 MAIN_SCRIPT_NAME = "CoatMenu_Show.py"
 
+
+def entry_label(name: str) -> str:
+    """The Scripts-menu name for one of our menus.
+
+    Prefixed so CoatMenu's entries sit together in 3DCoat's Scripts list and are
+    obvious at a glance; the menu keeps its own name everywhere else.
+    """
+    return " ".join(f"CoatMenu_{name}".split())
+
+
+def legacy_hotkey_ids(config: MenuConfig) -> list[str]:
+    """Ids earlier versions registered for these same menus.
+
+    Before the terminology pass a menu's id was ``CoatMenu_List_<Name>``. Those
+    entries are still in the *running* 3DCoat menu (rewriting the XML does not
+    touch the live menu), which is how one menu ended up listed twice.
+    """
+    return [f"CoatMenu_List_{lst.slug}" for lst in config.menus]
+
 EDITOR_MENU_ID = "CoatMenu_Editor"
 EDITOR_MENU_LABEL = "Edit menus"
 EDITOR_SCRIPT_NAME = "CoatMenu_Editor.py"
@@ -164,7 +183,8 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
         ),
     ]
     for lst in config.menus:
-        rows.append((lst.hotkey_id, lst.name, entry_script_path(entry_scripts_dir, lst.slug)))
+        rows.append((lst.hotkey_id, entry_label(lst.name),
+                     entry_script_path(entry_scripts_dir, lst.slug)))
     return rows
 
 

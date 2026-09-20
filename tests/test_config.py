@@ -140,6 +140,18 @@ check("<MenuItem>CoatMenu_Doctor</MenuItem>" in xml, "doctor entry registered")
 check("<MenuItem>CoatMenu_Sculpt</MenuItem>" in xml, "list entry registered")
 check(f"<Command>script:{registry._posix(sculpt_script)}</Command>" in xml, "absolute posix script path")
 
+print("== Scripts menu entries are prefixed ==")
+entries = registry.menu_entries(cfg, ext, entry_dir)
+labels = {menu_id: label for menu_id, label, _script in entries}
+check(labels["CoatMenu_Sculpt"] == "CoatMenu_Sculpt",
+      f"a menu's Scripts entry carries the prefix ({labels['CoatMenu_Sculpt']})")
+check(labels["CoatMenu_Show"] == "Show CoatMenu", "the main entry keeps its own name")
+check(labels["CoatMenu_Editor"] == "Edit menus", "and so does the editor entry")
+check(registry.entry_label("Shade  (3)") == "CoatMenu_Shade (3)",
+      "double spaces are squeezed out of the label")
+check(registry.legacy_hotkey_ids(cfg) == ["CoatMenu_List_Sculpt", "CoatMenu_List_Paint"],
+      f"the ids the previous version used are known ({registry.legacy_hotkey_ids(cfg)})")
+
 print("== stale launchers are cleaned up ==")
 cfg2 = MenuConfig(menus=[Menu(name="Sculpt")])
 info = registry.sync(cfg2, ext, entry_dir, xml_path)

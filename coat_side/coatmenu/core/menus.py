@@ -14,7 +14,12 @@ import os
 
 from coatmenu.core import paths
 from coatmenu.core.config import MenuConfig, starter_config
-from coatmenu.core.menus_registry import MAIN_MENU_ID, menu_entries, sync
+from coatmenu.core.menus_registry import (
+    MAIN_MENU_ID,
+    legacy_hotkey_ids,
+    menu_entries,
+    sync,
+)
 from coatmenu.core.log import log
 
 # Where our menu items appear in 3DCoat's main menu (see menu_sections.txt).
@@ -112,6 +117,16 @@ def register_menu_items(config: MenuConfig) -> int:
         return 0
 
     inserted = 0
+    # Drop entries left behind by earlier id schemes first, otherwise a menu shows
+    # up twice in 3DCoat's Scripts list for the rest of the session.
+    for menu_id in legacy_hotkey_ids(config):
+        try:
+            if coat.ui.checkIfMenuItemInserted(menu_id):
+                coat.ui.removeCommandFromMenu(menu_id)
+                log(f"removed legacy menu item {menu_id}")
+        except Exception as exc:
+            log(f"legacy menu item {menu_id} not removed: {exc}")
+
     for menu_id, label, script in menu_entries(
         config, paths.extension_root(), paths.entry_scripts_dir()
     ):
@@ -132,6 +147,7 @@ def unregister_menu_items() -> None:
     except Exception:
         return
     ids = [MAIN_MENU_ID] + [lst.hotkey_id for lst in get_config().menus]
+    ids += legacy_hotkey_ids(get_config())
     for menu_id in ids:
         try:
             if coat.ui.checkIfMenuItemInserted(menu_id):
