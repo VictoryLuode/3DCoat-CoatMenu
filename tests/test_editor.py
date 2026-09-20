@@ -189,9 +189,9 @@ config_path = paths.config_path()
 check(os.path.isfile(config_path), f"config written ({config_path})")
 with open(config_path, encoding="utf-8") as fh:
     saved = json.load(fh)
-check([lst["name"] for lst in saved["lists"]] == ["Sculpt", "Paint"], "both lists saved")
+check([lst["name"] for lst in saved["menus"]] == ["Sculpt", "Paint"], "both lists saved")
 check(any(isinstance(row, dict) and row.get("name") == "Booleans"
-          for row in saved["lists"][0]["items"]), "submenu saved in the shared JSON shape")
+          for row in saved["menus"][0]["items"]), "submenu saved in the shared JSON shape")
 
 launchers = os.listdir(paths.entry_scripts_dir())
 check(sorted(launchers) == ["CoatMenu_Paint.py", "CoatMenu_Sculpt.py"],
@@ -217,7 +217,7 @@ reloaded = CoatMenuEditor(config=MenuConfig.load(config_path))
 reloaded.show_editor()
 app.processEvents()
 check([lst.name for lst in reloaded._config.menus] == ["Sculpt", "Paint"], "reload keeps lists")
-check(reloaded._tree.topLevelItemCount() == len(saved["lists"][0]["items"]),
+check(reloaded._tree.topLevelItemCount() == len(saved["menus"][0]["items"]),
       f"reload keeps rows ({reloaded._tree.topLevelItemCount()})")
 reloaded.close_editor()
 editor.close_editor()

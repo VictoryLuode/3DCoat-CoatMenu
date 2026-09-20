@@ -9,7 +9,7 @@ program folder, never another add-on's files):
 
 1. copies ``coat_side/`` into ``Scripts/cExtensions/CoatMenu/``
 2. regenerates the per-list launcher scripts and ``Scripts/ExtraMenuItems/CoatMenu.xml``
-   from the user's ``data/lists.json`` (absolute script paths - 3DCoat does not
+   from the user's ``data/menus.json`` (absolute script paths - 3DCoat does not
    accept relative ones there)
 3. appends ``CoatMenu`` to ``Scripts/cExtensions/startup.txt`` (backed up first)
 
@@ -22,6 +22,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -157,9 +158,27 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
     return removed
 
 
+def _uses_old_key(path: str) -> bool:
+    """True for a config written before the terminology pass (had a "lists" key)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return False
+    return isinstance(data, dict) and "menus" not in data
+
+
 def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
     """Config from the installed copy when it exists, else a fresh starter."""
-    path = os.path.join(ext_dir, "data", "lists.json")
+    path = os.path.join(ext_dir, "data", "menus.json")
+    legacy = os.path.join(ext_dir, "data", "lists.json")
+    if not os.path.exists(path) and os.path.exists(legacy):
+        try:
+            # The terminology pass renamed the file; move it rather than leaving
+            # two configs behind.
+            os.replace(legacy, path)
+        except OSError:
+            path = legacy
     if os.path.exists(path):
         config = MenuConfig.load(path)
         if config.menus:
@@ -186,13 +205,18 @@ def install(documents: str) -> int:
 
     # 2. launcher scripts + menu XML from the user's config ---------------
     config = _load_or_create_config(p["ext"], documents)
-    config_path = os.path.join(p["ext"], "data", "lists.json")
+    config_path = os.path.join(p["ext"], "data", "menus.json")
+    legacy_path = os.path.join(p["ext"], "data", "lists.json")
     # Built-in presets (the LKS Add-Prims port) land once; an existing list of
     # the same name is never touched, and anything we do rewrite is backed up.
     added_presets = presets.install_presets(config)
-    if added_presets and os.path.exists(config_path):
-        shutil.copy2(config_path, f"{config_path}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}")
-    if added_presets or not os.path.exists(config_path):
+    rewrite = added_presets or not os.path.exists(config_path) or _uses_old_key(config_path)
+    for candidate in (config_path, legacy_path):
+        if rewrite and os.path.exists(candidate):
+            shutil.copy2(candidate, f"{candidate}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}")
+    if rewrite:
+        # Written whenever the file is new, a preset changed, or the file still
+        # carries the pre-terminology key - so it ends up in the current shape.
         config.save(config_path)
     info = menus_registry.sync(
         config,
@@ -240,10 +264,10 @@ def uninstall(documents: str) -> int:
     p = paths(documents)
     removed: list[str] = []
 
-    # Keep the user's lists - an uninstall should not throw away their work.
-    config_path = os.path.join(p["ext"], "data", "lists.json")
+    # Keep the user's menus - an uninstall should not throw away their work.
+    config_path = os.path.join(p["ext"], "data", "menus.json")
     if os.path.exists(config_path):
-        backup = os.path.join(documents, "3DCoat", f"{EXTENSION_NAME}-lists-backup.json")
+        backup = os.path.join(documents, "3DCoat", f"{EXTENSION_NAME}-menus-backup.json")
         try:
             os.makedirs(os.path.dirname(backup), exist_ok=True)
             shutil.copy2(config_path, backup)

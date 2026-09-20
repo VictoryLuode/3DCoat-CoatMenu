@@ -7,7 +7,7 @@ be moved between the two add-ons:
 ```json
 {
   "version": 1,
-  "lists": [
+  "menus": [
     {
       "name": "Sculpt",
       "items": [
@@ -61,9 +61,7 @@ def slugify(name: str) -> str:
 class Menu:
     """One menu - a named set of rows.
 
-    ``mode`` is how it opens: ``list`` (rows) or ``pie`` (radial). 3DCoat/MenuBelt's
-    JSON calls these "lists", so the file keys stay that way; the things themselves
-    are menus.
+    ``mode`` is how it opens: ``list`` (rows) or ``pie`` (radial).
     """
 
     name: str
@@ -210,8 +208,9 @@ class MenuConfig:
     def from_json(cls, data) -> "MenuConfig":
         menus: list[Menu] = []
         if isinstance(data, dict):
-            # The key stays "lists": the file format is shared with Krita MenuBelt.
-            raw_menus = data.get("lists") or []
+            # "menus" is the current key; "lists" is what the file used before the
+            # terminology pass and is still read so an existing file keeps working.
+            raw_menus = data.get("menus") or data.get("lists") or []
         elif isinstance(data, list):  # tolerate a bare list of menus
             raw_menus = data
         else:
@@ -244,7 +243,7 @@ class MenuConfig:
             out.append(data)
         return {
             "version": CONFIG_VERSION,
-            "lists": out,
+            "menus": out,
         }
 
     @classmethod

@@ -35,6 +35,11 @@ def data_dir() -> str:
 
 
 def config_path() -> str:
+    return os.path.join(data_dir(), "menus.json")
+
+
+def legacy_config_path() -> str:
+    """The config was called lists.json before the terminology pass."""
     return os.path.join(data_dir(), "lists.json")
 
 

@@ -36,12 +36,31 @@ def get_config(reload: bool = False) -> MenuConfig:
     return _config
 
 
+def _migrate_config_name() -> None:
+    """Rename a pre-terminology ``lists.json`` to ``menus.json`` (once).
+
+    A rename rather than a copy: the config then exists under exactly one name, so
+    there is no chance of two files drifting apart. If the rename fails the old
+    file is untouched and the next start tries again.
+    """
+    new = paths.config_path()
+    old = paths.legacy_config_path()
+    if not os.path.exists(old) or os.path.exists(new):
+        return
+    try:
+        os.replace(old, new)
+        log("migrated lists.json -> menus.json")
+    except OSError as exc:
+        log(f"could not rename {old} -> {new}: {exc}")
+
+
 def ensure_config() -> MenuConfig:
     """Load the config, materialise it on first run, and sync menus.
 
     Called at startup and after the editor saves.
     """
     global _config
+    _migrate_config_name()
     existed = os.path.exists(paths.config_path())
     _config = MenuConfig.load(paths.config_path())
     if not _config.menus:

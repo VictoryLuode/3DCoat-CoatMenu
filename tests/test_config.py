@@ -59,7 +59,12 @@ check(item_from_json({"header": "Shading"}).kind == "header", "header")
 check(item_from_json({"nonsense": 1}) is None, "unknown dict is dropped")
 check(item_from_json("") is None, "empty string is dropped")
 
-print("== round trip ==")
+print("== round trip (old key included) ==")
+# A file written before the terminology pass used "lists"; it still loads.
+check(MenuConfig.from_json({"version": 1, "lists": [{"name": "Old", "items": ["Resample"]}]})
+      .menus[0].name == "Old", "a config written with the old \"lists\" key still loads")
+check("menus" in MenuConfig(menus=[Menu(name="New")]).to_json(),
+      "and new files are written with the \"menus\" key")
 config = MenuConfig.from_json(
     {
         "version": 1,
@@ -202,12 +207,12 @@ round_trip = MenuConfig.from_json(preset_cfg.to_json())
 back = round_trip.find("Prims").items[0]
 check(back.cmds == sphere.cmds, f"sequences survive a JSON round trip ({back.cmds})")
 check(round_trip.find("Prims").preset == "prims/2", "the preset marker survives too")
-check(isinstance(round_trip.to_json()["lists"][0]["items"][0], dict),
+check(isinstance(round_trip.to_json()["menus"][0]["items"][0], dict),
       "a multi-command row is written as an object, not a bare id")
 
 saved_cfg = MenuConfig(menus=[Menu(name="Saved", items=[
     MenuItem(label="HS_Extrude", kind="preset", cid="HS_Extrude")])])
-saved_json = saved_cfg.to_json()["lists"][0]["items"][0]
+saved_json = saved_cfg.to_json()["menus"][0]["items"][0]
 check(saved_json == {"preset": "HS_Extrude", "label": "HS_Extrude"},
       f"a saved preset is written as {{preset: ...}} ({saved_json})")
 saved_back = MenuConfig.from_json(saved_cfg.to_json()).find("Saved").items[0]
