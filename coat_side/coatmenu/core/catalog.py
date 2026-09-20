@@ -236,6 +236,95 @@ def read_tool_commands(root: str | None = None) -> list[CommandEntry]:
     return out
 
 
+# --- 3DCoat's own tool panels -----------------------------------------------
+_TOOLS_ITEM = re.compile(r'tools_item\(\s*"([^"\n]+)"\s*\)\s*(?:#\s*(.*))?')
+_TOOLS_SECTION = re.compile(r'@d_tools_section\(\s*"([^"\n]+)"\s*\)')
+_FAMILY_PREFIX = re.compile(r"^(\{[^}]*\}|\[[^]]*\])*")
+
+
+def read_toolpanel_commands(root: str | None = None) -> list[CommandEntry]:
+    """The tools on 3DCoat's own tool panels.
+
+    ``sculptTools.py`` and friends call ``coat.tools_item("[extension]VoxLayer")``
+    with 3DCoat's own readable name in the trailing comment, and
+    ``@d_tools_section`` marks the panel section - so these entries arrive named
+    and grouped the way the UI shows them. Authoritative and in the program
+    folder, like the menu definitions.
+    """
+    root = root if root is not None else c_templates_root()
+    out: list[CommandEntry] = []
+    seen: set[str] = set()
+    if not root or not os.path.isdir(root):
+        return out
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for name in sorted(filenames):
+            if not name.endswith(".py"):
+                continue
+            room = os.path.splitext(name)[0]
+            section = ""
+            for line in _read_text(os.path.join(dirpath, name)).splitlines():
+                if line.lstrip().startswith("#"):
+                    continue  # a commented-out tools_item is not a tool
+                found = _TOOLS_SECTION.search(line)
+                if found:
+                    section = found.group(1).strip()
+                    continue
+                match = _TOOLS_ITEM.search(line)
+                if not match:
+                    continue
+                cid = match.group(1).strip()
+                if not cid or cid in seen:
+                    continue
+                seen.add(cid)
+                label = (match.group(2) or "").strip() or cid
+                out.append(CommandEntry(cid=cid, label=label, room=room,
+                                        source="toolpanel", hint=section))
+    return out
+
+
+def tool_id_name(cid: str) -> str:
+    """``{FLT}[extension]SCULP_PLANE`` -> ``SCULP_PLANE``.
+
+    Tool ids carry modifier groups and a family tag (``[extension]``,
+    ``[StdPen]``); the bare name is what a ``CustomTools`` preset file matches.
+    """
+    return _FAMILY_PREFIX.sub("", cid).strip()
+
+
+def read_my_tools(root: str | None = None) -> list[CommandEntry]:
+    """The tools that have a preset of the user's own (``CustomTools/*.txt``).
+
+    3DCoat's equivalent of Krita's "Brushes" source: the presets you built, ready
+    to drop into a menu. The payload is the tool id itself (``$[extension]Blob``),
+    not the file name, because that is what actually switches the tool.
+    """
+    tools_root = root or custom_tools_root()
+    if not tools_root or not os.path.isdir(tools_root):
+        return []
+    mine = sorted(os.path.splitext(n)[0] for n in os.listdir(tools_root)
+                  if n.lower().endswith(".txt"))
+    if not mine:
+        return []
+    wanted = set(mine)
+    out: list[CommandEntry] = []
+    matched: set[str] = set()
+    for entry in read_toolpanel_commands():
+        bare = tool_id_name(entry.cid)
+        if bare in wanted:
+            out.append(entry)
+            matched.add(bare)
+    out.sort(key=lambda e: (e.hint, e.label.lower()))
+    # A preset with no panel entry still gets a row - it may be a tool this build
+    # does not ship, and the family tag is the one 3DCoat uses for user presets.
+    for bare in mine:
+        if bare in matched:
+            continue
+        out.append(CommandEntry(cid=f"[extension]{bare}", label=bare,
+                                source="toolpanel", hint="Other"))
+    return out
+
+
 def read_script_commands(root: str | None = None, limit: int = 400) -> list[CommandEntry]:
     """List ``UserPrefs/Scripts`` python files as menu-item candidates."""
     root = root or scripts_root()

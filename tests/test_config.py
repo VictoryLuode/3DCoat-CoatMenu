@@ -177,20 +177,26 @@ check(preset_list.items[14].children[0].cmds[-1] == "$VoxelSculptTool::ffBlob",
       "FFD entry uses the ff* id")
 
 preset_cfg = MenuConfig()
-check(presets.install_presets(preset_cfg) == ["Prims"], "preset list added")
+check(presets.install_presets(preset_cfg, names=("Prims",)) == ["Prims"], "preset list added")
 check(preset_cfg.find("Prims").preset == "prims/2",
       f"a shipped list carries its version marker ({preset_cfg.find('Prims').preset})")
-check(presets.install_presets(preset_cfg) == [], "adding it twice does nothing")
+check(presets.install_presets(preset_cfg, names=("Prims",)) == [],
+      "adding it twice does nothing")
 
 older = MenuConfig(lists=[MenuList(name="Prims", preset="prims/1")])
-check(presets.install_presets(older) == ["Prims (refreshed)"],
+check(presets.install_presets(older, names=("Prims",)) == ["Prims (refreshed)"],
       "an older shipped version is refreshed in place")
 check(len(older.find("Prims").items) == 15, "and gets the current rows")
 
 handmade = MenuConfig(lists=[MenuList(name="Prims", items=[MenuItem(label="Mine", cid="MINE")])])
-check(presets.install_presets(handmade) == [],
+check(presets.install_presets(handmade, names=("Prims",)) == [],
       "a hand-built list with the same name is left alone")
 check(len(handmade.find("Prims").items) == 1, "and keeps its own rows")
+
+tools_cfg = MenuConfig()
+check(presets.install_presets(tools_cfg, names=("Tools",)) == ["Tools"],
+      "the Tools preset (your CustomTools) installs alongside Prims")
+check(tools_cfg.find("Tools").preset == "tools/1", "with a marker of its own")
 
 round_trip = MenuConfig.from_json(preset_cfg.to_json())
 back = round_trip.find("Prims").items[0]

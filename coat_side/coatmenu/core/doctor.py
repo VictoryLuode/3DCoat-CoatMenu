@@ -41,6 +41,47 @@ def _startup_lists_us(path: str) -> bool:
         return False
 
 
+PROBE_LIMIT = 2
+
+
+def tool_probe(limit: int = PROBE_LIMIT) -> list[str]:
+    """Do the tool commands really switch tools? Ask 3DCoat itself.
+
+    ``CMD.GetCurrentToolID()`` is the one honest answer to that question, so the
+    doctor switches a couple of the user's tools, reads the active id back, and
+    puts the tool they started on back. Nothing else about the scene is touched.
+    """
+    try:
+        import coat  # type: ignore
+    except Exception as exc:  # pragma: no cover - only outside 3DCoat
+        return [f"  tool probe    : no coat module ({exc})"]
+    try:
+        active = str(coat.GetCurrentToolID())
+    except Exception as exc:  # pragma: no cover
+        return [f"  tool probe    : GetCurrentToolID failed ({exc})"]
+
+    lines = [f"  active tool   : {active}"]
+    probes = [entry.cid for entry in catalog.read_my_tools()][:limit]
+    for cid in probes:
+        cmd = cid if cid.startswith("$") else "$" + cid
+        try:
+            coat.ui.cmd(cmd)
+            now = str(coat.GetCurrentToolID())
+        except Exception as exc:
+            lines.append(f"    {cmd}  ->  error: {exc}")
+            continue
+        verdict = "" if now != active else "   (no change)"
+        lines.append(f"    {cmd}  ->  {now}{verdict}")
+    if probes:
+        cmd = active if active.startswith("$") else "$" + active
+        try:
+            coat.ui.cmd(cmd)
+            lines.append(f"    restored      ->  {coat.GetCurrentToolID()}")
+        except Exception as exc:
+            lines.append(f"    restore failed: {exc}")
+    return lines
+
+
 def report(config=None) -> str:
     """The whole picture, as plain text."""
     cfg = config if config is not None else lists.get_config()
@@ -64,6 +105,7 @@ def report(config=None) -> str:
             f"  key={binds.for_list(lst.name) or 'unbound'}"
         )
     out.append(f"  hotkey clashes: {'; '.join(binds.conflicts) or 'none'}")
+    out.extend(tool_probe())
 
     path = log_path()
     out.append(f"  log           : {path}")

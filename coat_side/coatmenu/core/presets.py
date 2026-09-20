@@ -16,8 +16,9 @@ to make the pick land.
 """
 from __future__ import annotations
 
+from coatmenu.core import catalog
 from coatmenu.core.config import MenuConfig, MenuList
-from coatmenu.core.menu_model import LIST, MenuItem, separator, sequence, submenu
+from coatmenu.core.menu_model import COMMAND, LIST, MenuItem, header, separator, sequence, submenu
 
 # --- command ids (from LKS utils/primitives_constants.py) --------------------
 NEUTRALISE = "$SCULPT_TRANSFORM"
@@ -63,7 +64,7 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # Version markers for the lists we ship: bump the number when the preset changes
 # so the installer refreshes the user's copy (a hand-built list of the same name
 # has no marker and is never touched).
-PRESET_MARKERS = {"Prims": "prims/2"}
+PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1"}
 
 
 def builtin_row(label: str, param: str) -> MenuItem:
@@ -103,13 +104,39 @@ def primitives_list(mode: str = LIST) -> MenuList:
                     preset=PRESET_MARKERS["Prims"])
 
 
-def install_presets(config: MenuConfig, names: tuple[str, ...] = ("Prims",)) -> list[str]:
+def tool_rows() -> list[tuple[str, list[MenuItem]]]:
+    """(panel section, rows) exactly as 3DCoat groups its own tool panel."""
+    groups: dict[str, list[MenuItem]] = {}
+    for entry in catalog.read_my_tools():
+        # Tools 3DCoat's own panel definitions do not put in a section (CAD/model
+        # tools mostly) still need a heading.
+        groups.setdefault(entry.hint or "General", []).append(
+            MenuItem(label=entry.label, kind=COMMAND, cid=entry.cmd_string))
+    return list(groups.items())
+
+
+def tools_list(mode: str = LIST) -> MenuList:
+    """The ``Tools`` list: your tool presets, grouped like 3DCoat's own panel.
+
+    A hundred tools flat in one menu would be unusable, so each of 3DCoat's panel
+    sections becomes a submenu - the section names are 3DCoat's own.
+    """
+    items: list[MenuItem] = []
+    for name, rows in tool_rows():
+        items.append(submenu(f"{name}  ({len(rows)})", rows))
+    if not items:
+        items.append(header("no CustomTools presets found"))
+    return MenuList(name="Tools", items=items, mode=mode,
+                    preset=PRESET_MARKERS["Tools"])
+
+
+def install_presets(config: MenuConfig, names: tuple[str, ...] = ("Prims", "Tools")) -> list[str]:
     """Add missing preset lists, and refresh ones shipped by an older version.
 
     A preset list is recognised by its ``preset`` marker: a list you built by
     hand - even one called ``Prims`` - has no marker and is never touched.
     """
-    built = {"Prims": primitives_list}
+    built = {"Prims": primitives_list, "Tools": tools_list}
     added: list[str] = []
     for name in names:
         make = built.get(name)

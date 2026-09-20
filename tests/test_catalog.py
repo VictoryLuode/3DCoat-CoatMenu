@@ -64,7 +64,28 @@ with open(os.path.join(CMAKE, "MainMenu", "File.py"), "w", encoding="utf-8") as 
         '    # coat.menu_item("COMMENTED_OUT")\n'
     )
 with open(os.path.join(CMAKE, "sculptTools.py"), "w", encoding="utf-8") as fh:
-    fh.write('import coat\ncoat.menu_item("BaseVoxBrush")\ncoat.menu_item("CLEARSCENE")\n')
+    fh.write(
+        'import coat\n'
+        'coat.menu_item("BaseVoxBrush")\n'
+        'coat.menu_item("CLEARSCENE")\n'
+        '\n'
+        '@d_tools_section("Clay/Draw")\n'
+        'def BaseSurfaceTools():\n'
+        '    coat.tools_item("[extension]SCULP_SCLAY")  # Clay\n'
+        '    coat.tools_item("{FLT}[extension]SCULP_PLANE")  # Flatten\n'
+        '    # coat.tools_item("[extension]COMMENTED_TOOL")\n'
+        '\n'
+        '@d_tools_section("Layers")\n'
+        'def Layers():\n'
+        '    coat.tools_item("[extension]MagnifyLayers")  # Magnify SL\n'
+        '    coat.tools_item("[extension]BendVolume")  # Array/Bend Volume\n'
+    )
+# The user's own tool presets: 3DCoat names each file after the tool it customises.
+os.makedirs(os.path.join(USERPREF, "CustomTools"), exist_ok=True)
+for tool in ("SCULP_SCLAY", "MagnifyLayers", "BendVolume", "SomePersonalTool"):
+    with open(os.path.join(USERPREF, "CustomTools", f"{tool}.txt"), "w",
+              encoding="utf-8") as fh:
+        fh.write(f"<CustomExtension><Name>{tool}</Name></CustomExtension>\n")
 LANG = os.path.join(INSTALL, "data", "Languages")
 os.makedirs(LANG, exist_ok=True)
 with open(os.path.join(LANG, "English.xml"), "w", encoding="utf-8") as fh:
@@ -159,6 +180,39 @@ by_id = {e.cid: e for e in combined}
 check(by_id["CLEARSCENE"].label == "New", "entries carry readable names")
 check(by_id["Resample"].room == "VoxelsCustom", "custom-menu entries merged in")
 check(len(combined) >= 7, f"union of menu + hotkeys + custom menu ({len(combined)})")
+
+print("== 3DCoat's own tool panel (tools_item) ==")
+panel = catalog.read_toolpanel_commands()
+by_id = {e.cid: e for e in panel}
+check(len(panel) == 4, f"panel tools extracted ({sorted(by_id)})")
+check(by_id["[extension]SCULP_SCLAY"].label == "Clay",
+      "the trailing comment is 3DCoat's readable name")
+check(by_id["[extension]SCULP_SCLAY"].hint == "Clay/Draw", "the panel section is carried")
+check("[extension]COMMENTED_TOOL" not in by_id, "a commented-out tools_item is not a tool")
+check(catalog.tool_id_name("{FLT}[extension]SCULP_PLANE") == "SCULP_PLANE",
+      "modifier groups and the family tag strip off")
+check(catalog.tool_id_name("[extension]BendVolume") == "BendVolume", "and off a plain id")
+
+print("== my tool presets (CustomTools/*.txt) ==")
+mine = catalog.read_my_tools()
+by_name = {catalog.tool_id_name(e.cid): e for e in mine}
+check(len(mine) == 4, f"every preset becomes a row ({sorted(by_name)})")
+check(by_name["SCULP_SCLAY"].cmd_string == "$[extension]SCULP_SCLAY",
+      "a row runs the tool id itself, not the file name")
+check(by_name["BendVolume"].label == "Array/Bend Volume",
+      "the readable name comes from 3DCoat's panel definition")
+check(by_name["SCULP_SCLAY"].hint == "Clay/Draw", "and so does the section")
+check(by_name["SomePersonalTool"].hint == "Other",
+      "a preset 3DCoat's panels do not list still gets a row")
+
+from coatmenu.core import presets  # noqa: E402
+
+tools_preset = presets.tools_list()
+check([i.label for i in tools_preset.items] == ["Clay/Draw  (1)", "Layers  (2)", "Other  (1)"],
+      f"the Tools list groups them like 3DCoat's panel "
+      f"({[i.label for i in tools_preset.items]})")
+check(any(child.cid == "$[extension]BendVolume" for child in tools_preset.items[1].children),
+      "rows inside a group are runnable tool ids")
 
 print("== a hotkeys file broken by 3DCoat still parses ==")
 # 3DCoat writes '&lt'/'&gt' without the semicolon; a strict XML parser rejects the

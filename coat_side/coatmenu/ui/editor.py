@@ -308,7 +308,7 @@ class CoatMenuEditor(QWidget):
         box.addWidget(QLabel("Add from"))
 
         self._source_kind = QComboBox()
-        self._source_kind.addItems(["3DCoat commands", "Tools", "Scripts"])
+        self._source_kind.addItems(["3DCoat commands", "My tools", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -759,8 +759,13 @@ class CoatMenuEditor(QWidget):
                 rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
                              entry.cid, entry.label))
         elif kind == 1:
-            for entry in catalog.read_tool_commands():
-                rows.append((f"{entry.label}  \u2014  tool", entry.cid, entry.label))
+            # Your own tool presets (CustomTools/*.txt), resolved to the tool ids
+            # 3DCoat's own panel uses - so a row added from here really does
+            # switch the tool on the way out.
+            for entry in catalog.read_my_tools():
+                where = entry.hint or "tool"
+                rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
+                             entry.cid, entry.label))
         else:
             for entry in catalog.read_script_commands():
                 rows.append((entry.label, entry.cid, os.path.basename(entry.cid)))
