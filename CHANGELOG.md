@@ -2,6 +2,21 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.5.4 — 2026-09-20
+
+### Fixed
+
+- **A key set in the editor can actually take effect now.** It never could before:
+  3D-Coat only honours a key on an entry added through `coat.menu_item`, and ours
+  were added with `coat.ui.insertInMenu`, which the hotkey system ignores (and then
+  rewrites with an empty `<Code>`). `onExtendMenu` — which the log proves this build
+  does call — now registers every entry through the API and attaches the key
+  immediately after its own entry. `onStartup` still inserts them as well, so they
+  stay visible in the Scripts menu.
+- Switching source in the editor no longer costs 80 ms, and the editor opens centred.
+- A key you set by hand in Preferences ▸ Hotkeys is still never proposed over.
+- (`END` over a menu entry remains 3D-Coat's own way of binding, and the fastest.)
+
 ## v0.5.3 — 2026-09-20
 
 ### Changed

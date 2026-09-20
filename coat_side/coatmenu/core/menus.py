@@ -170,27 +170,20 @@ def register_menu_items(config: MenuConfig) -> int:
     return inserted
 
 
-def register_menu_api() -> dict:
-    """Register the one-per-menu entries through 3DCoat's own menu API.
+def register_menus_via_api() -> dict:
+    """Put every entry into 3DCoat's menu API, with its key, from the menu pass.
 
-    This is what makes the key set in the editor real: ``coat.menu_item`` adds the
-    entry and ``coat.menu_hotkey`` proposes its key. 3DCoat writes the binding
-    itself, so CoatMenu still never touches ``Options_Hotkeys.xml``.
+    This is the only path that reaches the hotkey system: an entry added with
+    ``coat.ui.insertInMenu`` is invisible to it, so a key set there does nothing.
+    Called from ``onExtendMenu`` (see ``CoatMenu.py``), which 3DCoat does run.
 
-    Must run from the menu-building pass (``onBuildMainMenu``); returns a report
-    for the log and the doctor.
+    A key the user set by hand in Preferences ▸ Hotkeys carries
+    ``<UserDefined>1</UserDefined>`` and is left alone.
     """
     config = get_config()
-    report = menus_registry.register_menus_via_api(
+    return menus_registry.register_menus_via_api(
         config, paths.extension_root(), paths.entry_scripts_dir()
     )
-    # Always logged: this line is the only evidence that 3DCoat ran the menu pass,
-    # and which keys it accepted.
-    log(f"menu api: registered={report.get('registered')} "
-        f"hotkeys={len(report.get('hotkeys') or [])} "
-        f"kept-user-keys={len(report.get('kept_user_keys') or [])} "
-        f"error={report.get('error') or 'none'}")
-    return report
 
 
 def unregister_menu_items() -> None:
