@@ -164,7 +164,7 @@ from_preset = editor.tree_to_items()[-1]
 check(from_preset.kind == "preset" and from_preset.cid == "HS_Test",
       f"a row added from Presets is a preset entry ({from_preset.kind}, {from_preset.cid})")
 
-editor._source_kind.setCurrentIndex(3)  # Scripts
+editor._source_kind.setCurrentIndex(4)  # Scripts
 editor.reload_sources()
 check(editor._source_list.count() == 1, f"scripts listed ({editor._source_list.count()})")
 

@@ -376,7 +376,9 @@ def read_script_commands(root: str | None = None, limit: int = 400) -> list[Comm
             if not name.endswith(".py") or name.startswith("_"):
                 continue
             rel = os.path.relpath(os.path.join(dirpath, name), root).replace("\\", "/")
-            if rel.startswith("cExtensions/") and "/tests/" in rel:
+            if rel.startswith(("cExtensions/", "cModules/")):
+                # Another extension's internals are not the user's scripts - LKS
+                # actions come in through the LKS menu source instead.
                 continue
             out.append(CommandEntry(cid=os.path.join(dirpath, name), label=rel, source="script"))
             if len(out) >= limit:

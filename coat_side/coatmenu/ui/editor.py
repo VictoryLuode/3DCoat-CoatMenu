@@ -38,9 +38,19 @@ from PySide6.QtWidgets import (
 
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, lists
+from coatmenu.core import lks as lks_mod
 from coatmenu.core.config import MenuConfig, MenuList, item_to_json
 from coatmenu.core.log import log
-from coatmenu.core.menu_model import COMMAND, HEADER, PRESET, SCRIPT, SEPARATOR, SUBMENU, MenuItem
+from coatmenu.core.menu_model import (
+    COMMAND,
+    HEADER,
+    PRESET,
+    SCRIPT,
+    SEPARATOR,
+    SUBMENU,
+    MenuItem,
+    flatten,
+)
 from coatmenu.ui import cursor as cursor_tool
 from coatmenu.ui import system
 from coatmenu.ui import theme
@@ -308,7 +318,8 @@ class CoatMenuEditor(QWidget):
         box.addWidget(QLabel("Add from"))
 
         self._source_kind = QComboBox()
-        self._source_kind.addItems(["3DCoat commands", "My tools", "Presets", "Scripts"])
+        self._source_kind.addItems(
+            ["3DCoat commands", "My tools", "Presets", "LKS menus", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -696,8 +707,12 @@ class CoatMenuEditor(QWidget):
             self.set_status("Pick something from the list on the right")
             return
         cid = entry.data(Qt.UserRole) or ""
+        stored_kind = entry.data(Qt.UserRole + 2) or ""
         source = self._source_kind.currentIndex()
-        kind = SCRIPT if source == 3 else (PRESET if source == 2 else COMMAND)
+        # A stored kind wins: the LKS source mixes commands and scripts, so the
+        # row knows what it is better than the dropdown does.
+        kind = stored_kind or (SCRIPT if source == 4 else
+                               (PRESET if source == 2 else COMMAND))
         label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
         new_item = MenuItem(label=label, kind=kind, cid=cid, path=cid if kind == SCRIPT else "")
 
@@ -752,7 +767,7 @@ class CoatMenuEditor(QWidget):
         needle = self._search.text().strip().lower()
         kind = self._source_kind.currentIndex()
         self._source_list.clear()
-        rows: list[tuple[str, str, str]] = []  # (display text, command id, readable label)
+        rows: list[tuple[str, str, str, str]] = []  # text, cid, label, item kind
 
         if kind == 0:
             # The full command list: 3DCoat's own menus (~600) + hotkey ids +
@@ -760,7 +775,7 @@ class CoatMenuEditor(QWidget):
             for entry in catalog.read_all_commands():
                 where = entry.hint or entry.room or entry.source
                 rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
-                             entry.cid, entry.label))
+                             entry.cid, entry.label, COMMAND))
         elif kind == 1:
             # Your own tool presets (CustomTools/*.txt), resolved to the tool ids
             # 3DCoat's own panel uses - so a row added from here really does
@@ -768,22 +783,37 @@ class CoatMenuEditor(QWidget):
             for entry in catalog.read_my_tools():
                 where = entry.hint or "tool"
                 rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
-                             entry.cid, entry.label))
+                             entry.cid, entry.label, COMMAND))
         elif kind == 2:
             # Your saved tool presets - a tool *plus* its settings.
             for entry in catalog.read_presets():
-                rows.append((f"{entry.label}  \u2014  preset", entry.cid, entry.label))
+                rows.append((f"{entry.label}  \u2014  preset", entry.cid, entry.label,
+                             PRESET))
+        elif kind == 3:
+            # The LKS extension's radial menus, flattened. LKS rows carry their
+            # own kind, so a script stays a script when you add it.
+            flat: list[MenuItem] = []
+            for menu in lks_mod.read_menus():
+                flat.extend(flatten(menu.items))
+            for row in flat:
+                if not row.clickable:
+                    continue
+                target = row.path or row.cid
+                rows.append((f"{row.label}  \u2014  {target}   [LKS]", target,
+                             row.label, row.kind))
         else:
             for entry in catalog.read_script_commands():
-                rows.append((entry.label, entry.cid, os.path.basename(entry.cid)))
+                rows.append((entry.label, entry.cid, os.path.basename(entry.cid),
+                             SCRIPT))
 
         shown = 0
-        for text, cid, label in rows:
+        for text, cid, label, item_kind in rows:
             if needle and needle not in text.lower():
                 continue
             node = QListWidgetItem(text)
             node.setData(Qt.UserRole, cid)
             node.setData(Qt.UserRole + 1, label)
+            node.setData(Qt.UserRole + 2, item_kind)
             node.setToolTip(text)
             self._source_list.addItem(node)
             shown += 1

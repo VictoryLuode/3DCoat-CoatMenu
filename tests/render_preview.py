@@ -257,3 +257,19 @@ compose(os.path.join(OUT_DIR, "preview-presets.png"), [saved_widget])
 saved_widget.dismiss()
 app.processEvents()
 print(f"presets preview: {len(saved.items)} presets")
+
+# 12. the LKS list - the LKS extension's radial menus, imported read-only
+lks_preset = presets.lks_list()
+manager.show_menu(lks_preset.items, anchor=QPoint(120, 90), title=lks_preset.name)
+lks_widget = manager.popup
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-lks.png"), [lks_widget])
+lks_branch = lks_widget._first_branch()
+if lks_branch >= 0:
+    lks_widget._hover = lks_branch
+    lks_widget._open_child(lks_branch)
+    app.processEvents()
+    compose(os.path.join(OUT_DIR, "preview-lks-sub.png"), [lks_widget, lks_widget._child])
+lks_widget.dismiss()
+app.processEvents()
+print(f"lks preview: {len(lks_preset.items)} menu(s)")

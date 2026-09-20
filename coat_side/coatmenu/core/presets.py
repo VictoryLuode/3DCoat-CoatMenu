@@ -73,7 +73,8 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # Version markers for the lists we ship: bump the number when the preset changes
 # so the installer refreshes the user's copy (a hand-built list of the same name
 # has no marker and is never touched).
-PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1", "Presets": "presets/1"}
+PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1", "Presets": "presets/1",
+                  "LKS": "lks/1"}
 
 
 def builtin_row(label: str, param: str) -> MenuItem:
@@ -158,14 +159,32 @@ def presets_list(mode: str = LIST) -> MenuList:
                     preset=PRESET_MARKERS["Presets"])
 
 
+def lks_list(mode: str = LIST) -> MenuList:
+    """The ``LKS`` list: the radial menus from the LKS extension.
+
+    LKS owns those JSON files and its users edit them in place, so this is a
+    read-only import - one submenu per LKS menu, with LKS's own labels and order.
+    """
+    from coatmenu.core import lks
+
+    items: list[MenuItem] = []
+    for menu in lks.read_menus():
+        items.append(submenu(f"{menu.name}  ({len(menu.items)})", menu.items))
+    if not items:
+        items.append(header("no LKS radial menus found"))
+    return MenuList(name="LKS", items=items, mode=mode,
+                    preset=PRESET_MARKERS["LKS"])
+
+
 def install_presets(config: MenuConfig,
-                    names: tuple[str, ...] = ("Prims", "Tools", "Presets")) -> list[str]:
+                    names: tuple[str, ...] = ("Prims", "Tools", "Presets", "LKS")) -> list[str]:
     """Add missing preset lists, and refresh ones shipped by an older version.
 
     A preset list is recognised by its ``preset`` marker: a list you built by
     hand - even one called ``Prims`` - has no marker and is never touched.
     """
-    built = {"Prims": primitives_list, "Tools": tools_list, "Presets": presets_list}
+    built = {"Prims": primitives_list, "Tools": tools_list, "Presets": presets_list,
+             "LKS": lks_list}
     added: list[str] = []
     for name in names:
         make = built.get(name)

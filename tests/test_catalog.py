@@ -97,6 +97,27 @@ with open(os.path.join(PRESETS_DIR, "HS_E58886E5B182Split.xml"), "w",
     fh.write("<OnePreset><Name>HS_分层Split</Name></OnePreset>\n")
 with open(os.path.join(PRESETS_DIR, "order.txt"), "w", encoding="utf-8") as fh:
     fh.write("HS_Extrude.xml\nHS_E58886E5B182Split.xml\n")
+
+# A stand-in for the LKS extension's radial menus, which CoatMenu imports.
+LKS_ROOT = os.path.join(USERPREF, "Scripts", "cExtensions", "LKS")
+LKS_MENUS = os.path.join(LKS_ROOT, "data", "library", "radial_menus")
+os.makedirs(os.path.join(LKS_ROOT, "actions"), exist_ok=True)
+os.makedirs(LKS_MENUS, exist_ok=True)
+with open(os.path.join(LKS_MENUS, "LKS_Radial_Booleans.json"), "w", encoding="utf-8") as fh:
+    fh.write('{"version": 3, "name": "LKS_Radial_Booleans", "items": ['
+             '{"label": "Apply", "type": "action", "action": "$LKS_Apply"},'
+             '{"label": "New", "type": "list", "children": ['
+             '{"label": "Union", "type": "action", "action": "$LKS_Union"}]},'
+             '{"label": "Ghost", "type": "action", "action": "actions/Ghost.py"},'
+             '{"label": "action", "type": "action"},'
+             '{"label": "Decimate", "type": "action", "action": "ops.Decimate.main"}]}\n')
+with open(os.path.join(LKS_MENUS, "Shift S.json"), "w", encoding="utf-8") as fh:
+    fh.write('{"version": 3, "name": "Shift S", "items": ['
+             '{"label": "Reset Axis", "type": "action", "action": "$Reset Axis"}]}\n')
+with open(os.path.join(LKS_MENUS, "Alt Q.json.bak"), "w", encoding="utf-8") as fh:
+    fh.write('{"name": "Alt Q", "items": []}\n')
+with open(os.path.join(LKS_ROOT, "actions", "Ghost.py"), "w", encoding="utf-8") as fh:
+    fh.write("# demo\n")
 LANG = os.path.join(INSTALL, "data", "Languages")
 os.makedirs(LANG, exist_ok=True)
 with open(os.path.join(LANG, "English.xml"), "w", encoding="utf-8") as fh:
@@ -232,6 +253,29 @@ check([e.label for e in saved] == ["HS_Extrude", "HS_分层Split"],
       f"({[e.label for e in saved]})")
 check(saved[1].cid == "HS_分层Split", "the real (non-ASCII) name is the payload")
 check(saved[0].source == "preset", "and it is tagged as a preset source")
+
+print("== LKS radial menus (read-only import) ==")
+from coatmenu.core import lks  # noqa: E402
+
+menus = lks.read_menus()
+by_name = {m.name: m for m in menus}
+check([m.name for m in menus] == ["Booleans", "Shift S"],
+      f"menu names with the LKS_Radial_ prefix dropped ({[m.name for m in menus]})")
+booleans = by_name["Booleans"].items
+check([r.label for r in booleans] == ["Apply", "New", "Ghost"],
+      f"placeholders and module.function rows dropped ({[r.label for r in booleans]})")
+check(booleans[0].kind == "command" and booleans[0].cid == "$LKS_Apply",
+      "$ commands stay commands")
+check(booleans[1].children[0].cid == "$LKS_Union", "nested list rows come through")
+check(booleans[2].kind == "script" and booleans[2].path.endswith("Ghost.py"),
+      f"actions/X.py becomes a runnable script row ({booleans[2].path})")
+check(by_name["Shift S"].items[0].label == "Reset Axis",
+      "the user's own LKS menu is included")
+
+lks_preset = presets.lks_list()
+check([i.label for i in lks_preset.items] == ["Booleans  (3)", "Shift S  (1)"],
+      f"the LKS list makes one submenu per menu ({[i.label for i in lks_preset.items]})")
+check(lks_preset.preset == "lks/1", "with a marker of its own")
 
 print("== a hotkeys file broken by 3DCoat still parses ==")
 # 3DCoat writes '&lt'/'&gt' without the semicolon; a strict XML parser rejects the
