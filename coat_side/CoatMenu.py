@@ -82,9 +82,9 @@ class CoatMenuExtension(cPy.cCore.cExtension):
 
     def onStartup(self) -> None:
         try:
-            from coatmenu.core import lists
-            lists.ensure_config()
-            lists.register_menu_items(lists.get_config())
+            from coatmenu.core import menus
+            menus.ensure_config()
+            menus.register_menu_items(menus.get_config())
         except Exception:
             log("onStartup list registration failed", exc=True)
         log(f"{EXTENSION_NAME} onStartup")

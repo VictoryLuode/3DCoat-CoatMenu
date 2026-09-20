@@ -54,12 +54,17 @@ def slugify(name: str) -> str:
     """ASCII slug used for hotkey ids and generated entry scripts."""
     text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode()
     text = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
-    return text or "list"
+    return text or "menu"
 
 
 @dataclass
-class MenuList:
-    """One named list of entries."""
+class Menu:
+    """One menu - a named set of rows.
+
+    ``mode`` is how it opens: ``list`` (rows) or ``pie`` (radial). 3DCoat/MenuBelt's
+    JSON calls these "lists", so the file keys stay that way; the things themselves
+    are menus.
+    """
 
     name: str
     items: list[MenuItem] = field(default_factory=list)
@@ -73,7 +78,7 @@ class MenuList:
     @property
     def hotkey_id(self) -> str:
         """Id registered in 3DCoat's menu (bindable in Preferences > Hotkeys)."""
-        return f"CoatMenu_List_{self.slug}"
+        return f"CoatMenu_{self.slug}"
 
 
 # ---------------------------------------------------------------------------
@@ -175,23 +180,23 @@ def _clean_items(items: list[MenuItem], depth: int = 0) -> list[MenuItem]:
 class MenuConfig:
     """The whole user configuration."""
 
-    lists: list[MenuList] = field(default_factory=list)
+    menus: list[Menu] = field(default_factory=list)
 
     # -- lookup ----------------------------------------------------------
 
-    def find(self, key: str) -> MenuList | None:
-        """Find a list by slug, hotkey id, or name (case-insensitive)."""
+    def find(self, key: str) -> Menu | None:
+        """Find a menu by slug, hotkey id, or name (case-insensitive)."""
         if not key:
             return None
         wanted = str(key).strip().lower()
-        for lst in self.lists:
+        for lst in self.menus:
             if wanted in (lst.slug.lower(), lst.hotkey_id.lower(), lst.name.lower()):
                 return lst
         return None
 
     def unique_name(self, base: str) -> str:
-        """A list name not yet used (appends 2, 3, ...)."""
-        existing = {lst.name.lower() for lst in self.lists}
+        """A menu name not yet used (appends 2, 3, ...)."""
+        existing = {lst.name.lower() for lst in self.menus}
         if base.lower() not in existing:
             return base
         index = 2
@@ -203,37 +208,38 @@ class MenuConfig:
 
     @classmethod
     def from_json(cls, data) -> "MenuConfig":
-        lists: list[MenuList] = []
+        menus: list[Menu] = []
         if isinstance(data, dict):
-            raw_lists = data.get("lists") or []
-        elif isinstance(data, list):  # tolerate a bare list of lists
-            raw_lists = data
+            # The key stays "lists": the file format is shared with Krita MenuBelt.
+            raw_menus = data.get("lists") or []
+        elif isinstance(data, list):  # tolerate a bare list of menus
+            raw_menus = data
         else:
-            raw_lists = []
-        for raw in raw_lists:
+            raw_menus = []
+        for raw in raw_menus:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or "").strip()
             if not name:
                 continue
             items = _clean_items([i for i in (item_from_json(r) for r in raw.get("items") or []) if i])
-            lists.append(MenuList(name=name, items=items, mode=str(raw.get("mode") or "list"),
-                                  preset=str(raw.get("preset") or "")))
-            if len(lists) >= MAX_LISTS:
+            menus.append(Menu(name=name, items=items, mode=str(raw.get("mode") or "list"),
+                              preset=str(raw.get("preset") or "")))
+            if len(menus) >= MAX_LISTS:
                 break
-        return cls(lists=lists)
+        return cls(menus=menus)
 
     def to_json(self) -> dict:
         out: list[dict] = []
-        for lst in self.lists:
+        for lst in self.menus:
             data = {
                 "name": lst.name,
                 "mode": lst.mode,
                 "items": [item_to_json(i) for i in lst.items],
             }
             if lst.preset:
-                # Only shipped lists carry this; it lets the installer refresh
-                # them without ever touching a hand-built list of the same name.
+                # Only shipped presets carry this; it lets the installer refresh
+                # them without ever touching a menu of the same name built by hand.
                 data["preset"] = lst.preset
             out.append(data)
         return {
@@ -261,16 +267,16 @@ class MenuConfig:
 
     # -- editing helpers (used by the editor and the tests) ---------------
 
-    def add_list(self, name: str) -> MenuList:
-        lst = MenuList(name=self.unique_name(name or "New list"))
-        self.lists.append(lst)
+    def add_menu(self, name: str) -> Menu:
+        lst = Menu(name=self.unique_name(name or "New menu"))
+        self.menus.append(lst)
         return lst
 
-    def remove_list(self, name: str) -> bool:
+    def remove_menu(self, name: str) -> bool:
         target = self.find(name)
-        if target is None or len(self.lists) <= 1:
+        if target is None or len(self.menus) <= 1:
             return False
-        self.lists.remove(target)
+        self.menus.remove(target)
         return True
 
     def set_mode(self, key: str, mode: str) -> bool:
@@ -281,7 +287,7 @@ class MenuConfig:
         target.mode = "pie" if str(mode).lower() == "pie" else "list"
         return True
 
-    def rename_list(self, old: str, new: str) -> MenuList | None:
+    def rename_menu(self, old: str, new: str) -> Menu | None:
         target = self.find(old)
         new_name = (new or "").strip()
         if target is None or not new_name:
@@ -290,15 +296,15 @@ class MenuConfig:
             target.name = self.unique_name(new_name)
         return target
 
-    def move_list(self, name: str, delta: int) -> bool:
+    def move_menu(self, name: str, delta: int) -> bool:
         target = self.find(name)
         if target is None:
             return False
-        index = self.lists.index(target)
-        new_index = max(0, min(len(self.lists) - 1, index + delta))
+        index = self.menus.index(target)
+        new_index = max(0, min(len(self.menus) - 1, index + delta))
         if new_index == index:
             return False
-        self.lists.insert(new_index, self.lists.pop(index))
+        self.menus.insert(new_index, self.menus.pop(index))
         return True
 
 
@@ -324,13 +330,13 @@ def starter_config(documents: str | None = None) -> MenuConfig:
     def rows(source) -> list[MenuItem]:
         return [MenuItem(label=e.label, kind="command", cid=e.cid) for e in source]
 
-    lists = [
-        MenuList(name="Sculpt", items=rows(sculpt)),
-        MenuList(name="Modeling", items=rows(model)),
+    menus = [
+        Menu(name="Sculpt", items=rows(sculpt)),
+        Menu(name="Modeling", items=rows(model)),
     ]
-    if not any(lst.items for lst in lists):
-        lists = [
-            MenuList(
+    if not any(lst.items for lst in menus):
+        menus = [
+            Menu(
                 name="Starter",
                 items=[
                     header_item("No CustomMenu entries found"),
@@ -339,4 +345,4 @@ def starter_config(documents: str | None = None) -> MenuConfig:
                 ],
             )
         ]
-    return MenuConfig(lists=lists)
+    return MenuConfig(menus=menus)

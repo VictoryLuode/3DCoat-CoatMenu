@@ -10,7 +10,7 @@ entry) that edits the same JSON the overlay reads:
 * right     - the source catalog: 3DCoat commands, CustomMenu entries, scripts
 * footer    - add submenu/header/separator, import/export, save & apply
 
-Saving goes through ``core.lists.save_config``, which rewrites the launcher
+Saving goes through ``core.menus.save_config``, which rewrites the launcher
 scripts, the menu XML and (in a running 3DCoat) the menu items themselves.
 """
 from __future__ import annotations
@@ -39,9 +39,9 @@ from PySide6.QtWidgets import (
 )
 
 from coatmenu.core import bindings as bindings_mod
-from coatmenu.core import catalog, lists
+from coatmenu.core import catalog, menus
 from coatmenu.core import lks as lks_mod
-from coatmenu.core.config import MenuConfig, MenuList, item_to_json
+from coatmenu.core.config import MenuConfig, Menu, item_to_json
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (
     COMMAND,
@@ -67,10 +67,10 @@ _TITLE_ROW_HEIGHT = 30
 _COUNT_SUFFIX = re.compile(r"\s*\(\d+\)\s*$")
 
 
-def _list_name_from(label: str) -> str:
-    """The list name a promoted submenu should get: its label, minus the count."""
+def _menu_name_from(label: str) -> str:
+    """The menu name a promoted submenu should get: its label, minus the count."""
     name = _COUNT_SUFFIX.sub("", (label or "").strip()).strip()
-    return name or "List"
+    return name or "Menu"
 
 # The editor is mostly tree + catalog list, so it wants room: twice the original
 # panel, capped to whatever screen it lands on (3DCoat is usually full-screen).
@@ -167,7 +167,7 @@ class CoatMenuEditor(QWidget):
     def __init__(self, config: MenuConfig | None = None) -> None:
         super().__init__(None)
         self._explicit_config = config is not None
-        self._config = config or lists.get_config()
+        self._config = config or menus.get_config()
         self._index = 0
         self._sources_loaded = False
         self._drag_offset: QPoint | None = None
@@ -250,24 +250,24 @@ class CoatMenuEditor(QWidget):
     def _build_list_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(6)
-        row.addWidget(QLabel("List"))
-        self._list_combo = QComboBox()
-        self._list_combo.setMinimumWidth(150)
-        self._list_combo.currentIndexChanged.connect(self.select_list)
-        row.addWidget(self._list_combo)
+        row.addWidget(QLabel("Menu"))
+        self._menu_combo = QComboBox()
+        self._menu_combo.setMinimumWidth(150)
+        self._menu_combo.currentIndexChanged.connect(self.select_menu)
+        row.addWidget(self._menu_combo)
 
         self._new_name = QLineEdit()
-        self._new_name.setPlaceholderText("new list name")
+        self._new_name.setPlaceholderText("new menu name")
         self._new_name.setMaximumWidth(140)
-        self._new_name.returnPressed.connect(self.add_list)
+        self._new_name.returnPressed.connect(self.add_menu)
         row.addWidget(self._new_name)
 
         for label, slot in (
-            ("+ New", self.add_list),
-            ("Rename", self.rename_list),
-            ("Delete", self.remove_list),
-            ("\u25b2", lambda: self.move_list(-1)),
-            ("\u25bc", lambda: self.move_list(1)),
+            ("+ New", self.add_menu),
+            ("Rename", self.rename_menu),
+            ("Delete", self.remove_menu),
+            ("\u25b2", lambda: self.move_menu(-1)),
+            ("\u25bc", lambda: self.move_menu(1)),
         ):
             button = QPushButton(label)
             button.clicked.connect(slot)
@@ -275,9 +275,7 @@ class CoatMenuEditor(QWidget):
 
         self._mode_combo = QComboBox()
         self._mode_combo.addItems(["List", "Pie"])
-        self._mode_combo.setToolTip(
-            "How this list opens: a vertical List, or a radial Pie menu"
-        )
+        self._mode_combo.setToolTip("How this menu opens: rows (List), or a radial Pie")
         self._mode_combo.currentIndexChanged.connect(self.set_mode_from_combo)
         row.addWidget(QLabel("as"))
         row.addWidget(self._mode_combo)
@@ -285,15 +283,15 @@ class CoatMenuEditor(QWidget):
         return row
 
     def _sync_mode_combo(self) -> None:
-        target = self.current_list
+        target = self.current_menu
         index = 1 if (target is not None and target.mode == "pie") else 0
         self._mode_combo.blockSignals(True)
         self._mode_combo.setCurrentIndex(index)
         self._mode_combo.blockSignals(False)
 
     def set_mode_from_combo(self, index: int) -> None:
-        """Persist the layout choice for the selected list."""
-        target = self.current_list
+        """Persist the layout choice for the selected menu."""
+        target = self.current_menu
         if target is None or index < 0:
             return
         mode = "pie" if index == 1 else "list"
@@ -343,7 +341,7 @@ class CoatMenuEditor(QWidget):
 
         self._source_list = QListWidget()
         self._source_list.itemDoubleClicked.connect(lambda _i: self.add_source_item())
-        self._source_list.setToolTip("double-click (or Add \u2192) to append to the list")
+        self._source_list.setToolTip("double-click (or Add \u2192) to append to this menu")
         box.addWidget(self._source_list, 1)
 
         add = QPushButton("Add \u2192")
@@ -359,14 +357,14 @@ class CoatMenuEditor(QWidget):
             ("+ Header", self.add_header),
             ("+ Separator", self.add_separator),
             ("Remove row", self.remove_row),
-            ("Submenu \u2192 list", self.promote_submenu),
+            ("Promote", self.promote_submenu),
         ):
             button = QPushButton(label)
             button.clicked.connect(slot)
             row.addWidget(button)
         row.addStretch(1)
         for label, slot in (
-            ("Preview", self.preview_list),
+            ("Preview", self.preview_menu),
             ("Import", self.import_config),
             ("Export", self.export_config),
             ("Save & apply", self.save),
@@ -437,8 +435,8 @@ class CoatMenuEditor(QWidget):
         # the singleton reads back from disk - and it keeps un-saved edits, so
         # stepping aside (switching applications) never throws work away.
         if not self._explicit_config and not self._dirty:
-            self._config = lists.get_config()
-        self.reload_lists()
+            self._config = menus.get_config()
+        self.reload_menus()
         if self._dirty:
             self.set_status("un-saved edits kept - press Save & apply")
         self._clamp_to_screen()
@@ -483,14 +481,14 @@ class CoatMenuEditor(QWidget):
             log("editor.keyPressEvent failed", exc=True)
         super().keyPressEvent(event)
 
-    def preview_list(self) -> None:
+    def preview_menu(self) -> None:
         """Show the current rows exactly as the menu will open them.
 
         A separate overlay instance (not the singleton the hotkeys use), so a
         preview and a real menu never fight over one window. It uses the tree's
         *current* rows, so an un-saved edit can be looked at before committing.
         """
-        target = self.current_list
+        target = self.current_menu
         if target is None:
             return
         from coatmenu.ui.popup import MenuPopup, title_item
@@ -553,26 +551,26 @@ class CoatMenuEditor(QWidget):
     # ------------------------------------------------------------------
 
     @property
-    def current_list(self) -> MenuList | None:
-        if 0 <= self._index < len(self._config.lists):
-            return self._config.lists[self._index]
+    def current_menu(self) -> Menu | None:
+        if 0 <= self._index < len(self._config.menus):
+            return self._config.menus[self._index]
         return None
 
-    def reload_lists(self) -> None:
+    def reload_menus(self) -> None:
         # Read the bindings first: the editor is where a missing key or two lists
         # fighting over one key should become visible.
         self._bindings = bindings_mod.describe(self._config)
-        self._list_combo.blockSignals(True)
-        self._list_combo.clear()
-        for lst in self._config.lists:
-            key = self._bindings.for_list(lst.name)
-            self._list_combo.addItem(
+        self._menu_combo.blockSignals(True)
+        self._menu_combo.clear()
+        for lst in self._config.menus:
+            key = self._bindings.for_menu(lst.name)
+            self._menu_combo.addItem(
                 f"{lst.name}  ({len(lst.items)})" + (f"  [{key}]" if key else "")
             )
-        self._index = min(self._index, max(0, len(self._config.lists) - 1))
-        self._list_combo.setCurrentIndex(self._index)
-        self._list_combo.blockSignals(False)
-        self._list_combo.setToolTip(self._bindings_tooltip())
+        self._index = min(self._index, max(0, len(self._config.menus) - 1))
+        self._menu_combo.setCurrentIndex(self._index)
+        self._menu_combo.blockSignals(False)
+        self._menu_combo.setToolTip(self._bindings_tooltip())
         self.refresh_tree()
         self._sync_mode_combo()
         self.set_status("")
@@ -580,69 +578,69 @@ class CoatMenuEditor(QWidget):
             self.set_status("Hotkey clash: " + "; ".join(self._bindings.conflicts))
 
     def _bindings_tooltip(self) -> str:
-        """Keys per list, plus any clashes - survives later status messages."""
+        """Keys per menu, plus any clashes - survives later status messages."""
         lines = [
-            f"{lst.name}: {self._bindings.for_list(lst.name) or 'unbound - bind it in Preferences > Hotkeys'}"
-            for lst in self._config.lists
+            f"{lst.name}: {self._bindings.for_menu(lst.name) or 'unbound - bind it in Preferences > Hotkeys'}"
+            for lst in self._config.menus
         ]
         if self._bindings.conflicts:
             lines.append("")
             lines.extend(self._bindings.conflicts)
         return "\n".join(lines)
 
-    def select_list(self, which) -> None:
-        """Select a list by index, or by name/slug."""
+    def select_menu(self, which) -> None:
+        """Select a menu by index, or by name/slug."""
         if isinstance(which, str):
             target = self._config.find(which)
-            which = self._config.lists.index(target) if target in self._config.lists else -1
+            which = self._config.menus.index(target) if target in self._config.menus else -1
         if which < 0:
             return
         self._index = which
         self.refresh_tree()
         self._sync_mode_combo()
 
-    def add_list(self) -> None:
+    def add_menu(self) -> None:
         name = self._new_name.text().strip()
         if not name:
             self.set_status("Type a name first")
             return
-        lst = self._config.add_list(name)
+        lst = self._config.add_menu(name)
         self._new_name.clear()
-        self._index = self._config.lists.index(lst)
-        self.reload_lists()
-        self.set_status(f"Added list '{lst.name}'")
+        self._index = self._config.menus.index(lst)
+        self.reload_menus()
+        self.set_status(f"Added menu '{lst.name}'")
 
-    def rename_list(self) -> None:
-        target = self.current_list
+    def rename_menu(self) -> None:
+        target = self.current_menu
         if target is None:
             return
         new_name = self._new_name.text().strip()
         if not new_name:
             self.set_status("Type the new name in the field, then Rename")
             return
-        self._config.rename_list(target.name, new_name)
+        self._config.rename_menu(target.name, new_name)
         self._new_name.clear()
-        self.reload_lists()
-        self.set_status(f"Renamed to '{self.current_list.name}'")
+        self.reload_menus()
+        self.set_status(f"Renamed to '{self.current_menu.name}'")
 
-    def remove_list(self) -> None:
-        target = self.current_list
+    def remove_menu(self) -> None:
+        target = self.current_menu
         if target is None:
             return
-        if not self._config.remove_list(target.name):
-            self.set_status("A config needs at least one list")
+        if not self._config.remove_menu(target.name):
+            self.set_status("A config needs at least one menu")
             return
         self._index = max(0, self._index - 1)
-        self.reload_lists()
-        self.set_status(f"Removed list '{target.name}'")
+        self.reload_menus()
+        self.set_status(f"Removed menu '{target.name}'")
 
-    def move_list(self, delta: int) -> None:
-        target = self.current_list
+    def move_menu(self, delta: int) -> None:
+        target = self.current_menu
         if target is None:
             return
-        if self._config.move_list(target.name, delta):
-            self._index = self._config.lists.index(target)
-            self.reload_lists()
+        if self._config.move_menu(target.name, delta):
+            self._index = self._config.menus.index(target)
+            self.reload_menus()
 
     # ------------------------------------------------------------------
     # rows
@@ -651,7 +649,7 @@ class CoatMenuEditor(QWidget):
     def refresh_tree(self) -> None:
         self._tree.blockSignals(True)
         self._tree.clear()
-        target = self.current_list
+        target = self.current_menu
         if target is not None:
             for item in target.items:
                 self._tree.addTopLevelItem(self._node_for(item))
@@ -722,7 +720,7 @@ class CoatMenuEditor(QWidget):
     def add_source_item(self) -> None:
         entry = self._source_list.currentItem()
         if entry is None:
-            self.set_status("Pick something from the list on the right")
+            self.set_status("Pick something on the right")
             return
         cid = entry.data(Qt.UserRole) or ""
         stored_kind = entry.data(Qt.UserRole + 2) or ""
@@ -783,7 +781,7 @@ class CoatMenuEditor(QWidget):
 
         copy_to = menu.addMenu("Copy to")
         move_to = menu.addMenu("Move to")
-        targets = [lst for lst in self._config.lists if lst is not self.current_list]
+        targets = [lst for lst in self._config.menus if lst is not self.current_menu]
         if targets:
             for lst in targets:
                 label = f"{lst.name}  ({len(lst.items)})"
@@ -825,10 +823,10 @@ class CoatMenuEditor(QWidget):
         self.set_status("Row duplicated")
 
     def copy_selected_to_list(self, target_name: str) -> None:
-        """Copy the selected row (subtree included) into another list."""
+        """Copy the selected row (subtree included) into another menu."""
         node = self._tree.currentItem()
         target = self._config.find(target_name)
-        if node is None or target is None or target is self.current_list:
+        if node is None or target is None or target is self.current_menu:
             return
         copied = self._item_from_node(node)
         self.collect()  # pick up anything edited in the tree before we add to it
@@ -852,9 +850,9 @@ class CoatMenuEditor(QWidget):
         self._mark_dirty()
 
     def move_selected_to_list(self, target_name: str) -> None:
-        """Move the selected row (and anything under it) into another list."""
+        """Move the selected row (and anything under it) into another menu."""
         node = self._tree.currentItem()
-        current = self.current_list
+        current = self.current_menu
         target = self._config.find(target_name)
         if node is None or current is None or target is None or target is current:
             return
@@ -867,8 +865,8 @@ class CoatMenuEditor(QWidget):
         self.collect()
         target.items.append(moved)
 
-        self.reload_lists()
-        self.select_list(target.name)
+        self.reload_menus()
+        self.select_menu(target.name)
         self._mark_dirty()
         self.set_status(f"'{moved.label}' moved to '{target.name}'")
 
@@ -884,7 +882,7 @@ class CoatMenuEditor(QWidget):
         A submenu and a top-level list hold the same thing - rows - so promoting
         one is a move, not a copy: its children become the new list, the row goes
         away, and the new list appears in the picker with its own
-        ``CoatMenu_List_<Name>`` id to bind a hotkey to.
+        ``CoatMenu_<Name>`` id to bind a hotkey to.
         """
         node = self._tree.currentItem()
         if node is None or node.data(0, ROLE_KIND) != SUBMENU:
@@ -901,12 +899,12 @@ class CoatMenuEditor(QWidget):
         parent.removeChild(node)
         self.collect()
 
-        new_list = self._config.add_list(_list_name_from(promoted.label))
+        new_list = self._config.add_menu(_menu_name_from(promoted.label))
         new_list.items = promoted.children
-        self.reload_lists()
-        self.select_list(new_list.name)
+        self.reload_menus()
+        self.select_menu(new_list.name)
         self._mark_dirty()
-        self.set_status(f"'{new_list.name}' is a list of its own now - "
+        self.set_status(f"'{new_list.name}' is its own menu now - "
                         f"bind {new_list.hotkey_id} in Preferences \u25b8 Hotkeys")
 
     def add_header(self) -> None:
@@ -1000,7 +998,7 @@ class CoatMenuEditor(QWidget):
 
     def collect(self) -> MenuConfig:
         """Write the tree back into the config object."""
-        target = self.current_list
+        target = self.current_menu
         if target is not None:
             target.items = self.tree_to_items()
         return self._config
@@ -1008,16 +1006,16 @@ class CoatMenuEditor(QWidget):
     def save(self) -> None:
         try:
             config = self.collect()
-            info = lists.save_config(config)
+            info = menus.save_config(config)
             self._config = config
             self._dirty = False
             self._refresh_title()
-            self.reload_lists()
+            self.reload_menus()
             if self._preview is not None:
                 # Keep the preview honest: the rows may have just changed.
-                self.preview_list()
+                self.preview_menu()
             self.set_status(
-                f"Saved: {info['lists']} list(s), {info['registered']} menu item(s) registered"
+                f"Saved: {info['menus']} menu(s), {info['registered']} menu item(s) registered"
             )
             log(f"editor: saved ({info})")
         except Exception as exc:
@@ -1026,7 +1024,7 @@ class CoatMenuEditor(QWidget):
 
     def export_config(self) -> None:
         try:
-            path, _filter = QFileDialog.getSaveFileName(self, "Export CoatMenu lists", "coatmenu-lists.json",
+            path, _filter = QFileDialog.getSaveFileName(self, "Export CoatMenu menus", "coatmenu-menus.json",
                                                         "JSON (*.json)")
             if not path:
                 return
@@ -1044,12 +1042,12 @@ class CoatMenuEditor(QWidget):
                 return
             with open(path, encoding="utf-8") as fh:
                 imported = MenuConfig.from_json(json.load(fh))
-            if not imported.lists:
-                self.set_status("That file has no lists")
+            if not imported.menus:
+                self.set_status("That file has no menus")
                 return
             self._config = imported
             self._index = 0
-            self.reload_lists()
+            self.reload_menus()
             self.set_status("Imported - press Save & apply to keep it")
         except Exception as exc:
             self.set_status(f"Import failed: {exc}")
@@ -1065,9 +1063,9 @@ class CoatMenuEditor(QWidget):
             pass
 
     def describe(self) -> list[dict]:
-        """Debug helper: current lists as plain dicts."""
+        """Debug helper: current menus as plain dicts."""
         return [{"name": lst.name, "rows": [item_to_json(i) for i in lst.items]}
-                for lst in self.collect().lists]
+                for lst in self.collect().menus]
 
 
 _editor: CoatMenuEditor | None = None

@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import os
 
-from coatmenu.core import lists, paths
+from coatmenu.core import menus, paths
 from coatmenu.core.config import MenuConfig
 from coatmenu.core.hotkeys import find_trigger_vk
-from coatmenu.core.lists_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
+from coatmenu.core.menus_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import MenuItem, header, separator, submenu
 from coatmenu.ui import popup
@@ -34,7 +34,7 @@ def apply_labels() -> None:
         import coat  # type: ignore
     except Exception:
         return
-    config = lists.get_config()
+    config = menus.get_config()
     for menu_id, label, _script in menu_entries(
         config, paths.extension_root(), paths.entry_scripts_dir()
     ):
@@ -47,22 +47,22 @@ def apply_labels() -> None:
 def _config() -> MenuConfig:
     # ensure_config also regenerates launchers + menu XML if the config changed
     # on disk (e.g. the file was copied in by hand).
-    return lists.ensure_config()
+    return menus.ensure_config()
 
 
 def show_main_menu(script_path: str = "") -> None:
     """Show the list index at the cursor."""
     try:
         config = _config()
-        rows: list[MenuItem] = [submenu(lst.name, lst.items) for lst in config.lists]
+        rows: list[MenuItem] = [submenu(lst.name, lst.items) for lst in config.menus]
         if not rows:
-            log("show_main_menu: no lists configured")
+            log("show_main_menu: no menus configured")
             return
         # The editor is one row away, so the flow is: open menu, tweak, save.
         rows.append(separator())
         rows.append(
             MenuItem(
-                label="Edit lists\u2026",
+                label="Edit menus\u2026",
                 kind="script",
                 path=os.path.join(paths.extension_root(), "actions", "CoatMenu_Editor.py"),
             )
@@ -85,7 +85,7 @@ def list_rows(target) -> list[MenuItem]:
     """
     items = list(target.items)
     if not items:
-        items = [header("this list is empty - use Edit lists to fill it")]
+        items = [header("this menu is empty - use Edit menus to fill it")]
     return items
 
 

@@ -14,7 +14,7 @@ import os
 
 from coatmenu.core import paths
 from coatmenu.core.config import MenuConfig, starter_config
-from coatmenu.core.lists_registry import MAIN_MENU_ID, menu_entries, sync
+from coatmenu.core.menus_registry import MAIN_MENU_ID, menu_entries, sync
 from coatmenu.core.log import log
 
 # Where our menu items appear in 3DCoat's main menu (see menu_sections.txt).
@@ -44,7 +44,7 @@ def ensure_config() -> MenuConfig:
     global _config
     existed = os.path.exists(paths.config_path())
     _config = MenuConfig.load(paths.config_path())
-    if not _config.lists:
+    if not _config.menus:
         _config = starter_config()
     if not existed:
         save_config(_config, register=False)
@@ -71,7 +71,7 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
     if register:
         info["registered"] = register_menu_items(config)
     log(
-        f"sync: {info['lists']} list(s), wrote {len(info['scripts_written'])} launcher(s), "
+        f"sync: {info['menus']} menu(s), wrote {len(info['scripts_written'])} launcher(s), "
         f"removed {len(info['scripts_removed'])}, registered {info.get('registered', '-')}"
     )
     return info
@@ -112,7 +112,7 @@ def unregister_menu_items() -> None:
         import coat  # type: ignore
     except Exception:
         return
-    ids = [MAIN_MENU_ID] + [lst.hotkey_id for lst in get_config().lists]
+    ids = [MAIN_MENU_ID] + [lst.hotkey_id for lst in get_config().menus]
     for menu_id in ids:
         try:
             if coat.ui.checkIfMenuItemInserted(menu_id):

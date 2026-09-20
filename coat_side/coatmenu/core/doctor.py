@@ -13,7 +13,7 @@ import os
 import time
 
 from coatmenu.core import bindings as bindings_mod
-from coatmenu.core import catalog, lists, paths
+from coatmenu.core import catalog, menus, paths
 from coatmenu.core.log import log, log_path
 
 REPORT_NAME = "doctor.txt"
@@ -131,7 +131,7 @@ def preset_probe() -> list[str]:
 
 def report(config=None) -> str:
     """The whole picture, as plain text."""
-    cfg = config if config is not None else lists.get_config()
+    cfg = config if config is not None else menus.get_config()
     binds = bindings_mod.describe(cfg)
     startup = startup_path()
 
@@ -140,16 +140,16 @@ def report(config=None) -> str:
         f"  time          : {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"  extension     : {paths.extension_root()}",
         f"  data          : {paths.data_dir()}",
-        f"  lists.json    : {'ok' if os.path.exists(paths.config_path()) else 'MISSING'}",
+        f"  menus.json    : {'ok' if os.path.exists(paths.config_path()) else 'MISSING'}",
         f"  startup.txt   : {'CoatMenu listed' if _startup_lists_us(startup) else 'CoatMenu NOT listed'}"
         f"  ({startup})",
         f"  command source: {catalog.describe_counts()}",
-        f"  lists         : {len(cfg.lists)}",
+        f"  menus         : {len(cfg.menus)}",
     ]
-    for lst in cfg.lists:
+    for lst in cfg.menus:
         out.append(
             f"    - {lst.name}  mode={lst.mode}  rows={len(lst.items)}"
-            f"  key={binds.for_list(lst.name) or 'unbound'}"
+            f"  key={binds.for_menu(lst.name) or 'unbound'}"
         )
     out.append(f"  hotkey clashes: {'; '.join(binds.conflicts) or 'none'}")
     out.extend(tool_probe())

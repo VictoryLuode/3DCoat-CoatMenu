@@ -88,7 +88,7 @@ check(not os.path.exists(stale), "stale module removed by the next install")
 check(not os.path.isdir(old_pkg), "old top-level package folder removed, stubs and all")
 check(os.path.isfile(os.path.join(ext, "data", "lists.json")),
       "lists.json materialised on first install")
-check(os.path.isdir(os.path.join(ext, "actions", "lists")), "launcher folder created")
+check(os.path.isdir(os.path.join(ext, "actions", "menus")), "launcher folder created")
 check(os.path.isdir(os.path.join(ext, "coatmenu", "core")), "namespaced package intact")
 
 print("== uninstall ==")

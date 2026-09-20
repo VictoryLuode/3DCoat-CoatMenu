@@ -39,8 +39,8 @@ def config_path() -> str:
 
 
 def entry_scripts_dir() -> str:
-    """One thin launcher script per list (what the menu items point at)."""
-    return os.path.join(extension_root(), "actions", "lists")
+    """One thin launcher script per menu (what the menu items point at)."""
+    return os.path.join(extension_root(), "actions", "menus")
 
 
 def documents() -> str:

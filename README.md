@@ -49,9 +49,10 @@ extension builds on this machine)*
   `Esc` steps back out one level at a time (submenu → menu), right-click cancels,
   and entries fire on mouse *release*, so press-drag-release works like Blender's.
   A click away still reaches 3DCoat.
-* **Multiple lists, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
-  want; each becomes its own entry in 3D-Coat's menu (and so in
-  Preferences ▸ Hotkeys).
+* **Multiple menus, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
+  want; each becomes its own entry in 3DCoat's menu (and so in
+  Preferences ▸ Hotkeys). A *menu* is the thing you build; `List` and `Pie` are
+  only how it opens.
 * **Rows *or* a pie** — each list opens as a vertical list or as a radial pie
   (pick per list in the editor). The pie is laid out the way Blender's is:
   rounded buttons around a small centre ring, each showing its `1..9` shortcut,

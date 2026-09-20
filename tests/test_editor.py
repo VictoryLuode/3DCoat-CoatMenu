@@ -65,10 +65,10 @@ from coatmenu.core import paths  # noqa: E402
 
 # Keep every write inside the temp tree - never the repository's own folders.
 paths.extension_root = lambda: os.path.join(WORK, "ext")
-paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "lists")
+paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "menus")
 os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 
-from coatmenu.core.config import MenuConfig, MenuList  # noqa: E402
+from coatmenu.core.config import MenuConfig, Menu  # noqa: E402
 from coatmenu.core.menu_model import MenuItem  # noqa: E402
 from coatmenu.ui.editor import ROLE_KIND, CoatMenuEditor  # noqa: E402
 
@@ -82,15 +82,15 @@ def check(condition: bool, label: str) -> None:
 
 
 def fresh_editor() -> CoatMenuEditor:
-    config = MenuConfig(lists=[
-        MenuList(name="Sculpt", items=[
+    config = MenuConfig(menus=[
+        Menu(name="Sculpt", items=[
             MenuItem(label="Resample", kind="command", cid="Resample"),
             MenuItem(label="Booleans", kind="submenu", children=[
                 MenuItem(label="Subtract", kind="command", cid="SubtractVolume"),
             ]),
             MenuItem(label="Wireframe", kind="command", cid="VIEW_WIREFRAME"),
         ]),
-        MenuList(name="Paint", items=[MenuItem(label="Fill", kind="command", cid="FillLayer")]),
+        Menu(name="Paint", items=[MenuItem(label="Fill", kind="command", cid="FillLayer")]),
     ])
     return CoatMenuEditor(config=config)
 
@@ -123,19 +123,19 @@ check([i.label for i in editor.tree_to_items()] == ["Booleans", "Wireframe", "Re
 
 print("== list operations ==")
 editor._new_name.setText("Details")
-editor.add_list()
-check([lst.name for lst in editor._config.lists] == ["Sculpt", "Paint", "Details"],
+editor.add_menu()
+check([lst.name for lst in editor._config.menus] == ["Sculpt", "Paint", "Details"],
       "list added")
 editor._new_name.setText("Details x")
-editor.rename_list()
-check("Details x" in [lst.name for lst in editor._config.lists], "list renamed")
-editor.move_list(-1)
-check([lst.name for lst in editor._config.lists][1] == "Details x", "list order changed")
-editor.remove_list()
-check("Details x" not in [lst.name for lst in editor._config.lists], "list removed")
+editor.rename_menu()
+check("Details x" in [lst.name for lst in editor._config.menus], "list renamed")
+editor.move_menu(-1)
+check([lst.name for lst in editor._config.menus][1] == "Details x", "list order changed")
+editor.remove_menu()
+check("Details x" not in [lst.name for lst in editor._config.menus], "list removed")
 
 print("== source catalog ==")
-editor.select_list(0)
+editor.select_menu(0)
 editor._source_kind.setCurrentIndex(0)  # 3DCoat commands (the combined list)
 editor.reload_sources()
 combined_count = editor._source_list.count()
@@ -216,48 +216,48 @@ print("== saved config reloads into a new editor ==")
 reloaded = CoatMenuEditor(config=MenuConfig.load(config_path))
 reloaded.show_editor()
 app.processEvents()
-check([lst.name for lst in reloaded._config.lists] == ["Sculpt", "Paint"], "reload keeps lists")
+check([lst.name for lst in reloaded._config.menus] == ["Sculpt", "Paint"], "reload keeps lists")
 check(reloaded._tree.topLevelItemCount() == len(saved["lists"][0]["items"]),
       f"reload keeps rows ({reloaded._tree.topLevelItemCount()})")
 reloaded.close_editor()
 editor.close_editor()
 
 print("== promoting a submenu into its own list ==")
-promo = editor._config.add_list("Promo")
+promo = editor._config.add_menu("Promo")
 promo.items = [MenuItem(label="Group  (3)", kind="submenu", children=[
     MenuItem(label="One", kind="command", cid="ONE"),
     MenuItem(label="Two", kind="command", cid="TWO")])]
-editor.reload_lists()
-editor.select_list("Promo")
+editor.reload_menus()
+editor.select_menu("Promo")
 editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
 editor.promote_submenu()
 check(editor._config.find("Group") is not None,
       "the submenu became a list of its own, without the row count in its name")
 check([i.label for i in editor._config.find("Group").items] == ["One", "Two"],
       "and took its rows with it")
-check(editor.current_list is not None and editor.current_list.name == "Group",
+check(editor.current_menu is not None and editor.current_menu.name == "Group",
       "the editor switched to the new list")
-check("CoatMenu_List_Group" in editor._status.text(),
+check("CoatMenu_Group" in editor._status.text(),
       f"and names the id to bind ({editor._status.text()[:50]})")
 check(len(editor._config.find("Promo").items) == 0,
       "the row is gone from the original list")
-editor.select_list("Promo")
+editor.select_menu("Promo")
 check(editor._tree.topLevelItemCount() == 0, "and the original list is empty in the tree")
 
-editor._config.add_list("Plain")
-editor.reload_lists()
-editor.select_list("Plain")
+editor._config.add_menu("Plain")
+editor.reload_menus()
+editor.select_menu("Plain")
 editor._tree.clearSelection()
 editor.promote_submenu()
 check("submenu row" in editor._status.text(), "a plain row is refused with a hint")
 
 print("== right-click menu: move a row to another list ==")
-source = editor._config.add_list("Source")
+source = editor._config.add_menu("Source")
 source.items = [MenuItem(label="Moveable", kind="command", cid="MOVEME"),
                 MenuItem(label="Stays", kind="command", cid="STAY")]
-editor._config.add_list("Sink")
-editor.reload_lists()
-editor.select_list("Source")
+editor._config.add_menu("Sink")
+editor.reload_menus()
+editor.select_menu("Source")
 editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
 
 row_menu = editor._row_menu()
@@ -277,10 +277,10 @@ check([i.label for i in editor._config.find("Source").items] == ["Stays"],
       "the row left the source list")
 check([i.label for i in editor._config.find("Sink").items] == ["Moveable"],
       "and landed in the target list")
-check(editor.current_list is not None and editor.current_list.name == "Sink",
+check(editor.current_menu is not None and editor.current_menu.name == "Sink",
       "the editor follows the row so you can see where it went")
 
-editor.select_list("Source")
+editor.select_menu("Source")
 editor.add_submenu()
 sub_node = editor._tree.topLevelItem(editor._tree.topLevelItemCount() - 1)
 sub_node.setText(0, "Group")
@@ -292,7 +292,7 @@ check(moved_sub.kind == "submenu" and moved_sub.children[0].cid == "KID",
       "a moved submenu takes its children with it")
 
 print("== right-click actions: duplicate, copy, add below ==")
-editor.select_list("Source")
+editor.select_menu("Source")
 editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
 editor.duplicate_row()
 check([i.label for i in editor.tree_to_items()] == ["Stays", "Stays"],
@@ -346,8 +346,8 @@ check(layer._position is None, "the drawn pointer is cleared on close")
 print("== live preview ==")
 from coatmenu.ui import popup as popup_mod  # noqa: E402
 
-editor.select_list(0)
-editor.preview_list()
+editor.select_menu(0)
+editor.preview_menu()
 check(editor._preview is not None and editor._preview.isVisible(), "preview panel opens")
 check(editor._preview._transient is False, "a preview never closes itself")
 check(editor._preview._items != [], "the preview has the current rows")
@@ -360,7 +360,7 @@ editor._preview._on_poll()
 check(editor._preview.isVisible(), "escape does not close a preview either")
 popup_mod.is_key_down = lambda _vk: False
 
-editor.preview_list()  # pressing it twice must not stack panels
+editor.preview_menu()  # pressing it twice must not stack panels
 panel = editor._preview
 editor.close_editor()
 check(panel is not None and not panel.isVisible(), "closing the editor closes the preview")

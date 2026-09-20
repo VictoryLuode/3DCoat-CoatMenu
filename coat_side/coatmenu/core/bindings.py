@@ -52,13 +52,13 @@ class Bindings:
     keys: dict[str, str] = field(default_factory=dict)   # list name -> "Ctrl+Q"
     conflicts: list[str] = field(default_factory=list)   # human-readable notes
 
-    def for_list(self, name: str) -> str:
+    def for_menu(self, name: str) -> str:
         return self.keys.get(name, "")
 
 
 def describe(config: MenuConfig, path: str | None = None) -> Bindings:
     """Read the hotkey file once, then work out both the keys and the clashes."""
-    wanted = {lst.hotkey_id: lst.name for lst in config.lists}
+    wanted = {lst.hotkey_id: lst.name for lst in config.menus}
     by_combo: dict[tuple, list[str]] = defaultdict(list)
     keys: dict[str, str] = {}
 

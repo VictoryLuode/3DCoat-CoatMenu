@@ -36,7 +36,7 @@ MENU_LABEL = "Show CoatMenu"
 if SOURCE_DIR not in sys.path:
     sys.path.insert(0, SOURCE_DIR)
 
-from coatmenu.core import lists_registry, presets  # noqa: E402
+from coatmenu.core import menus_registry, presets  # noqa: E402
 from coatmenu.core.config import MenuConfig, starter_config  # noqa: E402
 
 
@@ -86,7 +86,7 @@ def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
             if not name.endswith(".py"):
                 continue
             rel = name if rel_dir == "." else f"{rel_dir}/{name}"
-            if rel in shipped or rel.startswith("actions/lists/"):
+            if rel in shipped or rel.startswith("actions/menus/"):
                 continue
             try:
                 os.remove(os.path.join(dirpath, name))
@@ -133,12 +133,21 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
                 shutil.rmtree(path, ignore_errors=True)
                 removed.append(f"coatmenu/{name}/")
 
+    # A previous layout kept the launchers in actions/lists/; they live in
+    # actions/menus/ now, and the old folder would otherwise linger with stale
+    # copies in it.
+    for old in ("lists",):
+        path = os.path.join(ext_dir, "actions", old)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(f"actions/{old}/")
+
     # ...and finally any folder left empty anywhere below the package.
     for dirpath, dirnames, filenames in os.walk(ext_dir, topdown=False):
         if dirnames or filenames:
             continue
         rel = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
-        if rel in (".", "data", "actions", "actions/lists", "coatmenu", "coatmenu/core", "coatmenu/ui"):
+        if rel in (".", "data", "actions", "actions/menus", "coatmenu", "coatmenu/core", "coatmenu/ui"):
             continue
         try:
             os.rmdir(dirpath)
@@ -153,7 +162,7 @@ def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
     path = os.path.join(ext_dir, "data", "lists.json")
     if os.path.exists(path):
         config = MenuConfig.load(path)
-        if config.lists:
+        if config.menus:
             return config
     return starter_config(documents)
 
@@ -185,10 +194,10 @@ def install(documents: str) -> int:
         shutil.copy2(config_path, f"{config_path}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}")
     if added_presets or not os.path.exists(config_path):
         config.save(config_path)
-    info = lists_registry.sync(
+    info = menus_registry.sync(
         config,
         p["ext"],
-        os.path.join(p["ext"], "actions", "lists"),
+        os.path.join(p["ext"], "actions", "menus"),
         p["menu_xml"],
     )
 
@@ -199,8 +208,8 @@ def install(documents: str) -> int:
     print(f"  files copied   : {copied}")
     if stale:
         print(f"  stale removed  : {', '.join(stale)}")
-    print(f"  lists          : {info['lists']} ({', '.join(lst.name for lst in config.lists)})")
-    print(f"  menu items     : {info['lists'] + 3} written to {p['menu_xml']}")
+    print(f"  menus          : {info['menus']} ({', '.join(lst.name for lst in config.menus)})")
+    print(f"  menu items     : {info['menus'] + 3} written to {p['menu_xml']}")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
     print("then use Scripts > CoatMenu > Show CoatMenu. Every list can get its own")

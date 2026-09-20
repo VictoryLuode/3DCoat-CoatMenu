@@ -90,9 +90,9 @@ def compose(path: str, panels: list) -> None:
 
 
 config = starter_config(DOCS)
-config.add_list("Paint")
-print(f"lists: {[lst.name for lst in config.lists]}")
-for lst in config.lists:
+config.add_menu("Paint")
+print(f"lists: {[lst.name for lst in config.menus]}")
+for lst in config.menus:
     print(f"  {lst.hotkey_id:24} {lst.name:10} {len(lst.items)} row(s)")
 
 manager = popup.get_manager()
@@ -105,7 +105,7 @@ popup.system.foreground_is_current_process = lambda: True
 os.environ["COATMENU_FORCE_CURSOR"] = "0"
 
 # 1. the index
-index_rows = [submenu(lst.name, lst.items) for lst in config.lists]
+index_rows = [submenu(lst.name, lst.items) for lst in config.menus]
 manager.show_menu(index_rows, anchor=QPoint(80, 80), title="CoatMenu")
 widget = manager.popup
 app.processEvents()
@@ -128,7 +128,7 @@ if child is not None:
 # 3. a single list shown flat
 widget.dismiss()
 app.processEvents()
-manager.show_menu(config.lists[0].items, anchor=QPoint(80, 80), title=config.lists[0].name)
+manager.show_menu(config.menus[0].items, anchor=QPoint(80, 80), title=config.menus[0].name)
 widget = manager.popup
 app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-list.png"), [widget])
@@ -202,7 +202,7 @@ app.processEvents()
 from coatmenu.ui.editor import EDITOR_SIZE, CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)
-editor_config.add_list("Paint")
+editor_config.add_menu("Paint")
 editor = CoatMenuEditor(config=editor_config)
 editor.show_editor()
 # Offscreen screens are small, so _fit_to_screen would shrink it: force the real
@@ -216,7 +216,7 @@ app.processEvents()
 compose(os.path.join(OUT_DIR, "preview-editor.png"), [editor])
 
 # 8. the editor with its live preview beside it (un-saved rows included)
-editor.preview_list()
+editor.preview_menu()
 app.processEvents()
 live = editor._preview
 print(f"editor preview open: {live is not None}")

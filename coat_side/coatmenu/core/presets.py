@@ -17,7 +17,7 @@ to make the pick land.
 from __future__ import annotations
 
 from coatmenu.core import catalog
-from coatmenu.core.config import MenuConfig, MenuList
+from coatmenu.core.config import MenuConfig, Menu
 from coatmenu.core.menu_model import (
     COMMAND,
     LIST,
@@ -98,7 +98,7 @@ def primitive_groups() -> list[tuple[str, list[MenuItem]]]:
     ]
 
 
-def primitives_list(mode: str = LIST) -> MenuList:
+def primitives_list(mode: str = LIST) -> Menu:
     """The ``Prims`` list.
 
     The built-in shapes sit straight on the list - they are the ones you reach
@@ -110,7 +110,7 @@ def primitives_list(mode: str = LIST) -> MenuList:
     items.append(separator())
     for label, rows in primitive_groups()[1:]:
         items.append(submenu(label, rows))
-    return MenuList(name="Prims", items=items, mode=mode,
+    return Menu(name="Prims", items=items, mode=mode,
                     preset=PRESET_MARKERS["Prims"])
 
 
@@ -125,7 +125,7 @@ def tool_rows() -> list[tuple[str, list[MenuItem]]]:
     return list(groups.items())
 
 
-def tools_list(mode: str = LIST) -> MenuList:
+def tools_list(mode: str = LIST) -> Menu:
     """The ``Tools`` list: your tool presets, grouped like 3DCoat's own panel.
 
     A hundred tools flat in one menu would be unusable, so each of 3DCoat's panel
@@ -136,7 +136,7 @@ def tools_list(mode: str = LIST) -> MenuList:
         items.append(submenu(f"{name}  ({len(rows)})", rows))
     if not items:
         items.append(header("no CustomTools presets found"))
-    return MenuList(name="Tools", items=items, mode=mode,
+    return Menu(name="Tools", items=items, mode=mode,
                     preset=PRESET_MARKERS["Tools"])
 
 
@@ -146,7 +146,7 @@ def preset_rows() -> list[MenuItem]:
             for e in catalog.read_presets()]
 
 
-def presets_list(mode: str = LIST) -> MenuList:
+def presets_list(mode: str = LIST) -> Menu:
     """The ``Presets`` list: the presets stored in 3DCoat's Presets panel.
 
     Unlike ``Tools`` (which only switches the tool), a preset carries the tool
@@ -155,11 +155,11 @@ def presets_list(mode: str = LIST) -> MenuList:
     """
     rows = preset_rows()
     items = rows or [header("no presets in UserPrefs/Presets")]
-    return MenuList(name="Presets", items=items, mode=mode,
+    return Menu(name="Presets", items=items, mode=mode,
                     preset=PRESET_MARKERS["Presets"])
 
 
-def lks_list(mode: str = LIST) -> MenuList:
+def lks_list(mode: str = LIST) -> Menu:
     """The ``LKS`` list: the radial menus from the LKS extension.
 
     LKS owns those JSON files and its users edit them in place, so this is a
@@ -172,7 +172,7 @@ def lks_list(mode: str = LIST) -> MenuList:
         items.append(submenu(f"{menu.name}  ({len(menu.items)})", menu.items))
     if not items:
         items.append(header("no LKS radial menus found"))
-    return MenuList(name="LKS", items=items, mode=mode,
+    return Menu(name="LKS", items=items, mode=mode,
                     preset=PRESET_MARKERS["LKS"])
 
 
@@ -197,7 +197,7 @@ def common_groups(menus: tuple[str, ...] = COMMON_MENUS) -> list[tuple[str, list
     return [(name, found[name]) for name in menus if name in found]
 
 
-def common_list(mode: str = LIST) -> MenuList:
+def common_list(mode: str = LIST) -> Menu:
     """The ``Common`` list: everyday commands, grouped as 3DCoat groups its menus.
 
     Undo/Redo and the transform commands live here, along with view shading,
@@ -208,7 +208,7 @@ def common_list(mode: str = LIST) -> MenuList:
         items.append(submenu(f"{name}  ({len(rows)})", rows))
     if not items:
         items.append(header("no main-menu commands found"))
-    return MenuList(name="Common", items=items, mode=mode,
+    return Menu(name="Common", items=items, mode=mode,
                     preset=PRESET_MARKERS["Common"])
 
 
@@ -230,9 +230,9 @@ def install_presets(config: MenuConfig,
         fresh = make()
         existing = config.find(name)
         if existing is None:
-            config.lists.append(fresh)
+            config.menus.append(fresh)
             added.append(name)
         elif existing.preset and existing.preset != fresh.preset:
-            config.lists[config.lists.index(existing)] = fresh
+            config.menus[config.menus.index(existing)] = fresh
             added.append(f"{name} (refreshed)")
     return added
