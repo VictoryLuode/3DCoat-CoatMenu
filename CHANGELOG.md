@@ -2,7 +2,7 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
-## Unreleased
+## v0.5.0 — 2026-09-20
 
 ### Changed
 

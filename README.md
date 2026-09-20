@@ -95,8 +95,24 @@ extension builds on this machine)*
 **Requirements:** 3D-Coat 2025 (it ships its own Python 3.11 + PySide6 — nothing to
 install).
 
-1. Grab the release zip from Releases (or build one with
-   `python tools/make_release.py`), or clone this repository.
+### Option 1 — the package (no terminal)
+
+1. Download `CoatMenu-v<version>.3dcpack` and install it with
+   **File ▸ Install ▸ Install extension**.
+2. Open **Windows ▸ Panels ▸ Extensions** and tick **Auto-Launch** for CoatMenu.
+   (The files are in place after step 1, but 3D-Coat only starts extensions it is
+   told to.)
+3. Restart 3D-Coat, then open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
+
+A `.3dcpack` is 3D-Coat's own format — a zip whose entries are `UserPrefs/`-relative
+paths. CoatMenu's package deliberately leaves `Scripts/cExtensions/startup.txt`
+alone: a package replaces whole files, and shipping that one would wipe the
+auto-launch lines of every other extension.
+
+### Option 2 — from a checkout
+
+1. Grab the release zip (or build one with `python tools/make_release.py`), or clone
+   this repository.
 2. Run the installer from the unzipped folder:
 
    ```

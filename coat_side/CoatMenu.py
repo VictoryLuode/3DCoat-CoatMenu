@@ -84,7 +84,14 @@ class CoatMenuExtension(cPy.cCore.cExtension):
         try:
             from coatmenu.core import menus
             menus.ensure_config()
-            menus.register_menu_items(menus.get_config())
+            config = menus.get_config()
+            # Installed from a .3dcpack there is no installer to run, and the
+            # generated launchers / menu XML are not in the package (they depend on
+            # the user's config, and the paths inside them are absolute). 3DCoat
+            # reads both at startup, so bring them up to date here. Nothing is
+            # rewritten when it is already current.
+            menus.sync_config(config, register=False)
+            menus.register_menu_items(config)
         except Exception:
             log("onStartup list registration failed", exc=True)
         log(f"{EXTENSION_NAME} onStartup")

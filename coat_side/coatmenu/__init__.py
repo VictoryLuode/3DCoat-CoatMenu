@@ -8,4 +8,4 @@ first).
 
 # Kept in step with the git tag; the release zip is named after it and the
 # doctor report prints it.
-__version__ = "0.4.0"
+__version__ = "0.5.0"
