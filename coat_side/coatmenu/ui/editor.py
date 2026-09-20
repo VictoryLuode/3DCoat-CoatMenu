@@ -346,6 +346,7 @@ class CoatMenuEditor(QWidget):
             ("+ Header", self.add_header),
             ("+ Separator", self.add_separator),
             ("Remove row", self.remove_row),
+            ("Submenu \u2192 list", self.promote_submenu),
         ):
             button = QPushButton(label)
             button.clicked.connect(slot)
@@ -576,10 +577,14 @@ class CoatMenuEditor(QWidget):
             lines.extend(self._bindings.conflicts)
         return "\n".join(lines)
 
-    def select_list(self, index: int) -> None:
-        if index < 0:
+    def select_list(self, which) -> None:
+        """Select a list by index, or by name/slug."""
+        if isinstance(which, str):
+            target = self._config.find(which)
+            which = self._config.lists.index(target) if target in self._config.lists else -1
+        if which < 0:
             return
-        self._index = index
+        self._index = which
         self.refresh_tree()
         self._sync_mode_combo()
 
@@ -736,6 +741,37 @@ class CoatMenuEditor(QWidget):
         self._tree.setCurrentItem(node)
         self._mark_dirty()
         self.set_status("Submenu added - double-click to rename")
+
+    def promote_submenu(self) -> None:
+        """Move the selected submenu out into a list of its own.
+
+        A submenu and a top-level list hold the same thing - rows - so promoting
+        one is a move, not a copy: its children become the new list, the row goes
+        away, and the new list appears in the picker with its own
+        ``CoatMenu_List_<Name>`` id to bind a hotkey to.
+        """
+        node = self._tree.currentItem()
+        if node is None or node.data(0, ROLE_KIND) != SUBMENU:
+            self.set_status("Select a submenu row to promote")
+            return
+        promoted = self._item_from_node(node)
+        if not promoted.children:
+            self.set_status(f"'{promoted.label}' has no rows - nothing to promote")
+            return
+
+        # Drop the row first, then collect: that leaves the config without it and
+        # keeps anything edited in the tree on the way in.
+        parent = node.parent() or self._tree.invisibleRootItem()
+        parent.removeChild(node)
+        self.collect()
+
+        new_list = self._config.add_list(promoted.label.strip() or "List")
+        new_list.items = promoted.children
+        self.reload_lists()
+        self.select_list(new_list.name)
+        self._mark_dirty()
+        self.set_status(f"'{new_list.name}' is a list of its own now - "
+                        f"bind {new_list.hotkey_id} in Preferences \u25b8 Hotkeys")
 
     def add_header(self) -> None:
         self._tree.addTopLevelItem(self._node_for(MenuItem(label="Section", kind=HEADER)))

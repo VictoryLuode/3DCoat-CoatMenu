@@ -211,6 +211,34 @@ check(reloaded._tree.topLevelItemCount() == len(saved["lists"][0]["items"]),
 reloaded.close_editor()
 editor.close_editor()
 
+print("== promoting a submenu into its own list ==")
+promo = editor._config.add_list("Promo")
+promo.items = [MenuItem(label="Group", kind="submenu", children=[
+    MenuItem(label="One", kind="command", cid="ONE"),
+    MenuItem(label="Two", kind="command", cid="TWO")])]
+editor.reload_lists()
+editor.select_list("Promo")
+editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
+editor.promote_submenu()
+check(editor._config.find("Group") is not None, "the submenu became a list of its own")
+check([i.label for i in editor._config.find("Group").items] == ["One", "Two"],
+      "and took its rows with it")
+check(editor.current_list is not None and editor.current_list.name == "Group",
+      "the editor switched to the new list")
+check("CoatMenu_List_Group" in editor._status.text(),
+      f"and names the id to bind ({editor._status.text()[:50]})")
+check(len(editor._config.find("Promo").items) == 0,
+      "the row is gone from the original list")
+editor.select_list("Promo")
+check(editor._tree.topLevelItemCount() == 0, "and the original list is empty in the tree")
+
+editor._config.add_list("Plain")
+editor.reload_lists()
+editor.select_list("Plain")
+editor._tree.clearSelection()
+editor.promote_submenu()
+check("submenu row" in editor._status.text(), "a plain row is refused with a hint")
+
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402
 
