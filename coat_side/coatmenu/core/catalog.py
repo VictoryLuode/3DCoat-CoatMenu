@@ -119,6 +119,10 @@ def english_xml_path() -> str:
 _HOTKEY_BLOCK = re.compile(r"<OneHotKey>(.*?)</OneHotKey>", re.S)
 _MENU_ITEM = re.compile(r'menu_item\(\s*"([^"\n]+)"\s*\)\s*(?:#\s*(.*))?')
 _TEXT_ITEM = re.compile(r"<TextItem>(.*?)</TextItem>", re.S)
+# Readable names cost ~77ms to parse and the file only changes when 3DCoat is
+# updated, so keep the result per (path, mtime).
+_TRANSLATION_CACHE: dict[str, tuple[float, dict[str, str]]] = {}
+_ALL_COMMANDS_CACHE: list["CommandEntry"] | None = None
 # 3DCoat decorates its own labels with colour and icon markers: {CY}…{C},
 # {maticon bool_intersection}. They are instructions to the UI, not words.
 _UI_MARKS = re.compile(r"\{[^}]*\}")
@@ -411,8 +415,21 @@ def read_script_commands(root: str | None = None, limit: int = 400) -> list[Comm
 
 
 def read_translations(path: str | None = None) -> dict[str, str]:
-    """``id -> readable name`` from English.xml (lenient - same escaping bug)."""
+    """``id -> readable name`` from English.xml (lenient - same escaping bug).
+
+    Cached per file, keyed on its mtime: parsing 7711 entries costs ~77ms, which
+    was almost all of the 80ms the editor spent each time the source dropdown
+    changed. Treat the returned dict as read-only.
+    """
     path = path if path is not None else english_xml_path()
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        stamp = 0.0
+    cached = _TRANSLATION_CACHE.get(path)
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+
     text = _read_text(path)
     out: dict[str, str] = {}
     if not text:
@@ -430,6 +447,7 @@ def read_translations(path: str | None = None) -> dict[str, str]:
         if not name or len(name) > 60:
             continue
         out[cid] = name
+    _TRANSLATION_CACHE[path] = (stamp, out)
     return out
 
 
@@ -438,7 +456,15 @@ def read_all_commands(translations: dict[str, str] | None = None) -> list[Comman
 
     Readable names come from the translation table, so entries read
     "New — CLEARSCENE" instead of bare ids.
+
+    Cached when called without *translations* (which is what the editor does):
+    the combination costs ~80ms cold and under a millisecond warm, and the editor
+    asks for it every time the source dropdown changes.
     """
+    global _ALL_COMMANDS_CACHE
+    if translations is None and _ALL_COMMANDS_CACHE is not None:
+        return _ALL_COMMANDS_CACHE
+
     merged: dict[str, CommandEntry] = {}
     for entry in read_menu_commands():
         merged[entry.cid] = entry
@@ -462,7 +488,16 @@ def read_all_commands(translations: dict[str, str] | None = None) -> list[Comman
         entry.label = display or entry.cid
         rows.append(entry)
     rows.sort(key=lambda e: (e.label.lower(), e.cid))
+    if translations is None:
+        _ALL_COMMANDS_CACHE = rows
     return rows
+
+
+def clear_caches() -> None:
+    """Drop the parsed-source caches (tests that rewrite the fake 3DCoat files)."""
+    global _ALL_COMMANDS_CACHE
+    _TRANSLATION_CACHE.clear()
+    _ALL_COMMANDS_CACHE = None
 
 
 def describe_counts() -> str:
