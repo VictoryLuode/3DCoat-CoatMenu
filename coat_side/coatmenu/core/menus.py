@@ -111,10 +111,8 @@ def register_menu_items(config: MenuConfig) -> int:
     """Insert/refresh every menu item in the running 3DCoat instance.
 
     Runtime insertion via ``coat.ui.insertInMenu`` is the path that is known to
-    work here: it is how these entries got into the Scripts menu in the first
-    place. A key (if the editor set one) goes immediately after its own item,
-    because ``coat.menu_hotkey`` applies to the entry it follows - never to an
-    entry that was already there, whose key is not ours to decide.
+    work here: it is how these entries get into the Scripts menu. Keys are not
+    touched - binding one is 3D-Coat's own job (hover the entry, press END).
 
     Returns how many items were newly inserted. Never raises.
     """
