@@ -131,16 +131,13 @@ def register_menu_items(config: MenuConfig) -> int:
         user_set = hotkeys_mod.user_defined_ids()
     except Exception:
         user_set = set()
+    _ = user_set  # reported below; kept so the count is visible in the log
 
-    wanted_keys: dict[str, dict] = {
-        lst.hotkey_id: lst.hotkey for lst in config.menus if getattr(lst, "hotkey", None)
-    }
+    wanted_keys: dict[str, dict] = {}
     for _menu_name, item_id, _script_name, row in menus_registry.shortcut_rows(config):
-        if row.hotkey:
-            wanted_keys[item_id] = row.hotkey
+        wanted_keys[item_id] = row.hotkey
 
     inserted = 0
-    keys_set = 0
     # Drop entries left behind by earlier id schemes first, otherwise a menu shows
     # up twice in 3DCoat's Scripts list for the rest of the session.
     for menu_id in legacy_hotkey_ids(config):
@@ -157,28 +154,19 @@ def register_menu_items(config: MenuConfig) -> int:
         try:
             coat.ui.addTranslation(menu_id, label)
             if coat.ui.checkIfMenuItemInserted(menu_id):
-                # Already in the menu: leave its binding exactly as it is.
                 continue
             coat.ui.insertInMenu(MENU_NAME, menu_id, script)
             inserted += 1
         except Exception as exc:
             log(f"menu item {menu_id} failed: {exc}")
-            continue
-
-        hotkey = wanted_keys.get(menu_id) or {}
-        if not hotkey.get("key") or menu_id in user_set:
-            continue
-        try:
-            coat.menu_hotkey(str(hotkey["key"]).upper(),
-                             1 if hotkey.get("shift") else 0,
-                             1 if hotkey.get("ctrl") else 0,
-                             1 if hotkey.get("alt") else 0)
-            keys_set += 1
-        except Exception as exc:
-            # The entry is in the menu either way; only its key was refused.
-            log(f"menu key for {menu_id} refused: {exc}")
-    log(f"menu items: inserted={inserted} keys={keys_set} "
-        f"user-set={len(user_set)} configured={len(wanted_keys)}")
+    # No coat.menu_hotkey call here, on purpose. Measured on this build: entries
+    # added with insertInMenu are not registered with the hotkey system, so the
+    # call is ignored - and worse, 3DCoat then rewrites those entries with an empty
+    # <Code>, wiping a binding the user had set by hand. Binding stays manual, in
+    # Preferences > Hotkeys; the editor shows the id to search for.
+    log(f"menu items: inserted={inserted} "
+        f"configured-keys={len(wanted_keys)} user-set={len(user_set)} "
+        f"(keys are bound in 3DCoat's Preferences, not here)")
     return inserted
 
 

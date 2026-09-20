@@ -2,6 +2,23 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.5.2 — 2026-09-20
+
+### Fixed
+
+- **`coat.menu_hotkey` is gone.** Measured on this build: for an entry added at
+  runtime (``coat.ui.insertInMenu``) the call is ignored, and 3D-Coat then rewrites
+  that entry with an empty ``<Code>`` — silently wiping two bindings that had been
+  set by hand (`CoatMenu_Sculpt`, `CoatMenu_Shade`). A key is now a note in the
+  editor plus the id to paste into Preferences ▸ Hotkeys; nothing is written from
+  our side.
+
+### Changed
+
+- Both menu hooks log every time they run. ``onExtendMenu`` does fire on this build
+  — the earlier conclusion that it does not was wrong, because the code that ran at
+  the time was older than the hook.
+
 ## v0.5.1 — 2026-09-20
 
 ### Fixed

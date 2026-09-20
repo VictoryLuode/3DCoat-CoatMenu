@@ -168,11 +168,12 @@ class _CursorLayer(QWidget):
 class HotkeyDialog(QDialog):
     """Ask for one key combination (the editor's ``Key:`` button).
 
-    A plain ``QKeySequenceEdit``: click it, press the combination, OK. The
-    modifiers come out of the sequence, so nothing has to be spelled out.
+    3D-Coat does not accept a key for an entry added at runtime (measured: the
+    call is ignored and the entry gets rewritten with an empty ``<Code>``), so
+    this only records the intention and shows which id to bind by hand.
     """
 
-    def __init__(self, current: str, parent=None) -> None:
+    def __init__(self, current: str, parent=None, entry_id: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle("Menu key")
         self.setModal(True)
@@ -181,7 +182,7 @@ class HotkeyDialog(QDialog):
         holder.setSpacing(8)
         holder.setContentsMargins(14, 14, 14, 14)
 
-        hint = QLabel("Press the key that should open this menu.")
+        hint = QLabel("Pick the key you want for this menu.")
         hint.setWordWrap(True)
         holder.addWidget(hint)
 
@@ -189,17 +190,27 @@ class HotkeyDialog(QDialog):
         self._edit.setMinimumWidth(220)
         holder.addWidget(self._edit)
 
-        note = QLabel("3DCoat picks it up the next time it starts. A key you set by "
-                      "hand in Preferences \u25b8 Hotkeys always wins.")
+        note = QLabel("3D-Coat takes the binding itself, so this is a note to yourself: "
+                      "set it in Preferences \u25b8 Hotkeys.\nSearch for the id below, "
+                      "or copy it and paste it into the search box there.")
         note.setObjectName("coatmenuHint")
         note.setWordWrap(True)
         holder.addWidget(note)
+
+        if entry_id:
+            id_box = QLabel(entry_id)
+            id_box.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            id_box.setObjectName("coatmenuHint")
+            holder.addWidget(id_box)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         clear = buttons.addButton("Clear", QDialogButtonBox.ResetRole)
         clear.clicked.connect(self._clear)
+        if entry_id:
+            buttons.addButton("Copy id", QDialogButtonBox.ActionRole).clicked.connect(
+                lambda: QGuiApplication.clipboard().setText(entry_id))
         holder.addWidget(buttons)
 
     def _clear(self) -> None:
@@ -368,15 +379,16 @@ class CoatMenuEditor(QWidget):
         if target is None:
             self.set_status("No menu selected")
             return
-        dialog = HotkeyDialog(hotkey_label(target.hotkey), self)
+        dialog = HotkeyDialog(hotkey_label(target.hotkey), self, entry_id=target.hotkey_id)
         if dialog.exec() != QDialog.Accepted:
             return
         target.hotkey = dialog.hotkey()
         self._mark_dirty()
         self._refresh_key_button()
         if target.hotkey:
-            self.set_status(f"'{target.name}' will open on "
-                            f"{hotkey_label(target.hotkey)} after the next 3D-Coat start")
+            self.set_status(f"Noted {hotkey_label(target.hotkey)} for '{target.name}' - "
+                            f"bind it in Preferences \u25b8 Hotkeys (search "
+                            f"{target.hotkey_id})")
         else:
             self.set_status(f"Cleared the key for '{target.name}'")
 
@@ -1017,16 +1029,21 @@ class CoatMenuEditor(QWidget):
             self.set_status("That row does not run anything - a header or separator "
                             "cannot have a key")
             return
-        dialog = HotkeyDialog(hotkey_label(item.hotkey), self)
+        from coatmenu.core import menus_registry as registry_mod  # noqa: PLC0415
+
+        menu = self.current_menu
+        entry_id = (f"{menu.hotkey_id}_{registry_mod.item_slug(item)}" if menu else "")
+        dialog = HotkeyDialog(hotkey_label(item.hotkey), self, entry_id=entry_id)
         if dialog.exec() != QDialog.Accepted:
             return
         chosen = dialog.hotkey()
         self._apply_row_hotkey(node, chosen)
+        label = item.label or item.cid
         if chosen:
-            self.set_status(f"'{item.label or item.cid}' will run on "
-                            f"{hotkey_label(chosen)} after the next 3D-Coat start")
+            self.set_status(f"Noted {hotkey_label(chosen)} for '{label}' - bind it in "
+                            f"Preferences \u25b8 Hotkeys (search {entry_id})")
         else:
-            self.set_status(f"Cleared the key for '{item.label or item.cid}'")
+            self.set_status(f"Cleared the key for '{label}'")
 
     def clear_row_hotkey(self) -> None:
         node = self._tree.currentItem()
