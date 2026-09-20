@@ -2,6 +2,25 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.5.5 — 2026-09-20
+
+### Removed
+
+- **The plugin has nothing to do with hotkeys any more.** The editor's `Key:`
+  button, the row `Set key…` / `Clear key` items, the per-row shortcut launchers and
+  the `coat.menu_hotkey` call are all gone. Measured on this build: a key only
+  attaches to an entry added through `coat.menu_item` inside 3D-Coat's menu pass,
+  and entries inserted at runtime never reach the hotkey system — so it could not
+  work, and worse, 3D-Coat rewrote those entries with an empty `<Code>`, silently
+  removing bindings set by hand.
+- Binding is simply 3D-Coat's own: **hover the entry in `Scripts ▸ CoatMenu` and
+  press `END`**, then the combination. CoatMenu reads `Options_Hotkeys.xml` only to
+  know which key opened a menu, exactly as it always did.
+
+### Fixed
+
+- The installer removes the now-unused `actions/shortcuts/` folder.
+
 ## v0.5.4 — 2026-09-20
 
 ### Fixed

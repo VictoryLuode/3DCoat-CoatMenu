@@ -154,30 +154,8 @@ def report(config=None) -> str:
             f"  key={binds.for_menu(lst.name) or 'unbound'}"
         )
     out.append(f"  hotkey clashes: {'; '.join(binds.conflicts) or 'none'}")
-    out.append("  menu keys     : editor -> 3DCoat (a 'user-set' key is never overridden)")
-    try:
-        from coatmenu.core import hotkeys as hotkeys_mod
-        from coatmenu.core.config import hotkey_label
-
-        user_defined = hotkeys_mod.user_defined_ids()
-        for lst in cfg.menus:
-            want = hotkey_label(getattr(lst, "hotkey", None)) or "-"
-            have = binds.for_menu(lst.name) or "-"
-            state = "user-set" if lst.hotkey_id in user_defined else "default"
-            out.append(f"    - {lst.name:<22} editor={want:<14} 3DCoat={have:<14} ({state})")
-    except Exception as exc:
-        out.append(f"    (unavailable: {exc})")
-    # Rows with a key of their own - each one is an entry in 3DCoat's Scripts menu.
-    try:
-        from coatmenu.core import menus_registry as registry_mod
-
-        keyed_rows = registry_mod.shortcut_rows(cfg)
-        names = ", ".join(f"{menu}: {row.label or row.cid}"
-                          for menu, _i, _s, row in keyed_rows)
-        out.append(f"  row shortcuts : {len(keyed_rows)}"
-                   + (f" ({names})" if names else " (no row has its own key)"))
-    except Exception as exc:
-        out.append(f"  row shortcuts : (unavailable: {exc})")
+    out.append("  keys          : bind them in 3DCoat - hover the entry in "
+               "Scripts > CoatMenu and press END")
     # Leftovers from the old insertInMenu path would list every menu twice.
     items_dir = os.path.join(paths.scripts_dir(), "ExtraMenuItems")
     try:

@@ -265,6 +265,7 @@ def install(documents: str) -> int:
         p["menu_xml"],
     )
     leftovers = clean_per_entry_xml(p["extra_menu_items"])
+    retired = clean_retired_dirs(p["ext"])
 
     # 3. startup entry --------------------------------------------------
     added = _ensure_startup_entry(p["startup"])
@@ -275,11 +276,11 @@ def install(documents: str) -> int:
         print(f"  stale removed  : {', '.join(stale)}")
     if leftovers:
         print(f"  cleaned up     : {len(leftovers)} per-entry XML file(s) left by insertInMenu")
+    if retired:
+        print(f"  removed        : {', '.join(retired)} (no longer used)")
     print(f"  menus          : {info['menus']} ({', '.join(lst.name for lst in config.menus)})")
     print(f"  menu items     : 3 fixed in {p['menu_xml']}, "
-          f"{info['menus']} registered by the extension (key included)")
-    if info.get("shortcuts"):
-        print(f"  row shortcuts  : {info['shortcuts']} row(s) with their own key")
+          f"{info['menus']} inserted at runtime")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
     print("then use Scripts > CoatMenu > Show CoatMenu. To give a menu its own key,")
@@ -287,6 +288,23 @@ def install(documents: str) -> int:
     print("you want - that is 3DCoat's own way of assigning a hotkey. The menu stays")
     print("open when you release the key: pick an entry, click away, or press Esc.")
     return 0
+
+
+def clean_retired_dirs(ext_dir: str) -> list[str]:
+    """Delete folders an earlier version generated and this one has no use for.
+
+    ``actions/shortcuts/`` held one launcher per keyed row, from when the plugin
+    tried to hand out hotkeys itself. It does not any more - binding is done in
+    3DCoat (hover an entry, press END) - so the folder would only linger.
+    """
+    retired = ["shortcuts"]
+    removed: list[str] = []
+    for name in retired:
+        path = os.path.join(ext_dir, "actions", name)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(f"actions/{name}/")
+    return removed
 
 
 def clean_per_entry_xml(extra_menu_items_dir: str) -> list[str]:

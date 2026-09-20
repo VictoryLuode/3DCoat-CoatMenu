@@ -1,7 +1,8 @@
 """
 CoatMenu - how a list becomes a real menu entry.
 
-Two things have to exist for a menu to be reachable from a hotkey:
+Two things have to exist for a menu to be reachable (and to take a hotkey
+bound in 3DCoat - hover the entry and press END):
 
 1. **a thin launcher script** - ``actions/menus/<Name>.py``. 3DCoat menu items
    point at a *file*, and one file cannot know which menu it belongs to, so each
@@ -16,8 +17,7 @@ from __future__ import annotations
 
 import os
 
-from coatmenu.core.config import MenuConfig, item_to_json, slugify
-from coatmenu.core.menu_model import MenuItem
+from coatmenu.core.config import MenuConfig
 
 MAIN_MENU_ID = "CoatMenu_Show"
 MAIN_MENU_LABEL = "Show CoatMenu"
@@ -168,14 +168,8 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
                  include: str = "all") -> list[tuple[str, str, str]]:
     """(menu_id, label, script_path) - main entry, editor, doctor, every menu.
 
-    ``include`` picks a subset:
-
-    * ``"all"`` (default) - everything.
-    * ``"fixed"`` - only Show / Edit menus / doctor. These live in the XML file,
-      which 3DCoat reads at startup.
-    * ``"menus"`` - only the one-per-menu entries. The extension registers those
-      at runtime through 3DCoat's menu API, because that is the only way to give
-      them a hotkey.
+    ``include="fixed"`` leaves out the one-per-menu entries; the XML file holds
+    those three, while the rest are inserted at runtime.
     """
     rows: list[tuple[str, str, str]] = [] if include == "menus" else [
         (
@@ -202,229 +196,6 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
     return rows
 
 
-def register_menus_via_api(config: MenuConfig, extension_root: str,
-                           entry_scripts_dir: str) -> dict:
-    """Add this menu's entries through 3DCoat's own menu API, keys included.
-
-    3DCoat's documented way to give a menu entry a key is ``coat.menu_hotkey``
-    immediately after adding the item (see its ``cTemplates/MainMenu/*.py``). It
-    writes the binding itself - CoatMenu still never touches
-    ``Options_Hotkeys.xml``.
-
-    Only callable from the menu-building pass, which is why ``onBuildMainMenu``
-    is the caller. Entries the user set by hand in Preferences ▸ Hotkeys carry
-    ``<UserDefined>1</UserDefined>`` and are left alone: the key in the editor is
-    a proposal, the user's own choice always wins.
-
-    Returns a report for the log and the doctor.
-    """
-    report: dict = {"registered": 0, "hotkeys": [], "kept_user_keys": [], "error": ""}
-    try:
-        import coat  # only available inside 3DCoat
-    except Exception as exc:
-        report["error"] = f"no coat module ({exc})"
-        return report
-
-    try:
-        from coatmenu.core import hotkeys as hotkeys_mod
-        mine = hotkeys_mod.user_defined_ids()
-    except Exception:
-        mine = set()
-
-    by_id = {lst.hotkey_id: lst for lst in config.menus}
-    # What key each registered id should carry: the menu's own key, or the key of
-    # the row it stands for.
-    wanted_keys: dict[str, dict] = {
-        lst.hotkey_id: lst.hotkey for lst in config.menus if getattr(lst, "hotkey", None)
-    }
-    for _menu_name, item_id, _script_name, row in shortcut_rows(config):
-        if row.hotkey:
-            wanted_keys[item_id] = row.hotkey
-    shortcut_scripts_dir = shortcut_dir_for(entry_scripts_dir)
-    # One entry per keyed row, plus the menu entries themselves. Rows without a
-    # key are not registered anywhere - that is the point of the opt-in.
-    todo = list(shortcut_entries(config, shortcut_scripts_dir))
-    todo += list(menu_entries(config, extension_root, entry_scripts_dir, include="menus"))
-    for menu_id, _label, script in todo:
-        try:
-            coat.menu_item(f"$execute:{_posix(script)}")
-            report["registered"] += 1
-        except Exception as exc:
-            report["error"] = f"{menu_id}: {exc}"
-            continue
-
-        hotkey = wanted_keys.get(menu_id) or {}
-        if not hotkey.get("key"):
-            continue
-        if menu_id in mine:
-            report["kept_user_keys"].append(menu_id)
-            continue
-        try:
-            coat.menu_hotkey(str(hotkey["key"]).upper(),
-                             1 if hotkey.get("shift") else 0,
-                             1 if hotkey.get("ctrl") else 0,
-                             1 if hotkey.get("alt") else 0)
-            report["hotkeys"].append(menu_id)
-        except Exception as exc:
-            report["error"] = f"hotkey {menu_id}: {exc}"
-    return report
-
-
-# ---------------------------------------------------------------------------
-# row shortcuts - a row you can press without opening its menu
-#
-# Only rows that carry a key are registered at all: 3DCoat gets one menu entry
-# per such row (and one key), and nothing for the rest. That keeps the Scripts
-# menu clean - it is opt-in per row.
-# ---------------------------------------------------------------------------
-
-SHORTCUT_DIR_NAME = "shortcuts"
-
-_SHORTCUT_SCRIPT = '''"""CoatMenu shortcut - generated by CoatMenu, do not edit.
-
-Menu: {menu}
-Row:  {label}
-
-Regenerate this from the CoatMenu editor; edits here are overwritten.
-"""
-import os
-import sys
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(_HERE)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-
-from coatmenu.core.config import item_from_json  # noqa: E402
-from coatmenu.core.log import log  # noqa: E402
-from coatmenu.core.runner import run_item  # noqa: E402
-
-# The row, frozen at generation time - it keeps working even if the row is renamed
-# or moved later, and pressing the key never needs the overlay.
-_ROW = {row!r}
-
-
-def _schedule_self_removal() -> None:
-    """Let the next press re-run this module.
-
-    3DCoat executes a menu script as ``exec("import <module name>")``, so without
-    this the second press would hit the import cache and do nothing.
-    """
-    try:
-        queue = getattr(sys, "_coatmenu_modules_to_clear", None)
-        if queue is None:
-            queue = set()
-            sys._coatmenu_modules_to_clear = queue
-        queue.add(__name__)
-    except Exception:
-        pass
-    try:
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda name=__name__: sys.modules.pop(name, None))
-    except Exception:
-        pass
-
-
-def main() -> None:
-    row = item_from_json(_ROW)
-    if row is None:
-        log("shortcut {label}: the row it was built from is gone")
-        return
-    log("shortcut: {label}")
-    run_item(row)
-
-
-_schedule_self_removal()
-main()
-'''
-
-
-def item_slug(item: MenuItem) -> str:
-    """A stable slug for one row.
-
-    Based on the command id rather than the label: renaming a row must not change
-    the id its key is bound under, or the key would silently come loose.
-    """
-    return slugify((item.cid or item.path or item.label or item.kind).lstrip("$"))
-
-
-def shortcut_rows(config: MenuConfig) -> list[tuple[str, str, str, MenuItem]]:
-    """(menu_name, item_id, script_name, item) for every row that has a key.
-
-    A row needs a key to be here at all, and it must be clickable - a header or a
-    separator cannot be run. Ids are made unique across the whole config.
-    """
-    taken: set[str] = {MAIN_MENU_ID, EDITOR_MENU_ID, DOCTOR_MENU_ID}
-    taken.update(lst.hotkey_id for lst in config.menus)
-    rows: list[tuple[str, str, str, MenuItem]] = []
-    for menu in config.menus:
-        for item in menu.items:
-            if not getattr(item, "hotkey", None) or not item.clickable:
-                continue
-            item_id = f"{menu.hotkey_id}_{item_slug(item)}"
-            candidate, n = item_id, 2
-            while candidate in taken:
-                candidate = f"{item_id}_{n}"
-                n += 1
-            taken.add(candidate)
-            rows.append((menu.name, candidate, f"{candidate}.py", item))
-    return rows
-
-
-def shortcut_script_path(shortcut_scripts_dir: str, script_name: str) -> str:
-    return os.path.join(shortcut_scripts_dir, script_name)
-
-
-def shortcut_dir_for(entry_scripts_dir: str) -> str:
-    """Where the per-row launchers live: ``actions/shortcuts``, beside ``menus``."""
-    return os.path.join(os.path.dirname(entry_scripts_dir), SHORTCUT_DIR_NAME)
-
-
-def write_shortcut_scripts(config: MenuConfig, shortcut_scripts_dir: str) -> tuple[list[str], list[str]]:
-    """(re)write one launcher per keyed row; delete the ones that are gone.
-
-    Returns ``(written, removed)`` absolute paths.
-    """
-    os.makedirs(shortcut_scripts_dir, exist_ok=True)
-    wanted: dict[str, tuple[str, str, MenuItem]] = {}
-    for menu_name, item_id, script_name, item in shortcut_rows(config):
-        wanted[script_name] = (menu_name, item_id, item)
-
-    written: list[str] = []
-    removed: list[str] = []
-    for script_name, (menu_name, _item_id, item) in wanted.items():
-        path = shortcut_script_path(shortcut_scripts_dir, script_name)
-        content = _SHORTCUT_SCRIPT.format(
-            menu=menu_name, label=item.label or item.cid,
-            row=item_to_json(item),
-        )
-        if _read(path) != content:
-            with open(path, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(content)
-            written.append(path)
-
-    for name in os.listdir(shortcut_scripts_dir):
-        if not name.endswith(".py") or name == "__init__.py" or name in wanted:
-            continue
-        path = os.path.join(shortcut_scripts_dir, name)
-        try:
-            os.remove(path)
-            removed.append(path)
-        except OSError:
-            pass
-    return written, removed
-
-
-def shortcut_entries(config: MenuConfig, shortcut_scripts_dir: str) -> list[tuple[str, str, str]]:
-    """(menu_id, label, script_path) - one per keyed row, for the menu API."""
-    out: list[tuple[str, str, str]] = []
-    for menu_name, item_id, script_name, item in shortcut_rows(config):
-        label = f"{menu_name}: {item.label or item.cid}"
-        out.append((item_id, " ".join(label.split()),
-                    shortcut_script_path(shortcut_scripts_dir, script_name)))
-    return out
-
-
 def write_menu_xml(config: MenuConfig, extension_root: str, entry_scripts_dir: str, xml_path: str) -> str:
     """Write ``ExtraMenuItems/CoatMenu.xml`` (3DCoat needs absolute paths).
 
@@ -445,19 +216,13 @@ def write_menu_xml(config: MenuConfig, extension_root: str, entry_scripts_dir: s
 
 
 def sync(config: MenuConfig, extension_root: str, entry_scripts_dir: str, xml_path: str) -> dict:
-    """Bring the launchers, the row shortcuts and the menu XML in line with ``config``."""
+    """Bring the launcher scripts and the menu XML in line with ``config``."""
     written, removed = write_entry_scripts(config, entry_scripts_dir)
-    shortcuts_written, shortcuts_removed = write_shortcut_scripts(
-        config, shortcut_dir_for(entry_scripts_dir)
-    )
     write_menu_xml(config, extension_root, entry_scripts_dir, xml_path)
     return {
         "menus": len(config.menus),
         "scripts_written": written,
         "scripts_removed": removed,
-        "shortcuts": len(shortcut_rows(config)),
-        "shortcuts_written": shortcuts_written,
-        "shortcuts_removed": shortcuts_removed,
         "menu_xml": xml_path,
     }
 

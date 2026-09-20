@@ -86,53 +86,6 @@ check("coatmenu_stale_action" not in sys.modules,
       "queued action module is dropped one frame later")
 check(not sys._coatmenu_modules_to_clear, "the queue is emptied")
 
-print("== onExtendMenu registers entries and their keys through 3DCoat's API ==")
-from coatmenu.core import menus as menus_mod  # noqa: E402
-from coatmenu.core.config import Menu as MenuModel  # noqa: E402
-
-# Give one menu and one of its rows a key, then run the menu pass.
-live = menus_mod.get_config()
-if not live.menus:
-    live.menus.append(MenuModel(name="Sculpt"))
-live.menus[0].hotkey = {"key": "J", "ctrl": True, "shift": False, "alt": False}
-if not live.menus[0].items:
-    from coatmenu.core.menu_model import MenuItem as RowModel  # noqa: E402
-    live.menus[0].items.append(RowModel(label="Resample", cid="Resample"))
-live.menus[0].items[0].hotkey = {"key": "K", "ctrl": False, "shift": True, "alt": False}
-
-hotkeys_mod = None
-try:
-    from coatmenu.core import hotkeys as hotkeys_mod  # noqa: E402
-except Exception:
-    pass
-_real_user_defined = getattr(hotkeys_mod, "user_defined_ids", None)
-if hotkeys_mod is not None:
-    hotkeys_mod.user_defined_ids = lambda path=None: set()  # pretend nothing is bound
-
-FAKE.menu_api.clear()
-FAKE.hotkey_api.clear()
-ext.onExtendMenu()
-if hotkeys_mod is not None and _real_user_defined is not None:
-    hotkeys_mod.user_defined_ids = _real_user_defined
-
-check(len(FAKE.menu_api) >= 2,
-      f"every entry goes in via coat.menu_item ({len(FAKE.menu_api)} calls)")
-check(all(str(i).startswith("$execute:") for i in FAKE.menu_api),
-      f"as $execute script items ({FAKE.menu_api[:1]})")
-check(("J", 0, 1, 0) in FAKE.hotkey_api,
-      f"the menu's key is attached right after it ({FAKE.hotkey_api})")
-check(any(h[0] == "K" for h in FAKE.hotkey_api),
-      "and so is the row's key")
-
-FAKE.hotkey_api.clear()
-if hotkeys_mod is not None:
-    hotkeys_mod.user_defined_ids = lambda path=None: {live.menus[0].hotkey_id}
-ext.onExtendMenu()
-if hotkeys_mod is not None and _real_user_defined is not None:
-    hotkeys_mod.user_defined_ids = _real_user_defined
-check(all(h[0] != "J" for h in FAKE.hotkey_api),
-      "a key the user set by hand is never proposed over")
-
 print("== room change / exit are safe with no overlay open ==")
 ext.onChangeRoom()
 ext.onExit()

@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 
 from coatmenu.core import paths
-from coatmenu.core import menus_registry
 from coatmenu.core.config import MenuConfig, starter_config
 from coatmenu.core.menus_registry import (
     MAIN_MENU_ID,
@@ -98,8 +97,6 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
     log(
         f"sync: {info['menus']} menu(s), wrote {len(info['scripts_written'])} launcher(s), "
         f"removed {len(info['scripts_removed'])}, "
-        f"shortcuts {info.get('shortcuts', 0)} "
-        f"(wrote {len(info.get('shortcuts_written') or [])}), "
         f"registered {info.get('registered', '-')}"
     )
     return info
@@ -126,17 +123,6 @@ def register_menu_items(config: MenuConfig) -> int:
     except Exception:
         return 0
 
-    from coatmenu.core import hotkeys as hotkeys_mod
-    try:
-        user_set = hotkeys_mod.user_defined_ids()
-    except Exception:
-        user_set = set()
-    _ = user_set  # reported below; kept so the count is visible in the log
-
-    wanted_keys: dict[str, dict] = {}
-    for _menu_name, item_id, _script_name, row in menus_registry.shortcut_rows(config):
-        wanted_keys[item_id] = row.hotkey
-
     inserted = 0
     # Drop entries left behind by earlier id schemes first, otherwise a menu shows
     # up twice in 3DCoat's Scripts list for the rest of the session.
@@ -159,31 +145,12 @@ def register_menu_items(config: MenuConfig) -> int:
             inserted += 1
         except Exception as exc:
             log(f"menu item {menu_id} failed: {exc}")
-    # No coat.menu_hotkey call here, on purpose. Measured on this build: entries
-    # added with insertInMenu are not registered with the hotkey system, so the
-    # call is ignored - and worse, 3DCoat then rewrites those entries with an empty
-    # <Code>, wiping a binding the user had set by hand. Binding stays manual, in
-    # Preferences > Hotkeys; the editor shows the id to search for.
-    log(f"menu items: inserted={inserted} "
-        f"configured-keys={len(wanted_keys)} user-set={len(user_set)} "
-        f"(keys are bound in 3DCoat's Preferences, not here)")
+    # CoatMenu deliberately does not touch hotkeys: binding is done in 3DCoat -
+    # hover the entry and press END. Attaching a key from here was measured to be
+    # impossible on this build (entries added at runtime never reach the hotkey
+    # system) and actively harmful (3DCoat rewrites them with an empty <Code>).
+    log(f"menu items: inserted={inserted}")
     return inserted
-
-
-def register_menus_via_api() -> dict:
-    """Put every entry into 3DCoat's menu API, with its key, from the menu pass.
-
-    This is the only path that reaches the hotkey system: an entry added with
-    ``coat.ui.insertInMenu`` is invisible to it, so a key set there does nothing.
-    Called from ``onExtendMenu`` (see ``CoatMenu.py``), which 3DCoat does run.
-
-    A key the user set by hand in Preferences ▸ Hotkeys carries
-    ``<UserDefined>1</UserDefined>`` and is left alone.
-    """
-    config = get_config()
-    return menus_registry.register_menus_via_api(
-        config, paths.extension_root(), paths.entry_scripts_dir()
-    )
 
 
 def unregister_menu_items() -> None:

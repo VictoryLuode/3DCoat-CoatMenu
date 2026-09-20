@@ -20,15 +20,12 @@ import os
 import re
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QPainter, QPen
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
-    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -44,7 +41,7 @@ from PySide6.QtWidgets import (
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, menus
 from coatmenu.core import lks as lks_mod
-from coatmenu.core.config import MenuConfig, Menu, hotkey_label, item_to_json, sequence_to_hotkey
+from coatmenu.core.config import MenuConfig, Menu, item_to_json
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (
     COMMAND,
@@ -63,7 +60,6 @@ from coatmenu.ui import theme
 ROLE_KIND = Qt.UserRole + 1
 ROLE_CID = Qt.UserRole + 2
 ROLE_CMDS = Qt.UserRole + 3
-ROLE_HOTKEY = Qt.UserRole + 4
 
 _TITLE_ROW_HEIGHT = 30
 # Submenu labels we generate carry a row count ("Shade  (3)"); it belongs in the
@@ -163,65 +159,6 @@ class _CursorLayer(QWidget):
             log("editor cursor layer failed", exc=True)
         finally:
             painter.end()
-
-
-class HotkeyDialog(QDialog):
-    """Ask for one key combination (the editor's ``Key:`` button).
-
-    3D-Coat does not accept a key for an entry added at runtime (measured: the
-    call is ignored and the entry gets rewritten with an empty ``<Code>``), so
-    this only records the intention and shows which id to bind by hand.
-    """
-
-    def __init__(self, current: str, parent=None, entry_id: str = "") -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Menu key")
-        self.setModal(True)
-
-        holder = QVBoxLayout(self)
-        holder.setSpacing(8)
-        holder.setContentsMargins(14, 14, 14, 14)
-
-        hint = QLabel("Pick the key you want for this menu.")
-        hint.setWordWrap(True)
-        holder.addWidget(hint)
-
-        self._edit = QKeySequenceEdit(QKeySequence(current) if current else QKeySequence())
-        self._edit.setMinimumWidth(220)
-        holder.addWidget(self._edit)
-
-        note = QLabel("3D-Coat assigns the binding itself: hover over "
-                      "Scripts \u25b8 CoatMenu \u25b8 this menu and press END, then press "
-                      "the combination. This dialog only records the choice for your "
-                      "own reference.")
-        note.setObjectName("coatmenuHint")
-        note.setWordWrap(True)
-        holder.addWidget(note)
-
-        if entry_id:
-            id_box = QLabel(f"Search for: {entry_id}")
-            id_box.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            id_box.setObjectName("coatmenuHint")
-            holder.addWidget(id_box)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        clear = buttons.addButton("Clear", QDialogButtonBox.ResetRole)
-        clear.clicked.connect(self._clear)
-        if entry_id:
-            buttons.addButton("Copy id", QDialogButtonBox.ActionRole).clicked.connect(
-                lambda: QGuiApplication.clipboard().setText(entry_id))
-        holder.addWidget(buttons)
-
-    def _clear(self) -> None:
-        self._edit.clear()
-        self.accept()
-
-    def hotkey(self) -> dict:
-        """The chosen combination, as the config stores it ({} when cleared)."""
-        sequence = self._edit.keySequence()
-        return sequence_to_hotkey(sequence.toString(QKeySequence.SequenceFormat.PortableText))
 
 
 class CoatMenuEditor(QWidget):
@@ -354,44 +291,8 @@ class CoatMenuEditor(QWidget):
         row.addWidget(QLabel("as"))
         row.addWidget(self._mode_combo)
 
-        self._key_button = QPushButton()
-        self._key_button.setToolTip(
-            "The key that opens this menu. 3DCoat applies it on the next start, and\n"
-            "a key you set by hand in Preferences \u25b8 Hotkeys is left alone."
-        )
-        self._key_button.clicked.connect(self.edit_menu_hotkey)
-        row.addWidget(self._key_button)
         row.addStretch(1)
         return row
-
-    def _refresh_key_button(self) -> None:
-        """Show the selected menu's key, or "-" when it has none."""
-        target = self.current_menu
-        label = hotkey_label(target.hotkey) if target is not None else ""
-        self._key_button.setText(f"Key: {label or '-'}")
-
-    def edit_menu_hotkey(self) -> None:
-        """Ask for the key that should open this menu.
-
-        Stored in the config and handed to 3DCoat through its own menu API on the
-        next start - CoatMenu never writes the hotkey file itself.
-        """
-        target = self.current_menu
-        if target is None:
-            self.set_status("No menu selected")
-            return
-        dialog = HotkeyDialog(hotkey_label(target.hotkey), self, entry_id=target.hotkey_id)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        target.hotkey = dialog.hotkey()
-        self._mark_dirty()
-        self._refresh_key_button()
-        if target.hotkey:
-            self.set_status(f"Noted {hotkey_label(target.hotkey)} for '{target.name}' - "
-                            f"bind it in Preferences \u25b8 Hotkeys (search "
-                            f"{target.hotkey_id})")
-        else:
-            self.set_status(f"Cleared the key for '{target.name}'")
 
     def _sync_mode_combo(self) -> None:
         target = self.current_menu
@@ -421,11 +322,6 @@ class CoatMenuEditor(QWidget):
 
         self._tree = QTreeWidget()
         self._tree.setHeaderHidden(True)
-        # Two columns: the row, and the global key it can be pressed with. Keeping
-        # the key out of the label matters - the label column is edited in place
-        # and written straight back to the config.
-        self._tree.setColumnCount(2)
-        self._tree.setColumnWidth(1, 150)
         self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self._tree.setDragDropMode(QAbstractItemView.InternalMove)
         self._tree.setDefaultDropAction(Qt.MoveAction)
@@ -779,7 +675,6 @@ class CoatMenuEditor(QWidget):
         self._menu_combo.setToolTip(self._bindings_tooltip())
         self.refresh_tree()
         self._sync_mode_combo()
-        self._refresh_key_button()
         self.set_status("")
         if self._bindings.conflicts:
             self.set_status("Hotkey clash: " + "; ".join(self._bindings.conflicts))
@@ -868,16 +763,12 @@ class CoatMenuEditor(QWidget):
         self._tree.blockSignals(False)
 
     def _node_for(self, item: MenuItem) -> QTreeWidgetItem:
-        node = QTreeWidgetItem([self._label_for(item), hotkey_label(item.hotkey)])
+        node = QTreeWidgetItem([self._label_for(item)])
         node.setData(0, ROLE_KIND, item.kind)
         node.setData(0, ROLE_CID, item.cid or item.path)
-        if item.hotkey:
-            node.setData(0, ROLE_HOTKEY, dict(item.hotkey))
         if item.cmds:
             node.setData(0, ROLE_CMDS, list(item.cmds))
             node.setToolTip(0, "runs in order: " + "  ->  ".join(item.cmds))
-        if item.hotkey:
-            node.setToolTip(1, "pressing this runs the row without opening the menu")
         flags = node.flags() | Qt.ItemIsEditable
         if item.kind == SUBMENU:
             flags |= Qt.ItemIsDropEnabled
@@ -896,14 +787,8 @@ class CoatMenuEditor(QWidget):
             return item.label
         return item.label or item.cid or item.path
 
-    def _on_item_changed(self, node: QTreeWidgetItem, column: int) -> None:
-        """Mark dirty when a row is renamed in place.
-
-        Only column 0 is a real edit: column 1 shows the row's key and is filled in
-        by the editor, so a change there must not be written back as a rename.
-        """
-        if column != 0:
-            return
+    def _on_item_changed(self, node: QTreeWidgetItem, _column: int) -> None:
+        """Mark dirty when a row is renamed in place."""
         kind = node.data(0, ROLE_KIND)
         text = node.text(0).strip()
         if kind == HEADER and text.startswith("[") and text.endswith("]"):
@@ -917,15 +802,6 @@ class CoatMenuEditor(QWidget):
                 for i in range(self._tree.topLevelItemCount())]
 
     def _item_from_node(self, node: QTreeWidgetItem) -> MenuItem:
-        item = self._item_body_from_node(node)
-        # The row's key lives beside the label, not in it, so it has to be carried
-        # across explicitly - otherwise saving would quietly drop every shortcut.
-        key = node.data(0, ROLE_HOTKEY) or {}
-        if item is not None and key:
-            item.hotkey = dict(key)
-        return item
-
-    def _item_body_from_node(self, node: QTreeWidgetItem) -> MenuItem:
         kind = node.data(0, ROLE_KIND) or COMMAND
         text = node.text(0).strip()
         cid = node.data(0, ROLE_CID) or ""
@@ -1014,55 +890,6 @@ class CoatMenuEditor(QWidget):
         self._tree.setCurrentItem(node)
         self._row_menu().exec(self._tree.viewport().mapToGlobal(pos))
 
-    def set_row_hotkey(self) -> None:
-        """Give the selected row a key of its own.
-
-        Unlike a menu's key this one needs no menu open: the row gets its own entry
-        in 3DCoat's Scripts menu, so 3DCoat can fire it from anywhere. Only rows
-        with a key are registered - the rest stay out of that menu entirely.
-        """
-        node = self._tree.currentItem()
-        if node is None:
-            self.set_status("No row selected")
-            return
-        item = self._item_from_node(node)
-        if item is None or not item.clickable:
-            self.set_status("That row does not run anything - a header or separator "
-                            "cannot have a key")
-            return
-        from coatmenu.core import menus_registry as registry_mod  # noqa: PLC0415
-
-        menu = self.current_menu
-        entry_id = (f"{menu.hotkey_id}_{registry_mod.item_slug(item)}" if menu else "")
-        dialog = HotkeyDialog(hotkey_label(item.hotkey), self, entry_id=entry_id)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        chosen = dialog.hotkey()
-        self._apply_row_hotkey(node, chosen)
-        label = item.label or item.cid
-        if chosen:
-            self.set_status(f"Noted {hotkey_label(chosen)} for '{label}' - bind it in "
-                            f"Preferences \u25b8 Hotkeys (search {entry_id})")
-        else:
-            self.set_status(f"Cleared the key for '{label}'")
-
-    def clear_row_hotkey(self) -> None:
-        node = self._tree.currentItem()
-        if node is None:
-            return
-        self._apply_row_hotkey(node, {})
-        self.set_status("Cleared the row's key")
-
-    def _apply_row_hotkey(self, node: QTreeWidgetItem, hotkey: dict) -> None:
-        """Store it on the node (and show it), and mark the config changed."""
-        node.setData(0, ROLE_HOTKEY, dict(hotkey) if hotkey else {})
-        node.setText(1, hotkey_label(hotkey))
-        if hotkey:
-            node.setToolTip(1, "pressing this runs the row without opening the menu")
-        else:
-            node.setToolTip(1, "")
-        self._mark_dirty()
-
     def _row_menu(self) -> QMenu:
         """The row's context menu.
 
@@ -1080,21 +907,6 @@ class CoatMenuEditor(QWidget):
             "QMenu::item:disabled { color: rgb(130, 130, 130); }")
 
         menu.addAction("Duplicate").triggered.connect(self.duplicate_row)
-
-        # The row's own global key: pressing it runs the row without opening the
-        # menu at all. Only rows that have one show up in 3DCoat's Scripts menu.
-        menu.addSeparator()
-        current_key = item.hotkey if item else {}
-        set_key = menu.addAction(f"Set key\u2026  ({hotkey_label(current_key)})"
-                                 if current_key else "Set key\u2026")
-        set_key.triggered.connect(self.set_row_hotkey)
-        set_key.setEnabled(bool(item and item.clickable))
-        if not (item and item.clickable):
-            set_key.setToolTip("only rows that run something can have a key")
-        clear_key = menu.addAction("Clear key")
-        clear_key.triggered.connect(self.clear_row_hotkey)
-        clear_key.setEnabled(bool(current_key))
-        menu.addSeparator()
 
         copy_to = menu.addMenu("Copy to")
         move_to = menu.addMenu("Move to")
@@ -1221,8 +1033,8 @@ class CoatMenuEditor(QWidget):
         self.reload_menus()
         self.select_menu(new_list.name)
         self._mark_dirty()
-        self.set_status(f"'{new_list.name}' is its own menu now - "
-                        f"bind {new_list.hotkey_id} in Preferences \u25b8 Hotkeys")
+        self.set_status(f"'{new_list.name}' is its own menu now - hover it in "
+                        f"Scripts \u25b8 CoatMenu and press END to give it a key")
 
     def add_header(self) -> None:
         self._tree.addTopLevelItem(self._node_for(MenuItem(label="Section", kind=HEADER)))

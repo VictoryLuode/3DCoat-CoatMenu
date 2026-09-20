@@ -34,10 +34,6 @@ class MenuItem:
     enabled: bool = True
     children: list["MenuItem"] = field(default_factory=list)
     cmds: list[str] = field(default_factory=list)
-    # Optional global key: the row gets its own entry in 3DCoat's Scripts menu so
-    # it can be pressed without opening the menu. Rows without one stay invisible
-    # to 3DCoat - nothing is registered for them.
-    hotkey: dict = field(default_factory=dict)
 
     @property
     def clickable(self) -> bool:

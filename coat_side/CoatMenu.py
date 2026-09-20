@@ -99,29 +99,14 @@ class CoatMenuExtension(cPy.cCore.cExtension):
         log(f"{EXTENSION_NAME} onStartup")
 
     def onExtendMenu(self) -> None:
-        """Register the entries through 3DCoat's own menu API, keys included.
+        """Menu-building hook - logged only.
 
-        ``cCore.pyi`` describes this hook as "insert some menu items to main menu",
-        and ``coat.menu_item`` / ``coat.menu_hotkey`` are documented as callable
-        "only from the menu making script" - this is that script, and the log shows
-        3DCoat does run it.
-
-        Why here and not from ``onStartup``: entries added with
-        ``coat.ui.insertInMenu`` never reach the hotkey system at all, so a key
-        attached to one is ignored (and 3DCoat then rewrites it with an empty
-        ``<Code>``). ``onStartup`` still inserts them as well, so they are visible
-        in the Scripts menu either way; the same id is used for both.
+        Entries are inserted from ``onStartup`` via ``coat.ui.insertInMenu``, which
+        is the path that works here. Nothing is registered here, so nothing can be
+        listed twice; the line is kept because it is the cheapest way to see that
+        3DCoat ran the menu pass at all.
         """
         log("onExtendMenu reached")
-        try:
-            from coatmenu.core import menus
-            report = menus.register_menus_via_api()
-            log(f"menu api: stacked={report.get('registered')} "
-                f"keys={len(report.get('hotkeys') or [])} "
-                f"kept-user-keys={len(report.get('kept_user_keys') or [])} "
-                f"error={report.get('error') or 'none'}")
-        except Exception:
-            log("menu api registration failed", exc=True)
 
     def onBuildMainMenu(self) -> None:
         """Menu labels come from the translation table - make sure ours is in it.

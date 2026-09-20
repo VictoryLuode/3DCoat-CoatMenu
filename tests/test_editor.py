@@ -70,9 +70,8 @@ paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "menus")
 os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 
 from coatmenu.core.config import MenuConfig, Menu  # noqa: E402
-from coatmenu.core.config import sequence_to_hotkey  # noqa: E402
 from coatmenu.core.menu_model import MenuItem  # noqa: E402
-from coatmenu.ui.editor import ROLE_CID, ROLE_KIND, CoatMenuEditor, HotkeyDialog  # noqa: E402
+from coatmenu.ui.editor import ROLE_CID, ROLE_KIND, CoatMenuEditor  # noqa: E402
 
 failures: list[str] = []
 
@@ -239,8 +238,8 @@ check([i.label for i in editor._config.find("Group").items] == ["One", "Two"],
       "and took its rows with it")
 check(editor.current_menu is not None and editor.current_menu.name == "Group",
       "the editor switched to the new list")
-check("CoatMenu_Group" in editor._status.text(),
-      f"and names the id to bind ({editor._status.text()[:50]})")
+check("END" in editor._status.text(),
+      f"and says how to give it a key ({editor._status.text()})")
 check(len(editor._config.find("Promo").items) == 0,
       "the row is gone from the original list")
 editor.select_menu("Promo")
@@ -371,74 +370,6 @@ fresh = fresh_editor()
 fresh.undo()
 check("Nothing to undo" in fresh._status.text(), "an untouched editor has nothing to undo")
 fresh.close_editor()
-
-print("== the editor sets a menu's key ==")
-editor.select_menu("Sculpt")
-check(editor._key_button.text() == "Key: -",
-      f"a menu with no key says so ({editor._key_button.text()})")
-sculpt = editor.current_menu
-sculpt.hotkey = sequence_to_hotkey("Ctrl+Shift+J")
-editor._refresh_key_button()
-check(editor._key_button.text() == "Key: Ctrl+Shift+J",
-      f"the button follows the menu ({editor._key_button.text()})")
-saved = MenuConfig.from_json(json.loads(json.dumps(editor._config.to_json())))
-check(saved.menus[0].hotkey == {"key": "J", "ctrl": True, "shift": True, "alt": False},
-      f"the key survives save & reload ({saved.menus[0].hotkey})")
-
-dialog = HotkeyDialog("Ctrl+Q", None)
-check(dialog.hotkey().get("key") == "Q", "the dialog reads back the key it was given")
-dialog._edit.setKeySequence(QKeySequence("Shift+Alt+K"))
-check(dialog.hotkey() == {"key": "K", "ctrl": False, "shift": True, "alt": True},
-      f"and converts a freshly picked one ({dialog.hotkey()})")
-dialog._clear()
-check(dialog.hotkey() == {}, "Clear gives no key at all")
-dialog.deleteLater()
-
-print("== a row can have its own key ==")
-editor.select_menu("Sculpt")
-editor.refresh_tree()
-# Find the row by its command id, not by position: earlier test steps have been
-# dragging rows around and adding new ones.
-row_node = next(
-    editor._tree.topLevelItem(i)
-    for i in range(editor._tree.topLevelItemCount())
-    if editor._tree.topLevelItem(i).data(0, ROLE_CID) == "Resample"
-)
-check(row_node.text(1) == "", f"a row starts with no key ({row_node.text(1)!r})")
-editor._tree.setCurrentItem(row_node)
-editor._apply_row_hotkey(row_node, sequence_to_hotkey("Shift+A"))
-check(row_node.text(1) == "Shift+A", f"the key shows in the row's second column ({row_node.text(1)})")
-# The key must survive the tree -> model trip, or saving would drop it.
-roundtrip = editor._item_from_node(row_node)
-check(roundtrip.hotkey == {"key": "A", "ctrl": False, "shift": True, "alt": False},
-      f"and survives the tree round trip ({roundtrip.hotkey})")
-check(editor._tree.columnCount() == 2, "the tree keeps the key in its own column")
-
-from coatmenu.core import menus_registry as reg2  # noqa: E402
-keyed = reg2.shortcut_rows(editor._config)
-check(len(keyed) == 1, f"only the keyed row counts as a shortcut ({len(keyed)})")
-menu_name, item_id, script_name, item = keyed[0]
-check(item_id == "CoatMenu_Sculpt_Resample", f"its id names menu and row ({item_id})")
-
-short_dir = os.path.join(os.path.dirname(paths.entry_scripts_dir()), "shortcuts")
-written, removed = reg2.write_shortcut_scripts(editor._config, short_dir)
-check(len(written) == 1 and os.path.isfile(written[0]),
-      f"one launcher is written for it ({[os.path.basename(w) for w in written]})")
-with open(written[0], encoding="utf-8") as fh:
-    launcher = fh.read()
-check("run_item" in launcher and "_schedule_self_removal" in launcher,
-      "the launcher runs the row and can be re-pressed")
-check("_ROW = " in launcher, "and carries the row it was built from")
-check(reg2.shortcut_entries(editor._config, short_dir)[0][1].startswith("Sculpt:"),
-      "its Scripts entry is labelled with the menu it came from")
-
-# Clearing the key removes it from the shortcut set entirely.
-editor._apply_row_hotkey(row_node, {})
-check(reg2.shortcut_rows(editor._config) == [],
-      "clearing the key takes the row back out of the Scripts menu")
-written2, removed2 = reg2.write_shortcut_scripts(editor._config, short_dir)
-check(len(removed2) == 1 and not os.path.exists(removed2[0]),
-      f"and its launcher is cleaned up ({[os.path.basename(r) for r in removed2]})")
 
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402

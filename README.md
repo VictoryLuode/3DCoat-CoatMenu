@@ -49,11 +49,14 @@ extension builds on this machine)*
   steps back out one level at a time (submenu → menu), right-click cancels, and
   entries fire on mouse *release*, so press-drag-release works like Blender's. A
   click away still reaches 3D-Coat.
-* **Keys without opening the menu** — a row can take a key of its own (right-click
-  ▸ *Set key…*); it then gets an entry in 3D-Coat's Scripts menu and fires from
-  anywhere. Only keyed rows are registered, so nothing else clutters that menu.
-  Binding a key is done 3D-Coat's way: hover the entry and press `END`.
-* **Several menus, each with its own hotkey** — each becomes its own entry in
+* **Keys are 3D-Coat's business** — CoatMenu has nothing to do with hotkeys. Each
+  menu becomes its own entry in `Scripts ▸ CoatMenu`; to give one a key, hover over
+  it and press `END` (3D-Coat's own *"'END' - Define Hotkey"*). The only thing
+  CoatMenu does with the hotkey file is *read* it, to know which key just opened a
+  menu. An earlier version tried to hand out keys itself: it cannot work — a key
+  only attaches to an entry added inside 3D-Coat's menu pass, and doing it from
+  outside silently wiped bindings set by hand — so it was removed.
+* **Several menus, each with its own entry** — each becomes its own entry in
   3D-Coat's `Scripts ▸ CoatMenu` list (and so in Preferences ▸ Hotkeys). A list
   hangs from the cursor; a **pie is centred on it**, Blender-style.
 * **Rows *or* a pie** — pick per menu. The pie is laid out the way Blender's is:
@@ -110,11 +113,8 @@ install).
 
 **Hover over the menu entry in `Scripts ▸ CoatMenu` and press `END`**, then press
 the combination you want. That is 3D-Coat's own way of assigning a hotkey (its
-hint text reads *"'END' - Define Hotkey"*) and it writes the binding itself —
-CoatMenu only ever *reads* `Options_Hotkeys.xml`.
-
-The editor's `Key:` button records what you intend, for reference, and shows the id
-in case you would rather search for it in **Preferences ▸ Hotkeys**.
+hint text reads *"'END' - Define Hotkey"*) and it writes the binding itself.
+CoatMenu only ever *reads* `Options_Hotkeys.xml`, to know which key opened a menu.
 
 ### Where 3D-Coat lives does not matter
 

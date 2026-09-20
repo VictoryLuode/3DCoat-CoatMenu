@@ -284,46 +284,6 @@ filled = Menu(name="Some", items=[MenuItem(label="A", cid="A")])
 check(len(show_mod.list_rows(filled)) == 1 and show_mod.list_rows(filled)[0].label == "A",
       "a filled list is passed through untouched")
 
-print("== the menu API registration carries the keys set in the editor ==")
-from coatmenu.core import hotkeys as hotkeys_mod  # noqa: E402
-from coatmenu.core.config import hotkey_from_json, hotkey_label  # noqa: E402
-
-api_cfg = MenuConfig(menus=[
-    Menu(name="Sculpt", hotkey={"key": "q", "ctrl": False, "shift": True, "alt": False}),
-    Menu(name="Plain"),
-])
-
-_real_user_defined = hotkeys_mod.user_defined_ids
-hotkeys_mod.user_defined_ids = lambda path=None: set()
-FAKE.menu_api.clear()
-FAKE.hotkey_api.clear()
-api_report = registry.register_menus_via_api(api_cfg, ext, entry_dir)
-check(api_report["registered"] == 2,
-      f"every menu is registered through the API ({api_report['registered']})")
-check(all(i.startswith("$execute:") for i in FAKE.menu_api),
-      f"as $execute script items ({FAKE.menu_api[:1]})")
-check(FAKE.hotkey_api == [("Q", 1, 0, 0)],
-      f"only the menu that has a key gets one, in 3DCoat's spelling ({FAKE.hotkey_api})")
-check(api_report["hotkeys"] == ["CoatMenu_Sculpt"], "and the report names which")
-
-hotkeys_mod.user_defined_ids = lambda path=None: {"CoatMenu_Sculpt"}
-FAKE.hotkey_api.clear()
-kept = registry.register_menus_via_api(api_cfg, ext, entry_dir)
-check(FAKE.hotkey_api == [], "a key the user set in Preferences is never overridden")
-check(kept["kept_user_keys"] == ["CoatMenu_Sculpt"], "and the report says which one")
-hotkeys_mod.user_defined_ids = _real_user_defined
-
-print("== a menu's key survives the config round trip ==")
-hk_cfg = MenuConfig(menus=[Menu(name="Sculpt",
-                                hotkey={"key": "Q", "ctrl": True, "shift": False, "alt": False})])
-hk_back = MenuConfig.from_json(json.loads(json.dumps(hk_cfg.to_json())))
-check(hk_back.menus[0].hotkey == {"key": "Q", "ctrl": True, "shift": False, "alt": False},
-      f"the key comes back unchanged ({hk_back.menus[0].hotkey})")
-check(hotkey_label(hk_back.menus[0].hotkey) == "Ctrl+Q", "and reads as Ctrl+Q")
-check(hotkey_label(hotkey_from_json(None)) == "", "no key reads as nothing")
-check(MenuConfig.from_json({"menus": [{"name": "Bare"}]}).menus[0].hotkey == {},
-      "a menu without a key has no opinion (3DCoat's binding stands)")
-
 print()
 if failures:
     print(f"CONFIG FAILED ({len(failures)}): " + "; ".join(failures))
