@@ -2,6 +2,28 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.5.3 — 2026-09-20
+
+### Changed
+
+- **The `.3dcpack` route is gone.** It landed the files fine, but the extension then
+  still had to be ticked in Windows ▸ Panels ▸ Extensions — more steps than the
+  plain zip, not fewer. Releases ship the zip again.
+- **Key binding is documented the way 3D-Coat does it**: hover the entry in
+  `Scripts ▸ CoatMenu`, press `END`, then the combination. That is its own hint text
+  (*"'END' - Define Hotkey"*), and it writes the binding itself. The editor's `Key:`
+  button now says so instead of implying it can bind anything.
+
+### Fixed
+
+- **Nothing assumes where 3D-Coat lives any more.** The installer looks for the user
+  data folder (Documents, OneDrive-redirected Documents, `USERPROFILE`) and checks
+  each for a `3DCoat` folder rather than hard-coding `~/Documents`; it warns loudly
+  instead of installing somewhere 3D-Coat never reads, and accepts `--documents DIR`
+  / `COATMENU_DOCUMENTS`. `install.cmd` searches the same spots for 3D-Coat's own
+  Python. At runtime nothing was ever path-dependent: the folders come from
+  `coat.io.documents()` / `coat.io.installPath()`.
+
 ## v0.5.2 — 2026-09-20
 
 ### Fixed

@@ -190,15 +190,16 @@ class HotkeyDialog(QDialog):
         self._edit.setMinimumWidth(220)
         holder.addWidget(self._edit)
 
-        note = QLabel("3D-Coat takes the binding itself, so this is a note to yourself: "
-                      "set it in Preferences \u25b8 Hotkeys.\nSearch for the id below, "
-                      "or copy it and paste it into the search box there.")
+        note = QLabel("3D-Coat assigns the binding itself: hover over "
+                      "Scripts \u25b8 CoatMenu \u25b8 this menu and press END, then press "
+                      "the combination. This dialog only records the choice for your "
+                      "own reference.")
         note.setObjectName("coatmenuHint")
         note.setWordWrap(True)
         holder.addWidget(note)
 
         if entry_id:
-            id_box = QLabel(entry_id)
+            id_box = QLabel(f"Search for: {entry_id}")
             id_box.setTextInteractionFlags(Qt.TextSelectableByMouse)
             id_box.setObjectName("coatmenuHint")
             holder.addWidget(id_box)

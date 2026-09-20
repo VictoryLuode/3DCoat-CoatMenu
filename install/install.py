@@ -42,8 +42,39 @@ from coatmenu.core.config import MenuConfig, starter_config  # noqa: E402
 
 
 def default_documents() -> str:
-    """Documents folder of the current user (3DCoat's user data lives there)."""
-    return os.path.join(os.path.expanduser("~"), "Documents")
+    """The Documents folder that holds 3DCoat's user data.
+
+    Looked up rather than assumed. 3DCoat lets the user pick its data folder on
+    first run, and Windows itself often redirects Documents into OneDrive (3DCoat's
+    own API docs use ``C:/Users\\<user>\\OneDrive\\Documents/3DCoat/...`` as the
+    example). Every candidate is checked for a ``3DCoat`` folder so a Documents
+    folder 3DCoat never touches is not mistaken for the real one.
+
+    ``COATMENU_DOCUMENTS`` wins over the guess; ``--documents`` beats everything.
+    """
+    explicit = os.environ.get("COATMENU_DOCUMENTS")
+    if explicit:
+        return explicit
+
+    home = os.path.expanduser("~")
+    profile = os.environ.get("USERPROFILE") or home
+    candidates = [
+        os.path.join(home, "Documents"),
+        os.path.join(home, "OneDrive", "Documents"),
+        os.path.join(home, "OneDrive - Personal", "Documents"),
+        os.path.join(profile, "Documents"),
+    ]
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        candidate = os.path.normpath(candidate)
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if os.path.isdir(os.path.join(candidate, "3DCoat")):
+            return candidate
+    # Nothing looked familiar: hand back the plain Documents and let install() warn.
+    return candidates[0]
 
 
 def paths(documents: str) -> dict[str, str]:
@@ -189,6 +220,14 @@ def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
 
 def install(documents: str) -> int:
     p = paths(documents)
+    if not os.path.isdir(os.path.join(documents, "3DCoat")):
+        # Better a loud warning than a silent install into a folder 3DCoat never
+        # reads - its data folder can live anywhere (chosen on first run, or
+        # Documents redirected into OneDrive).
+        print(f"CoatMenu: no 3DCoat folder under {documents}")
+        print("  If 3DCoat keeps its data elsewhere, pass it explicitly:")
+        print('    python install.py --documents "D:\\path\\to\\Documents"')
+        print("  (3DCoat's own path is in that folder's executable.txt)")
     for key in ("cExtensions", "extra_menu_items"):
         os.makedirs(p[key], exist_ok=True)
 
@@ -243,10 +282,10 @@ def install(documents: str) -> int:
         print(f"  row shortcuts  : {info['shortcuts']} row(s) with their own key")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
-    print("then use Scripts > CoatMenu > Show CoatMenu. Each menu takes its key in")
-    print("Edit menus > Key - 3DCoat applies it on the next start, and a key you set")
-    print("by hand in Preferences > Hotkeys always wins. The menu stays open when you")
-    print("release the key: pick an entry, click away, or press Esc.")
+    print("then use Scripts > CoatMenu > Show CoatMenu. To give a menu its own key,")
+    print("hover that entry in Scripts > CoatMenu and press END, then press the keys")
+    print("you want - that is 3DCoat's own way of assigning a hotkey. The menu stays")
+    print("open when you release the key: pick an entry, click away, or press Esc.")
     return 0
 
 

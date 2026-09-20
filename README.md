@@ -50,8 +50,9 @@ extension builds on this machine)*
   entries fire on mouse *release*, so press-drag-release works like Blender's. A
   click away still reaches 3D-Coat.
 * **Keys without opening the menu** — a row can take a key of its own (right-click
-  ▸ *Set key…*); it then gets an entry in 3DCoat's Scripts menu and fires from
+  ▸ *Set key…*); it then gets an entry in 3D-Coat's Scripts menu and fires from
   anywhere. Only keyed rows are registered, so nothing else clutters that menu.
+  Binding a key is done 3D-Coat's way: hover the entry and press `END`.
 * **Several menus, each with its own hotkey** — each becomes its own entry in
   3D-Coat's `Scripts ▸ CoatMenu` list (and so in Preferences ▸ Hotkeys). A list
   hangs from the cursor; a **pie is centred on it**, Blender-style.
@@ -97,23 +98,38 @@ install).
 
 ### Option 1 — the package (no terminal)
 
-1. Download `CoatMenu-v<version>.3dcpack` and install it with
-   **File ▸ Install ▸ Install extension**.
-2. Open **Windows ▸ Panels ▸ Extensions** and tick **Auto-Launch** for CoatMenu.
-   (The files are in place after step 1, but 3D-Coat only starts extensions it is
-   told to.)
-3. Restart 3D-Coat, then open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
+1. Download `CoatMenu-v<version>.zip` from Releases and unzip it anywhere.
+2. Double-click `install\install.cmd` — it runs on 3D-Coat's own Python, and checks
+   the usual Documents folders (including OneDrive-redirected ones) before falling
+   back. Nothing outside 3D-Coat's user folder is touched.
+3. Restart 3D-Coat — or open **Windows ▸ Panels ▸ Extensions** and hit **Start** to
+   avoid a restart.
+4. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
 
-A `.3dcpack` is 3D-Coat's own format — a zip whose entries are `UserPrefs/`-relative
-paths. CoatMenu's package deliberately leaves `Scripts/cExtensions/startup.txt`
-alone: a package replaces whole files, and shipping that one would wipe the
-auto-launch lines of every other extension.
+### Binding a key
+
+**Hover over the menu entry in `Scripts ▸ CoatMenu` and press `END`**, then press
+the combination you want. That is 3D-Coat's own way of assigning a hotkey (its
+hint text reads *"'END' - Define Hotkey"*) and it writes the binding itself —
+CoatMenu only ever *reads* `Options_Hotkeys.xml`.
+
+The editor's `Key:` button records what you intend, for reference, and shows the id
+in case you would rather search for it in **Preferences ▸ Hotkeys**.
+
+### Where 3D-Coat lives does not matter
+
+Nothing here hard-codes a path:
+
+| What | How it is found |
+|---|---|
+| 3D-Coat's user data | `coat.io.documents()` at runtime; the installer checks the usual `Documents` spots (and OneDrive) and takes `--documents DIR` / `COATMENU_DOCUMENTS` |
+| 3D-Coat's program folder | `coat.io.installPath()`, falling back to the path in the user folder's `executable.txt` |
+| The extension itself | from its own location (inferred from `paths.py`) |
 
 ### Option 2 — from a checkout
 
-1. Grab the release zip (or build one with `python tools/make_release.py`), or clone
-   this repository.
-2. Run the installer from the unzipped folder:
+1. Clone this repository (or unzip the release archive), then run the installer from
+   the unzipped folder:
 
    ```
    install\install.cmd
