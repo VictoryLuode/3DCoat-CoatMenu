@@ -117,8 +117,20 @@ def english_xml_path() -> str:
 # ---------------------------------------------------------------------------
 
 _HOTKEY_BLOCK = re.compile(r"<OneHotKey>(.*?)</OneHotKey>", re.S)
-_MENU_ITEM = re.compile(r'menu_item\(\s*"([^"\n]+)"\s*\)')
+_MENU_ITEM = re.compile(r'menu_item\(\s*"([^"\n]+)"\s*\)\s*(?:#\s*(.*))?')
 _TEXT_ITEM = re.compile(r"<TextItem>(.*?)</TextItem>", re.S)
+# 3DCoat decorates its own labels with colour and icon markers: {CY}…{C},
+# {maticon bool_intersection}. They are instructions to the UI, not words.
+_UI_MARKS = re.compile(r"\{[^}]*\}")
+
+
+def clean_label(text: str) -> str:
+    """Drop 3DCoat's UI markers and squeeze whitespace out of a label."""
+    text = _UI_MARKS.sub(" ", text or "")
+    # Removing a marker can leave " ( Baked )" behind.
+    text = re.sub(r"\(\s+", "(", text)
+    text = re.sub(r"\s+\)", ")", text)
+    return " ".join(text.split()).strip()
 
 
 def _tag(block: str, name: str) -> str:
@@ -156,14 +168,26 @@ def read_menu_commands(root: str | None = None) -> list[CommandEntry]:
             if parent and parent != os.path.basename(root):
                 group = f"{parent}/{group}"
             for line in _read_text(os.path.join(dirpath, name)).splitlines():
-                code = line.split("#", 1)[0]  # ignore commented-out calls
-                for match in _MENU_ITEM.finditer(code):
+                if line.lstrip().startswith("#"):
+                    continue  # a commented-out call is not a command
+                for match in _MENU_ITEM.finditer(line):
                     # Some definitions write menu_item("$ID"); normalise it away,
                     # otherwise the id neither sorts nor looks up its name.
                     cid = match.group(1).strip().lstrip("$")
-                    if not cid or cid in out:
+                    if not cid:
                         continue
-                    out[cid] = CommandEntry(cid=cid, label=cid, source="menu", hint=group)
+                    # 3DCoat puts its own readable name in the trailing comment
+                    # ("coat.menu_item(\"UNDO\")  # Undo"), which is a better
+                    # label than the id when English.xml has no entry.
+                    label = clean_label(match.group(2) or "") or cid
+                    existing = out.get(cid)
+                    if existing is not None:
+                        # Room scripts repeat main-menu ids without that comment,
+                        # so a later definition can still know the name.
+                        if label != cid and existing.label == cid:
+                            existing.label = label
+                        continue
+                    out[cid] = CommandEntry(cid=cid, label=label, source="menu", hint=group)
     return sorted(out.values(), key=lambda e: (e.hint, e.cid))
 
 
@@ -398,11 +422,11 @@ def read_translations(path: str | None = None) -> dict[str, str]:
         name = _tag(block, "Text")
         if not cid or not name or cid in out:
             continue
-        name = re.sub(r"<[^>]+>", "", name)
-        name = " ".join(name.split())
+        name = clean_label(re.sub(r"<[^>]+>", "", name))
         for entity, char in (("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
                              ("&apos;", "'"), ("&amp;", "&")):
             name = name.replace(entity, char)
+        name = clean_label(name)
         if not name or len(name) > 60:
             continue
         out[cid] = name

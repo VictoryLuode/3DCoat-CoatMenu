@@ -283,3 +283,21 @@ if lks_branch >= 0:
 lks_widget.dismiss()
 app.processEvents()
 print(f"lks preview: {len(lks_preset.items)} menu(s)")
+
+# 13. the Common list - everyday commands, grouped like 3DCoat's main menu
+common = presets.common_list()
+manager.show_menu(common.items, anchor=QPoint(120, 90), title=common.name)
+common_widget = manager.popup
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-common.png"), [common_widget])
+common_branch = common_widget._first_branch()
+if common_branch >= 0:
+    common_widget._hover = common_branch
+    common_widget._open_child(common_branch)
+    app.processEvents()
+    compose(os.path.join(OUT_DIR, "preview-common-sub.png"),
+            [common_widget, common_widget._child])
+common_widget.dismiss()
+app.processEvents()
+print(f"common preview: {len(common.items)} group(s), "
+      f"{sum(len(i.children) for i in common.items)} commands")

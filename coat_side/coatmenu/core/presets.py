@@ -73,8 +73,8 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # Version markers for the lists we ship: bump the number when the preset changes
 # so the installer refreshes the user's copy (a hand-built list of the same name
 # has no marker and is never touched).
-PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1", "Presets": "presets/1",
-                  "LKS": "lks/1"}
+PRESET_MARKERS = {"Common": "common/1", "Prims": "prims/2", "Tools": "tools/1",
+                  "Presets": "presets/1", "LKS": "lks/1"}
 
 
 def builtin_row(label: str, param: str) -> MenuItem:
@@ -176,15 +176,52 @@ def lks_list(mode: str = LIST) -> MenuList:
                     preset=PRESET_MARKERS["LKS"])
 
 
+# The main menus whose commands get reached for constantly. Using 3DCoat's own
+# grouping keeps "common" 3DCoat's opinion rather than ours.
+COMMON_MENUS = ("Edit", "View", "Freeze", "Symmetry", "Hide", "Layers")
+
+
+def common_groups(menus: tuple[str, ...] = COMMON_MENUS) -> list[tuple[str, list[MenuItem]]]:
+    """(menu name, rows) for the everyday commands, in 3DCoat's own order."""
+    wanted = {name.lower() for name in menus}
+    found: dict[str, list[MenuItem]] = {}
+    for entry in catalog.read_all_commands():
+        hint = entry.hint or ""
+        if not hint.startswith("MainMenu/"):
+            continue
+        name = hint.split("/", 1)[1]
+        if name.lower() not in wanted:
+            continue
+        found.setdefault(name, []).append(
+            MenuItem(label=entry.label, kind=COMMAND, cid=entry.cmd_string))
+    return [(name, found[name]) for name in menus if name in found]
+
+
+def common_list(mode: str = LIST) -> MenuList:
+    """The ``Common`` list: everyday commands, grouped as 3DCoat groups its menus.
+
+    Undo/Redo and the transform commands live here, along with view shading,
+    freeze, symmetry and hide - the things reached for between sculpt strokes.
+    """
+    items: list[MenuItem] = []
+    for name, rows in common_groups():
+        items.append(submenu(f"{name}  ({len(rows)})", rows))
+    if not items:
+        items.append(header("no main-menu commands found"))
+    return MenuList(name="Common", items=items, mode=mode,
+                    preset=PRESET_MARKERS["Common"])
+
+
 def install_presets(config: MenuConfig,
-                    names: tuple[str, ...] = ("Prims", "Tools", "Presets", "LKS")) -> list[str]:
+                    names: tuple[str, ...] = ("Common", "Prims", "Tools", "Presets", "LKS")
+                    ) -> list[str]:
     """Add missing preset lists, and refresh ones shipped by an older version.
 
     A preset list is recognised by its ``preset`` marker: a list you built by
     hand - even one called ``Prims`` - has no marker and is never touched.
     """
-    built = {"Prims": primitives_list, "Tools": tools_list, "Presets": presets_list,
-             "LKS": lks_list}
+    built = {"Common": common_list, "Prims": primitives_list, "Tools": tools_list,
+             "Presets": presets_list, "LKS": lks_list}
     added: list[str] = []
     for name in names:
         make = built.get(name)

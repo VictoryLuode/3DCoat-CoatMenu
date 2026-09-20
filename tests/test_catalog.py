@@ -63,6 +63,9 @@ with open(os.path.join(CMAKE, "MainMenu", "File.py"), "w", encoding="utf-8") as 
         '    coat.menu_item("OPEN_FILE")   # Open\n'
         '    # coat.menu_item("COMMENTED_OUT")\n'
     )
+with open(os.path.join(CMAKE, "MainMenu", "Edit.py"), "w", encoding="utf-8") as fh:
+    fh.write('coat.menu_item("UNDO")  # Undo\n'
+             'coat.menu_item("TRANSFORM_TRANSLATE_X")  # Move along the X-axis\n')
 with open(os.path.join(CMAKE, "sculptTools.py"), "w", encoding="utf-8") as fh:
     fh.write(
         'import coat\n'
@@ -196,10 +199,25 @@ check(find_trigger_vk(["CoatMenu_Show", "execute:C:\\t\\actions\\CoatMenu_Show.p
 
 print("== 3DCoat's own menu definitions (authoritative, cannot be corrupted) ==")
 menu = catalog.read_menu_commands()
-check(len(menu) == 3, f"menu_item ids extracted ({sorted(e.cid for e in menu)})")
+by_menu_id = {e.cid: e for e in menu}
+check(len(menu) == 5, f"menu_item ids extracted ({sorted(by_menu_id)})")
 check(all(e.cid != "COMMENTED_OUT" for e in menu), "commented-out calls ignored")
 check(any(e.hint == "MainMenu/File" for e in menu), "group carries the source file")
+check(by_menu_id["CLEARSCENE"].label == "New",
+      "the trailing comment is 3DCoat's own name for the entry")
+check(by_menu_id["TRANSFORM_TRANSLATE_X"].label == "Move along the X-axis",
+      "so commands read like the menu instead of like their id")
+check(by_menu_id["BaseVoxBrush"].label == "BaseVoxBrush",
+      "an entry without a comment keeps its id")
 check(catalog.install_root() == INSTALL, "install root taken from coat.io.installPath()")
+
+print("== labels are cleaned of 3DCoat's UI markers ==")
+check(catalog.clean_label("{CY}Import for Sculpt{C}") == "Import for Sculpt",
+      "colour markers come out")
+check(catalog.clean_label("{maticon bool_intersection} Live Intersection") == "Live Intersection",
+      "and so do icon markers")
+check(catalog.clean_label("Paint Mesh ( Baked )") == "Paint Mesh (Baked)",
+      "including the spaces a marker leaves behind")
 
 print("== readable names from English.xml ==")
 names = catalog.read_translations()
@@ -253,6 +271,16 @@ check([e.label for e in saved] == ["HS_Extrude", "HS_分层Split"],
       f"({[e.label for e in saved]})")
 check(saved[1].cid == "HS_分层Split", "the real (non-ASCII) name is the payload")
 check(saved[0].source == "preset", "and it is tagged as a preset source")
+
+print("== the Common list (everyday commands, 3DCoat's own grouping) ==")
+groups = presets.common_groups()
+check([name for name, _ in groups] == ["Edit"],
+      f"only the menus we ask for ({[name for name, _ in groups]})")
+check([i.label for i in groups[0][1]] == ["Move along the X-axis", "Undo"],
+      f"named like the catalog ({[i.label for i in groups[0][1]]})")
+common = presets.common_list()
+check([i.label for i in common.items] == ["Edit  (2)"], "and it becomes one submenu per menu")
+check(common.preset == "common/1", "with its own marker")
 
 print("== LKS radial menus (read-only import) ==")
 from coatmenu.core import lks  # noqa: E402
