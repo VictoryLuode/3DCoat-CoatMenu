@@ -876,17 +876,31 @@ class MenuPopup(QWidget):
             self._poll.start()
 
     def _clamped_position(self, anchor: QPoint) -> QPoint:
-        """Panel top-left sits exactly on the anchor - same as Krita's QMenu.
+        """Where the panel's top-left goes, for that trigger point.
 
-        Flips to the other side of the cursor when the panel would otherwise run
-        off the screen.
+        A **list** hangs from the cursor - top-left on the anchor, the way every
+        context menu behaves. A **pie** is centred on the cursor instead: that is
+        what makes a Blender pie feel right, the pointer stays in the middle and
+        every slot is the same distance away.
+
+        Either way a panel that would run off the screen is moved back on.
         """
-        x, y = anchor.x(), anchor.y()
         screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
         try:
             area = screen.availableGeometry()
         except AttributeError:
             area = screen.geometry()
+
+        if self._mode == PIE:
+            # Centred, and slid just far enough to fit near an edge - a pie must
+            # stay wrapped around the cursor, so it never flips to the other side.
+            x = anchor.x() - self.width() // 2
+            y = anchor.y() - self.height() // 2
+            x = min(max(x, area.left()), max(area.left(), area.right() - self.width()))
+            y = min(max(y, area.top()), max(area.top(), area.bottom() - self.height()))
+            return QPoint(int(x), int(y))
+
+        x, y = anchor.x(), anchor.y()
         if x + self.width() > area.right():
             x = max(area.left(), anchor.x() - self.width())
         if y + self.height() > area.bottom():

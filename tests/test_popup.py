@@ -277,6 +277,16 @@ manager.show_menu(pie_items, anchor=QPoint(300, 300), title="Wheel", mode="pie")
 pie = manager.popup
 app.processEvents()
 check(pie._mode == PIE, "popup switched to pie mode")
+
+# A pie wraps around the cursor: the panel's middle is the trigger point, so every
+# slot is the same distance away (and the pointer sits in the centre ring).
+_want_x = 300 - pie.width() // 2
+_want_y = 300 - pie.height() // 2
+check(abs(pie.x() - _want_x) <= 2 and abs(pie.y() - _want_y) <= 2,
+      f"the pie is centred on the cursor ({pie.x()},{pie.y()} vs {_want_x},{_want_y})")
+check(pie._centre_point() == QPoint(pie.width() // 2, pie.height() // 2),
+      "and the panel's own centre is its middle")
+
 check(len(pie._pie_items) == 4, f"one slot per item ({len(pie._pie_items)})")
 check(len(pie._pie_rects) == 4, "each slot has geometry")
 check(pie._slot_expanded(3) and not pie._slot_expanded(2),

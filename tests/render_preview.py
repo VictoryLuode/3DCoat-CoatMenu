@@ -156,7 +156,7 @@ pie_rows = [
     MenuItem(label="Clean", kind=COMMAND, cid="CleanVoxels"),
     MenuItem(label="Measure", kind=COMMAND, cid="MEASURE"),
 ]
-manager.show_menu(pie_rows, anchor=QPoint(140, 140), title="Sculpt", mode="pie")
+manager.show_menu(pie_rows, anchor=QPoint(320, 240), title="Sculpt", mode="pie")
 pie = manager.popup
 app.processEvents()
 pie._hover = 3  # the branch, so the preview shows a highlighted button + dot
