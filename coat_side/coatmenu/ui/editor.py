@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
@@ -61,6 +62,15 @@ ROLE_CID = Qt.UserRole + 2
 ROLE_CMDS = Qt.UserRole + 3
 
 _TITLE_ROW_HEIGHT = 30
+# Submenu labels we generate carry a row count ("Shade  (3)"); it belongs in the
+# menu, not in a list name.
+_COUNT_SUFFIX = re.compile(r"\s*\(\d+\)\s*$")
+
+
+def _list_name_from(label: str) -> str:
+    """The list name a promoted submenu should get: its label, minus the count."""
+    name = _COUNT_SUFFIX.sub("", (label or "").strip()).strip()
+    return name or "List"
 
 # The editor is mostly tree + catalog list, so it wants room: twice the original
 # panel, capped to whatever screen it lands on (3DCoat is usually full-screen).
@@ -891,7 +901,7 @@ class CoatMenuEditor(QWidget):
         parent.removeChild(node)
         self.collect()
 
-        new_list = self._config.add_list(promoted.label.strip() or "List")
+        new_list = self._config.add_list(_list_name_from(promoted.label))
         new_list.items = promoted.children
         self.reload_lists()
         self.select_list(new_list.name)
