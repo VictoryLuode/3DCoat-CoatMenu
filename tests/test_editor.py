@@ -194,7 +194,7 @@ check(any(isinstance(row, dict) and row.get("name") == "Booleans"
           for row in saved["lists"][0]["items"]), "submenu saved in the shared JSON shape")
 
 launchers = os.listdir(paths.entry_scripts_dir())
-check(sorted(launchers) == ["CoatMenu_List_Paint.py", "CoatMenu_List_Sculpt.py"],
+check(sorted(launchers) == ["CoatMenu_Paint.py", "CoatMenu_Sculpt.py"],
       f"one launcher per list, prefixed so the Scripts menu groups them ({sorted(launchers)})")
 
 # A launcher left over from the old (unprefixed) naming must not linger, or the
@@ -204,7 +204,7 @@ with open(stale, "w", encoding="utf-8") as fh:
     fh.write("# launcher from before the prefix\n")
 editor.save()
 check(not os.path.exists(stale), "a launcher from the old naming is cleared out")
-check(os.path.isfile(os.path.join(paths.entry_scripts_dir(), "CoatMenu_List_Sculpt.py")),
+check(os.path.isfile(os.path.join(paths.entry_scripts_dir(), "CoatMenu_Sculpt.py")),
       "while the prefixed launcher stays put")
 xml_path = paths.menu_xml_path()
 check(os.path.isfile(xml_path), "menu xml written")

@@ -112,7 +112,7 @@ check(manager.popup is not None and len(manager.popup._rows) >= 2,
 popup.hide_menu()
 
 print("== the overlay's rows come from the installed config ==")
-launcher = os.path.join(EXT, "actions", "lists", "CoatMenu_List_Sculpt.py")
+launcher = os.path.join(EXT, "actions", "lists", "CoatMenu_Sculpt.py")
 check(os.path.isfile(launcher), "per-list launcher generated")
 try:
     runpy.run_path(launcher)
