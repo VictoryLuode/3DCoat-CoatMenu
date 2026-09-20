@@ -20,6 +20,10 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ### Added
 
+- **Menu keys in the editor** — a `Key:` button sets the key that opens a menu.
+  3DCoat applies it on the next start, through its own `menu_hotkey` API, so
+  `Options_Hotkeys.xml` is still only ever *read*. A key you set by hand in
+  Preferences ▸ Hotkeys is never overridden.
 - **Tool presets** as a menu source: your saved presets from
   `UserPrefs/Presets/*.xml`, applied with `AppOptions.ActivateToolPreset`.
 - **Your tools** as a menu source (the `CustomTools` panel's tools, via their
@@ -37,6 +41,9 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ### Fixed
 
+- Registering a menu entry with `coat.ui.insertInMenu` made 3D-Coat write its own
+  `CoatMenu_<id>.xml` next to ours. That file is read at startup too, so an entry
+  could be listed twice. They are cleaned up on install and no longer created.
 - Switching the editor's source took ~80ms (it re-parsed 3DCoat's 7711-entry
   translation table every time); it is cached now and effectively instant.
 - Creating, renaming, reordering or deleting a menu did not mark the config

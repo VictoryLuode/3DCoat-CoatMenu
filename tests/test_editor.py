@@ -57,6 +57,7 @@ with open(os.path.join(SCRIPTS_DIR, "speedup.py"), "w", encoding="utf-8") as fh:
     fh.write("# demo\n")
 
 from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from PySide6.QtGui import QKeySequence  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
@@ -69,8 +70,9 @@ paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "menus")
 os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 
 from coatmenu.core.config import MenuConfig, Menu  # noqa: E402
+from coatmenu.core.config import sequence_to_hotkey  # noqa: E402
 from coatmenu.core.menu_model import MenuItem  # noqa: E402
-from coatmenu.ui.editor import ROLE_KIND, CoatMenuEditor  # noqa: E402
+from coatmenu.ui.editor import ROLE_KIND, CoatMenuEditor, HotkeyDialog  # noqa: E402
 
 failures: list[str] = []
 
@@ -369,6 +371,28 @@ fresh = fresh_editor()
 fresh.undo()
 check("Nothing to undo" in fresh._status.text(), "an untouched editor has nothing to undo")
 fresh.close_editor()
+
+print("== the editor sets a menu's key ==")
+editor.select_menu("Sculpt")
+check(editor._key_button.text() == "Key: -",
+      f"a menu with no key says so ({editor._key_button.text()})")
+sculpt = editor.current_menu
+sculpt.hotkey = sequence_to_hotkey("Ctrl+Shift+J")
+editor._refresh_key_button()
+check(editor._key_button.text() == "Key: Ctrl+Shift+J",
+      f"the button follows the menu ({editor._key_button.text()})")
+saved = MenuConfig.from_json(json.loads(json.dumps(editor._config.to_json())))
+check(saved.menus[0].hotkey == {"key": "J", "ctrl": True, "shift": True, "alt": False},
+      f"the key survives save & reload ({saved.menus[0].hotkey})")
+
+dialog = HotkeyDialog("Ctrl+Q", None)
+check(dialog.hotkey().get("key") == "Q", "the dialog reads back the key it was given")
+dialog._edit.setKeySequence(QKeySequence("Shift+Alt+K"))
+check(dialog.hotkey() == {"key": "K", "ctrl": False, "shift": True, "alt": True},
+      f"and converts a freshly picked one ({dialog.hotkey()})")
+dialog._clear()
+check(dialog.hotkey() == {}, "Clear gives no key at all")
+dialog.deleteLater()
 
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402

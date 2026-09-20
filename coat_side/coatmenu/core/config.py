@@ -68,6 +68,9 @@ class Menu:
     items: list[MenuItem] = field(default_factory=list)
     mode: str = "list"
     preset: str = ""  # marker ("prims/2") for lists we ship and may refresh
+    # The key the user wants for this menu, as {"key": "Q", "ctrl": True, ...}.
+    # Empty means "no opinion" - 3DCoat's own binding (if any) stands.
+    hotkey: dict = field(default_factory=dict)
 
     @property
     def slug(self) -> str:
@@ -80,8 +83,95 @@ class Menu:
 
 
 # ---------------------------------------------------------------------------
-# item (de)serialisation
+# hotkey (de)serialisation
 # ---------------------------------------------------------------------------
+
+
+def hotkey_from_json(raw) -> dict:
+    """Read a ``{"key", "ctrl", "shift", "alt"}`` block (never raises).
+
+    An empty dict means "no opinion": CoatMenu then leaves whatever 3DCoat has.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    key = str(raw.get("key") or "").strip()
+    if not key:
+        return {}
+    return {
+        "key": key,
+        "ctrl": bool(raw.get("ctrl")),
+        "shift": bool(raw.get("shift")),
+        "alt": bool(raw.get("alt")),
+    }
+
+
+# Qt spells a few keys differently from 3DCoat's hotkey file; the right-hand side
+# is what ``coat.menu_hotkey`` and ``<Code>`` both understand.
+_QT_KEY_NAMES = {
+    "DEL": "DELETE",
+    "DELETE": "DELETE",
+    "INS": "INSERT",
+    "INSERT": "INSERT",
+    "PGUP": "PGUP",
+    "PGDN": "PGDN",
+    "PAGEUP": "PGUP",
+    "PAGEDOWN": "PGDN",
+    "BACKSPACE": "BACK",
+    "BACK": "BACK",
+    "ESC": "ESC",
+    "ESCAPE": "ESC",
+    "RETURN": "ENTER",
+    "ENTER": "ENTER",
+    "SPACE": "SPACE",
+    "UP": "UP",
+    "DOWN": "DOWN",
+    "LEFT": "LEFT",
+    "RIGHT": "RIGHT",
+    "HOME": "HOME",
+    "END": "END",
+    "TAB": "TAB",
+}
+
+
+def sequence_to_hotkey(text: str) -> dict:
+    """``"Ctrl+Shift+Q"`` -> ``{"key": "Q", "ctrl": True, "shift": True, "alt": False}``.
+
+    Takes Qt's portable spelling so the editor can hand a ``QKeySequence``
+    straight in. Returns ``{}`` when there is no real key in it (a bare modifier,
+    or nothing at all).
+    """
+    parts = [p.strip() for p in str(text or "").split("+") if p.strip()]
+    if not parts:
+        return {}
+    out = {"key": "", "ctrl": False, "shift": False, "alt": False}
+    for part in parts:
+        low = part.lower()
+        if low in ("ctrl", "control"):
+            out["ctrl"] = True
+        elif low == "shift":
+            out["shift"] = True
+        elif low in ("alt", "meta"):
+            out["alt"] = True
+        else:
+            out["key"] = _QT_KEY_NAMES.get(part.upper(), part.upper())
+    return out if out["key"] else {}
+
+
+def hotkey_label(hotkey: dict | None) -> str:
+    """``{"key": "Q", "ctrl": True}`` -> ``"Ctrl+Q"``; empty when unset."""
+    if not hotkey:
+        return ""
+    parts = []
+    if hotkey.get("ctrl"):
+        parts.append("Ctrl")
+    if hotkey.get("shift"):
+        parts.append("Shift")
+    if hotkey.get("alt"):
+        parts.append("Alt")
+    key = str(hotkey.get("key") or "").upper()
+    if key:
+        parts.append(key)
+    return "+".join(parts)
 
 
 def item_from_json(raw) -> MenuItem | None:
@@ -223,7 +313,8 @@ class MenuConfig:
                 continue
             items = _clean_items([i for i in (item_from_json(r) for r in raw.get("items") or []) if i])
             menus.append(Menu(name=name, items=items, mode=str(raw.get("mode") or "list"),
-                              preset=str(raw.get("preset") or "")))
+                              preset=str(raw.get("preset") or ""),
+                              hotkey=hotkey_from_json(raw.get("hotkey"))))
             if len(menus) >= MAX_LISTS:
                 break
         return cls(menus=menus)
@@ -240,6 +331,8 @@ class MenuConfig:
                 # Only shipped presets carry this; it lets the installer refresh
                 # them without ever touching a menu of the same name built by hand.
                 data["preset"] = lst.preset
+            if lst.hotkey:
+                data["hotkey"] = dict(lst.hotkey)
             out.append(data)
         return {
             "version": CONFIG_VERSION,

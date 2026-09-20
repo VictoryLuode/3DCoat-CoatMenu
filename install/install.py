@@ -224,6 +224,7 @@ def install(documents: str) -> int:
         os.path.join(p["ext"], "actions", "menus"),
         p["menu_xml"],
     )
+    leftovers = clean_per_entry_xml(p["extra_menu_items"])
 
     # 3. startup entry --------------------------------------------------
     added = _ensure_startup_entry(p["startup"])
@@ -232,14 +233,45 @@ def install(documents: str) -> int:
     print(f"  files copied   : {copied}")
     if stale:
         print(f"  stale removed  : {', '.join(stale)}")
+    if leftovers:
+        print(f"  cleaned up     : {len(leftovers)} per-entry XML file(s) left by insertInMenu")
     print(f"  menus          : {info['menus']} ({', '.join(lst.name for lst in config.menus)})")
-    print(f"  menu items     : {info['menus'] + 3} written to {p['menu_xml']}")
+    print(f"  menu items     : 3 fixed in {p['menu_xml']}, "
+          f"{info['menus']} registered by the extension (key included)")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
-    print("then use Scripts > CoatMenu > Show CoatMenu. Every list can get its own")
-    print("hotkey in Preferences > Hotkeys. The menu stays open when you release the")
-    print("key: pick an entry, click away, or press Esc.")
+    print("then use Scripts > CoatMenu > Show CoatMenu. Each menu takes its key in")
+    print("Edit menus > Key - 3DCoat applies it on the next start, and a key you set")
+    print("by hand in Preferences > Hotkeys always wins. The menu stays open when you")
+    print("release the key: pick an entry, click away, or press Esc.")
     return 0
+
+
+def clean_per_entry_xml(extra_menu_items_dir: str) -> list[str]:
+    """Remove the ``CoatMenu_<id>.xml`` files 3DCoat writes for ``insertInMenu``.
+
+    Calling ``coat.ui.insertInMenu`` made 3DCoat persist one XML per entry next to
+    our own ``CoatMenu.xml``. It reads those files at startup too, so an entry we
+    also register through the menu API would be listed twice.
+
+    Only ``CoatMenu_*.xml`` is touched: ``CoatBridge*`` and ``LKS_*`` in the same
+    folder belong to other add-ons.
+    """
+    removed: list[str] = []
+    try:
+        names = os.listdir(extra_menu_items_dir)
+    except OSError:
+        return removed
+    for name in names:
+        if not name.startswith(f"{EXTENSION_NAME}_") or not name.endswith(".xml"):
+            continue
+        path = os.path.join(extra_menu_items_dir, name)
+        try:
+            os.remove(path)
+            removed.append(path)
+        except OSError:
+            pass
+    return removed
 
 
 def _ensure_startup_entry(startup_path: str) -> bool:

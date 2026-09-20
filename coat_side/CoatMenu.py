@@ -90,12 +90,22 @@ class CoatMenuExtension(cPy.cCore.cExtension):
         log(f"{EXTENSION_NAME} onStartup")
 
     def onBuildMainMenu(self) -> None:
-        """Menu labels come from the translation table - make sure ours is in it."""
+        """Menu labels come from the translation table - make sure ours is in it.
+
+        Also the one moment 3DCoat lets us add menu entries through its own API,
+        which is how a menu gets the key set in the editor (see
+        ``menus.register_menu_api``).
+        """
         try:
             from coatmenu.core.show import apply_labels
             apply_labels()
         except Exception:
             pass
+        try:
+            from coatmenu.core import menus
+            menus.register_menu_api()
+        except Exception:
+            log("menu api registration failed", exc=True)
 
     def preprocess(self) -> None:
         """Once per frame, before tool processing: pump the Qt event loop."""

@@ -107,7 +107,11 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
 
 
 def register_menu_items(config: MenuConfig) -> int:
-    """Insert/refresh our menu items in the running 3DCoat instance.
+    """Insert/refresh the three fixed menu items in the running 3DCoat instance.
+
+    Only the fixed ones (Show CoatMenu / Edit menus / doctor): the one-per-menu
+    entries are registered by ``register_menu_api`` at menu-build time so they can
+    carry a hotkey, and doing it in both places would list every menu twice.
 
     Returns how many items were newly inserted. Never raises.
     """
@@ -128,16 +132,39 @@ def register_menu_items(config: MenuConfig) -> int:
             log(f"legacy menu item {menu_id} not removed: {exc}")
 
     for menu_id, label, script in menu_entries(
-        config, paths.extension_root(), paths.entry_scripts_dir()
+        config, paths.extension_root(), paths.entry_scripts_dir(), include="fixed"
     ):
         try:
+            # Only the label. The entry itself comes from CoatMenu.xml, which
+            # 3DCoat reads at startup - inserting it at runtime as well made
+            # 3DCoat persist its own ``<menu_id>.xml`` copy next to our file, and
+            # two copies of one entry is how a menu ends up listed twice.
             coat.ui.addTranslation(menu_id, label)
-            if not coat.ui.checkIfMenuItemInserted(menu_id):
-                coat.ui.insertInMenu(MENU_NAME, menu_id, script)
-                inserted += 1
         except Exception as exc:
             log(f"menu item {menu_id} failed: {exc}")
     return inserted
+
+
+def register_menu_api() -> dict:
+    """Register the one-per-menu entries through 3DCoat's own menu API.
+
+    This is what makes the key set in the editor real: ``coat.menu_item`` adds the
+    entry and ``coat.menu_hotkey`` proposes its key. 3DCoat writes the binding
+    itself, so CoatMenu still never touches ``Options_Hotkeys.xml``.
+
+    Must run from the menu-building pass (``onBuildMainMenu``); returns a report
+    for the log and the doctor.
+    """
+    config = get_config()
+    report = menus_registry.register_menus_via_api(
+        config, paths.extension_root(), paths.entry_scripts_dir()
+    )
+    if report.get("registered") or report.get("error"):
+        log(f"menu api: registered={report.get('registered')} "
+            f"hotkeys={len(report.get('hotkeys') or [])} "
+            f"kept-user-keys={len(report.get('kept_user_keys') or [])} "
+            f"error={report.get('error') or 'none'}")
+    return report
 
 
 def unregister_menu_items() -> None:

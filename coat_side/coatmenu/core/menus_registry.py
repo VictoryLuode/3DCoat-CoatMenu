@@ -163,9 +163,20 @@ def write_entry_scripts(config: MenuConfig, entry_scripts_dir: str) -> tuple[lis
     return written, removed
 
 
-def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str) -> list[tuple[str, str, str]]:
-    """(menu_id, label, script_path) - main entry, editor, doctor, every menu."""
-    rows = [
+def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str,
+                 include: str = "all") -> list[tuple[str, str, str]]:
+    """(menu_id, label, script_path) - main entry, editor, doctor, every menu.
+
+    ``include`` picks a subset:
+
+    * ``"all"`` (default) - everything.
+    * ``"fixed"`` - only Show / Edit menus / doctor. These live in the XML file,
+      which 3DCoat reads at startup.
+    * ``"menus"`` - only the one-per-menu entries. The extension registers those
+      at runtime through 3DCoat's menu API, because that is the only way to give
+      them a hotkey.
+    """
+    rows: list[tuple[str, str, str]] = [] if include == "menus" else [
         (
             MAIN_MENU_ID,
             MAIN_MENU_LABEL,
@@ -182,17 +193,82 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
             os.path.join(extension_root, "actions", DOCTOR_SCRIPT_NAME),
         ),
     ]
+    if include == "fixed":
+        return rows
     for lst in config.menus:
         rows.append((lst.hotkey_id, entry_label(lst.name),
                      entry_script_path(entry_scripts_dir, lst.slug)))
     return rows
 
 
+def register_menus_via_api(config: MenuConfig, extension_root: str,
+                           entry_scripts_dir: str) -> dict:
+    """Add this menu's entries through 3DCoat's own menu API, keys included.
+
+    3DCoat's documented way to give a menu entry a key is ``coat.menu_hotkey``
+    immediately after adding the item (see its ``cTemplates/MainMenu/*.py``). It
+    writes the binding itself - CoatMenu still never touches
+    ``Options_Hotkeys.xml``.
+
+    Only callable from the menu-building pass, which is why ``onBuildMainMenu``
+    is the caller. Entries the user set by hand in Preferences ▸ Hotkeys carry
+    ``<UserDefined>1</UserDefined>`` and are left alone: the key in the editor is
+    a proposal, the user's own choice always wins.
+
+    Returns a report for the log and the doctor.
+    """
+    report: dict = {"registered": 0, "hotkeys": [], "kept_user_keys": [], "error": ""}
+    try:
+        import coat  # only available inside 3DCoat
+    except Exception as exc:
+        report["error"] = f"no coat module ({exc})"
+        return report
+
+    try:
+        from coatmenu.core import hotkeys as hotkeys_mod
+        mine = hotkeys_mod.user_defined_ids()
+    except Exception:
+        mine = set()
+
+    by_id = {lst.hotkey_id: lst for lst in config.menus}
+    for menu_id, _label, script in menu_entries(config, extension_root,
+                                                entry_scripts_dir, include="menus"):
+        try:
+            coat.menu_item(f"$execute:{_posix(script)}")
+            report["registered"] += 1
+        except Exception as exc:
+            report["error"] = f"{menu_id}: {exc}"
+            continue
+
+        lst = by_id.get(menu_id)
+        hotkey = getattr(lst, "hotkey", None) if lst is not None else None
+        if not hotkey or not hotkey.get("key"):
+            continue
+        if menu_id in mine:
+            report["kept_user_keys"].append(menu_id)
+            continue
+        try:
+            coat.menu_hotkey(str(hotkey["key"]).upper(),
+                             1 if hotkey.get("shift") else 0,
+                             1 if hotkey.get("ctrl") else 0,
+                             1 if hotkey.get("alt") else 0)
+            report["hotkeys"].append(menu_id)
+        except Exception as exc:
+            report["error"] = f"hotkey {menu_id}: {exc}"
+    return report
+
+
 def write_menu_xml(config: MenuConfig, extension_root: str, entry_scripts_dir: str, xml_path: str) -> str:
-    """Write ``ExtraMenuItems/CoatMenu.xml`` (3DCoat needs absolute paths)."""
+    """Write ``ExtraMenuItems/CoatMenu.xml`` (3DCoat needs absolute paths).
+
+    Only the three fixed entries go in here. The one-per-menu entries are
+    registered at runtime instead (``register_menus_via_api``) - writing them in
+    both places would list every menu twice.
+    """
     entries = "".join(
         _MENU_ENTRY.format(menu_id=menu_id, script=_posix(script))
-        for menu_id, _label, script in menu_entries(config, extension_root, entry_scripts_dir)
+        for menu_id, _label, script in menu_entries(config, extension_root,
+                                                    entry_scripts_dir, include="fixed")
     )
     os.makedirs(os.path.dirname(xml_path), exist_ok=True)
     content = _MENU_XML.format(entries=entries)

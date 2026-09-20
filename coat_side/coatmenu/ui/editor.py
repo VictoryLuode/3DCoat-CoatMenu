@@ -20,12 +20,15 @@ import os
 import re
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -41,7 +44,7 @@ from PySide6.QtWidgets import (
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, menus
 from coatmenu.core import lks as lks_mod
-from coatmenu.core.config import MenuConfig, Menu, item_to_json
+from coatmenu.core.config import MenuConfig, Menu, hotkey_label, item_to_json, sequence_to_hotkey
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (
     COMMAND,
@@ -159,6 +162,53 @@ class _CursorLayer(QWidget):
             log("editor cursor layer failed", exc=True)
         finally:
             painter.end()
+
+
+class HotkeyDialog(QDialog):
+    """Ask for one key combination (the editor's ``Key:`` button).
+
+    A plain ``QKeySequenceEdit``: click it, press the combination, OK. The
+    modifiers come out of the sequence, so nothing has to be spelled out.
+    """
+
+    def __init__(self, current: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Menu key")
+        self.setModal(True)
+
+        holder = QVBoxLayout(self)
+        holder.setSpacing(8)
+        holder.setContentsMargins(14, 14, 14, 14)
+
+        hint = QLabel("Press the key that should open this menu.")
+        hint.setWordWrap(True)
+        holder.addWidget(hint)
+
+        self._edit = QKeySequenceEdit(QKeySequence(current) if current else QKeySequence())
+        self._edit.setMinimumWidth(220)
+        holder.addWidget(self._edit)
+
+        note = QLabel("3DCoat picks it up the next time it starts. A key you set by "
+                      "hand in Preferences \u25b8 Hotkeys always wins.")
+        note.setObjectName("coatmenuHint")
+        note.setWordWrap(True)
+        holder.addWidget(note)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        clear = buttons.addButton("Clear", QDialogButtonBox.ResetRole)
+        clear.clicked.connect(self._clear)
+        holder.addWidget(buttons)
+
+    def _clear(self) -> None:
+        self._edit.clear()
+        self.accept()
+
+    def hotkey(self) -> dict:
+        """The chosen combination, as the config stores it ({} when cleared)."""
+        sequence = self._edit.keySequence()
+        return sequence_to_hotkey(sequence.toString(QKeySequence.SequenceFormat.PortableText))
 
 
 class CoatMenuEditor(QWidget):
@@ -290,8 +340,44 @@ class CoatMenuEditor(QWidget):
         self._mode_combo.currentIndexChanged.connect(self.set_mode_from_combo)
         row.addWidget(QLabel("as"))
         row.addWidget(self._mode_combo)
+
+        self._key_button = QPushButton()
+        self._key_button.setToolTip(
+            "The key that opens this menu. 3DCoat applies it on the next start, and\n"
+            "a key you set by hand in Preferences \u25b8 Hotkeys is left alone."
+        )
+        self._key_button.clicked.connect(self.edit_menu_hotkey)
+        row.addWidget(self._key_button)
         row.addStretch(1)
         return row
+
+    def _refresh_key_button(self) -> None:
+        """Show the selected menu's key, or "-" when it has none."""
+        target = self.current_menu
+        label = hotkey_label(target.hotkey) if target is not None else ""
+        self._key_button.setText(f"Key: {label or '-'}")
+
+    def edit_menu_hotkey(self) -> None:
+        """Ask for the key that should open this menu.
+
+        Stored in the config and handed to 3DCoat through its own menu API on the
+        next start - CoatMenu never writes the hotkey file itself.
+        """
+        target = self.current_menu
+        if target is None:
+            self.set_status("No menu selected")
+            return
+        dialog = HotkeyDialog(hotkey_label(target.hotkey), self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        target.hotkey = dialog.hotkey()
+        self._mark_dirty()
+        self._refresh_key_button()
+        if target.hotkey:
+            self.set_status(f"'{target.name}' will open on "
+                            f"{hotkey_label(target.hotkey)} after the next 3D-Coat start")
+        else:
+            self.set_status(f"Cleared the key for '{target.name}'")
 
     def _sync_mode_combo(self) -> None:
         target = self.current_menu
@@ -674,6 +760,7 @@ class CoatMenuEditor(QWidget):
         self._menu_combo.setToolTip(self._bindings_tooltip())
         self.refresh_tree()
         self._sync_mode_combo()
+        self._refresh_key_button()
         self.set_status("")
         if self._bindings.conflicts:
             self.set_status("Hotkey clash: " + "; ".join(self._bindings.conflicts))

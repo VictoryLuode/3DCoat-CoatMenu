@@ -154,6 +154,29 @@ def report(config=None) -> str:
             f"  key={binds.for_menu(lst.name) or 'unbound'}"
         )
     out.append(f"  hotkey clashes: {'; '.join(binds.conflicts) or 'none'}")
+    out.append("  menu keys     : editor -> 3DCoat (a 'user-set' key is never overridden)")
+    try:
+        from coatmenu.core import hotkeys as hotkeys_mod
+        from coatmenu.core.config import hotkey_label
+
+        user_defined = hotkeys_mod.user_defined_ids()
+        for lst in cfg.menus:
+            want = hotkey_label(getattr(lst, "hotkey", None)) or "-"
+            have = binds.for_menu(lst.name) or "-"
+            state = "user-set" if lst.hotkey_id in user_defined else "default"
+            out.append(f"    - {lst.name:<22} editor={want:<14} 3DCoat={have:<14} ({state})")
+    except Exception as exc:
+        out.append(f"    (unavailable: {exc})")
+    # Leftovers from the old insertInMenu path would list every menu twice.
+    items_dir = os.path.join(paths.scripts_dir(), "ExtraMenuItems")
+    try:
+        leftovers = sorted(
+            name for name in os.listdir(items_dir)
+            if name.startswith("CoatMenu_") and name.endswith(".xml")
+        )
+        out.append(f"  extra items   : {', '.join(leftovers) if leftovers else 'none'}")
+    except OSError:
+        out.append("  extra items   : (folder missing)")
     out.extend(tool_probe())
     out.extend(preset_probe())
 

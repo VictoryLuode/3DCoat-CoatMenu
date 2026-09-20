@@ -17,6 +17,10 @@ class FakeCoat:
         self.calls: list[tuple[str, str]] = []
         self.translations: dict[str, str] = {}
         self.menu_items: dict[str, tuple[str, str]] = {}
+        # 3DCoat's own menu API (top-level coat.menu_item / coat.menu_hotkey),
+        # which is how the one-per-menu entries and their keys get registered.
+        self.menu_api: list[str] = []
+        self.hotkey_api: list[tuple[str, int, int, int]] = []
         self._documents = documents
         self._install = install_root or os.path.join(documents, "3DCoat-Install")
         self.ui = types.SimpleNamespace(
@@ -43,6 +47,14 @@ class FakeCoat:
         self.calls.append(("cmd", str(cid)))
         if callback:
             callback()
+
+    def _menu_item(self, item_id):
+        self.menu_api.append(str(item_id))
+        return True
+
+    def _menu_hotkey(self, key, shift, ctrl, alt):
+        self.hotkey_api.append((str(key), int(shift), int(ctrl), int(alt)))
+        return True
 
     def _add_translation(self, key, text):
         self.translations[str(key)] = str(text)
@@ -87,5 +99,7 @@ def install_fake_coat(documents: str | None = None, source_dir: str | None = Non
     module.io = fake.io
     module.settings = fake.settings
     module.dialog = fake.dialog
+    module.menu_item = fake._menu_item
+    module.menu_hotkey = fake._menu_hotkey
     sys.modules["coat"] = module
     return fake

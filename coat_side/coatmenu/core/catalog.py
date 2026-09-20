@@ -218,6 +218,9 @@ def iter_hotkey_blocks(path: str | None = None) -> list[dict]:
                 "ctrl": _tag(block, "Ctrl").lower() == "true",
                 "alt": _tag(block, "Alt").lower() == "true",
                 "shift": _tag(block, "Shift").lower() == "true",
+                # 1 when the key was set by hand in Preferences ▸ Hotkeys. CoatMenu
+                # only ever *proposes* defaults, so it leaves those alone.
+                "user_defined": _tag(block, "UserDefined") == "1",
             }
         )
     return out
