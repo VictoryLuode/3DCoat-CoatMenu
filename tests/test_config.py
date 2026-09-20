@@ -235,11 +235,16 @@ saved_cfg = MenuConfig(menus=[Menu(name="Saved", items=[
     MenuItem(label="HS_Extrude", kind="preset", cid="HS_Extrude")])])
 saved_json = saved_cfg.to_json()["menus"][0]["items"][0]
 check(saved_json == {"preset": "HS_Extrude", "label": "HS_Extrude"},
-      f"a saved preset is written as {{preset: ...}} ({saved_json})")
-saved_back = MenuConfig.from_json(saved_cfg.to_json()).find("Saved").items[0]
-check(saved_back.kind == "preset" and saved_back.cid == "HS_Extrude",
-      "and comes back as a runnable preset entry")
-check(saved_back.clickable, "so the row can actually be clicked")
+      f"a preset row still writes as {{preset: ...}} ({saved_json})")
+# Tool presets cannot be activated on this build (the documented API does not
+# exist), so the loader drops them rather than turning them into a $command that
+# can never resolve. A config written by an older build therefore just loses that
+# one menu, and works otherwise.
+saved_menu = MenuConfig.from_json(saved_cfg.to_json()).find("Saved")
+check(saved_menu is not None and not saved_menu.items,
+      f"and a preset row is dropped on load ({saved_menu.items if saved_menu else None})")
+check(MenuConfig.from_json(saved_cfg.to_json()).find("Saved") is not None,
+      "the menu itself survives")
 
 print("== key bindings, clashes and the doctor report ==")
 from coatmenu.core import bindings as bindings_mod  # noqa: E402

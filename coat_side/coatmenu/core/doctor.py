@@ -83,53 +83,6 @@ def tool_probe(limit: int = PROBE_LIMIT) -> list[str]:
     return lines
 
 
-def preset_probe() -> list[str]:
-    """Does ``ActivateToolPreset`` really apply a preset? Ask 3DCoat.
-
-    A preset stores the tool *and* its settings, so activating one should change
-    the active tool (or at least the live preset). The doctor captures both,
-    activates the user's first preset, and puts the original back.
-    """
-    try:
-        import coat  # type: ignore
-    except Exception as exc:  # pragma: no cover - only outside 3DCoat
-        return [f"  preset probe  : no coat module ({exc})"]
-    names = [entry.cid for entry in catalog.read_presets()]
-    if not names:
-        return ["  preset probe  : no presets in UserPrefs/Presets"]
-
-    def snapshot() -> tuple[str, str]:
-        try:
-            tool = str(coat.GetCurrentToolID())
-        except Exception:
-            tool = "?"
-        try:
-            live = str(getattr(coat.AppOptions, "CurPreset", ""))
-        except Exception:
-            live = "?"
-        return tool, live
-
-    tool_before, preset_before = snapshot()
-    lines = [f"  active preset : {preset_before or '(none)'}"]
-    target = names[0]
-    try:
-        coat.AppOptions.ActivateToolPreset(target)
-        tool_after, preset_after = snapshot()
-        changed = "" if (tool_after, preset_after) != (tool_before, preset_before) \
-            else "   (nothing changed)"
-        lines.append(f"    activate {target!r} -> tool={tool_after} preset={preset_after!r}{changed}")
-    except Exception as exc:
-        lines.append(f"    activate {target!r} -> error: {exc}")
-        return lines
-    if preset_before and preset_before not in ("", "None"):
-        try:
-            coat.AppOptions.ActivateToolPreset(preset_before)
-            lines.append(f"    restored      -> {snapshot()[1]!r}")
-        except Exception as exc:
-            lines.append(f"    restore failed: {exc}")
-    return lines
-
-
 def report(config=None) -> str:
     """The whole picture, as plain text."""
     cfg = config if config is not None else menus.get_config()
@@ -167,7 +120,6 @@ def report(config=None) -> str:
     except OSError:
         out.append("  extra items   : (folder missing)")
     out.extend(tool_probe())
-    out.extend(preset_probe())
 
     path = log_path()
     out.append(f"  log           : {path}")

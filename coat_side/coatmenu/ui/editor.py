@@ -370,7 +370,7 @@ class CoatMenuEditor(QWidget):
 
         self._source_kind = QComboBox()
         self._source_kind.addItems(
-            ["3DCoat commands", "My tools", "Presets", "Scripts"])
+            ["3DCoat commands", "My tools", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -1009,8 +1009,7 @@ class CoatMenuEditor(QWidget):
         source = self._source_kind.currentIndex()
         # A stored kind wins: a source can mix commands and scripts, so the row
         # knows what it is better than the dropdown does.
-        kind = stored_kind or (SCRIPT if source == 3 else
-                               (PRESET if source == 2 else COMMAND))
+        kind = stored_kind or (SCRIPT if source == 2 else COMMAND)
         label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
         node = self._node_for(MenuItem(label=label, kind=kind, cid=cid,
                                        path=cid if kind == SCRIPT else ""))
@@ -1235,11 +1234,6 @@ class CoatMenuEditor(QWidget):
                 rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
                              entry.cid, entry.label, COMMAND))
         elif kind == 2:
-            # Your saved tool presets - a tool *plus* its settings.
-            for entry in catalog.read_presets():
-                rows.append((f"{entry.label}  \u2014  preset", entry.cid, entry.label,
-                             PRESET))
-        else:
             for entry in catalog.read_script_commands():
                 rows.append((entry.label, entry.cid, os.path.basename(entry.cid),
                              SCRIPT))

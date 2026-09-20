@@ -3,7 +3,7 @@
 > Custom pop-up action menus for **3D-Coat** — at the cursor, from a hotkey.
 
 CoatMenu is the 3D-Coat sibling of [Krita **MenuBelt**](https://github.com/VictoryLuode/Krita-Menubelt):
-you build your own menus out of 3D-Coat commands, tools, presets and scripts, then
+you build your own menus out of 3D-Coat commands, tools and scripts, then
 reach them from a frameless overlay that appears where your cursor is.
 
 Press the hotkey once: the menu appears and **stays** after you let the key go.
@@ -86,12 +86,11 @@ extension builds on this machine)*
   CoatMenu ships lives under its own namespace, because `cExtensions` shares one
   interpreter: a generic top-level name would collide with a neighbour's (a sibling
   extension's `ui` package did exactly that once).
-* **Editor** — add rows from four sources, with readable names:
+* **Editor** — add rows from three sources, with readable names:
   | Source | What it gives you |
   |---|---|
   | 3D-Coat commands | 3D-Coat's own menu definitions — **900+ commands** |
   | My tools | the tools from 3D-Coat's `CustomTools` panel |
-  | Presets | your saved tool presets (tool + parameter snapshots) |
   | Scripts | your own scripts (other extensions' internals are skipped) |
   Plus drag-to-reorder (a row dropped onto another becomes its group), a second and
   third column to set how each group unfolds and where each row sits in a pie,
@@ -184,7 +183,7 @@ deleted.
 * Keyboard is read with `GetAsyncKeyState` polling instead of `grabKeyboard()`, so
   3D-Coat keeps receiving its own keys.
 * Entries run through `coat.ui.cmd("$CommandID")`; script entries go through
-  `coat.io.executeScript`; presets through `coat.AppOptions.ActivateToolPreset`.
+  `coat.io.executeScript`.
 * Every menu gets a **generated launcher script**
   (`actions/menus/CoatMenu_<Menu>.py`) plus a menu item in
   `Scripts/ExtraMenuItems/CoatMenu.xml`, because a 3D-Coat menu item points at a
@@ -205,7 +204,7 @@ deleted.
 | ✔ M1 | extension skeleton, cursor overlay, linear menu, click/hold/`Esc`, installer, tests |
 | ✔ M2 | `data/menus.json`, several menus + submenus, editor (sources, drag-and-drop, import/export), generated launchers |
 | ✔ M3 | radial pie renderer (same data), dwell submenus, per-menu list/pie switch |
-| ✔ M4 | Blender-style interaction, live preview, tools/presets/script sources, conflict detection, doctor report |
+| ✔ M4 | Blender-style interaction, live preview, tools/script sources, conflict detection, doctor report |
 | ✔ M5 | packaging and polish: one-command release zip, changelog, README |
 | ✔ M6 | per-row `Expand` and `Position`, ported sculpt actions, independence from other extensions |
 

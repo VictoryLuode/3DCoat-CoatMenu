@@ -2,6 +2,18 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.6.1 — 2026-09-20
+
+### Removed
+
+- **Tool presets.** They could not be activated from a menu item on this build: the
+  entry point `coat.pyi` documents (`coat.AppOptions.ActivateToolPreset`) does not
+  exist in the live module, and a runtime scan of `coat` found nothing offering it.
+  Rather than ship a source in the editor that produces rows which cannot work, it is
+  gone: the `Presets` source, the generated `Presets` menu, and the reader behind
+  them. A config written by an older build keeps working - preset rows are skipped
+  on load instead of turning into commands that could never resolve.
+
 ## v0.6.0 — 2026-09-20
 
 ### Added

@@ -118,12 +118,10 @@ def _item_body_from_json(raw) -> MenuItem | None:
         return submenu_item(label, children)
 
     if "preset" in raw:
-        # A 3DCoat tool preset (UserPrefs/Presets/*.xml): applied by name through
-        # AppOptions.ActivateToolPreset, not through the command bus.
-        name = str(raw.get("preset") or "").strip()
-        if not name:
-            return None
-        return MenuItem(label=str(raw.get("label") or name).strip(), kind="preset", cid=name)
+        # Tool presets are no longer supported: the documented activation API does
+        # not exist on this build, so a preset row could never work. Skip it rather
+        # than let the loader turn it into a $command that cannot resolve.
+        return None
 
     if "script" in raw:
         path = str(raw.get("script") or "").strip()

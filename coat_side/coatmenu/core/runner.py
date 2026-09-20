@@ -8,7 +8,7 @@ the same code.
 from __future__ import annotations
 
 from coatmenu.core.log import log
-from coatmenu.core.menu_model import PRESET, SCRIPT, MenuItem
+from coatmenu.core.menu_model import SCRIPT, MenuItem
 
 
 def run_item(item: MenuItem) -> None:
@@ -28,11 +28,6 @@ def run_item(item: MenuItem) -> None:
         elif item.kind == SCRIPT:
             coat.io.executeScript(item.path or item.cid)
             log(f"ran script: {item.path or item.cid}")
-        elif item.kind == PRESET:
-            # A preset is a tool *and* its stored settings, so it goes through
-            # 3DCoat's own preset API - the command bus cannot express it.
-            coat.AppOptions.ActivateToolPreset(item.cid)
-            log(f"activated preset: {item.cid}")
         else:
             cmd = item.cid if item.cid.startswith("$") else "$" + item.cid
             coat.ui.cmd(cmd)

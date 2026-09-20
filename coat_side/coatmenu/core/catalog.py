@@ -360,41 +360,6 @@ def read_my_tools(root: str | None = None) -> list[CommandEntry]:
     return out
 
 
-def read_presets(root: str | None = None) -> list[CommandEntry]:
-    """The user's tool presets (``UserPrefs/Presets/*.xml``).
-
-    Each file is a snapshot of a tool *plus* its settings, taken from 3DCoat's
-    Presets panel, so applying one restores the tool and everything stored with
-    it. The readable name lives inside the file (``<Name>``): file names lose
-    non-ASCII - ``HS_E58886E5B182Split.xml`` is "HS_分层Split". ``order.txt``
-    holds the order the panel lists them in, which the menu keeps.
-    """
-    root = root if root is not None else presets_root()
-    if not root or not os.path.isdir(root):
-        return []
-    files: dict[str, str] = {}  # file name -> preset name
-    for name in sorted(os.listdir(root)):
-        if not name.lower().endswith(".xml"):
-            continue
-        text = _read_text(os.path.join(root, name))
-        match = re.search(r"<Name>(.*?)</Name>", text, re.S)
-        files[name] = (match.group(1).strip() if match else "") or os.path.splitext(name)[0]
-    if not files:
-        return []
-
-    order: list[str] = []
-    for line in _read_text(os.path.join(root, "order.txt")).splitlines():
-        entry = line.strip().replace("\\", "/").split("/")[-1]
-        if entry in files and entry not in order:
-            order.append(entry)
-    for name in files:  # anything order.txt does not know about goes last
-        if name not in order:
-            order.append(name)
-
-    return [CommandEntry(cid=files[name], label=files[name], source="preset",
-                         hint="Presets") for name in order]
-
-
 def read_script_commands(root: str | None = None, limit: int = 400) -> list[CommandEntry]:
     """List ``UserPrefs/Scripts`` python files as menu-item candidates."""
     root = root or scripts_root()

@@ -160,16 +160,7 @@ editor._source_kind.setCurrentIndex(1)  # My tools
 editor.reload_sources()
 check(editor._source_list.count() == 1, f"tool presets listed ({editor._source_list.count()})")
 
-editor._source_kind.setCurrentIndex(2)  # Presets
-editor.reload_sources()
-check(editor._source_list.count() == 1, f"saved presets listed ({editor._source_list.count()})")
-editor._source_list.setCurrentRow(0)
-editor.add_source_item()
-from_preset = editor.tree_to_items()[-1]
-check(from_preset.kind == "preset" and from_preset.cid == "HS_Test",
-      f"a row added from Presets is a preset entry ({from_preset.kind}, {from_preset.cid})")
-
-editor._source_kind.setCurrentIndex(4)  # Scripts
+editor._source_kind.setCurrentIndex(2)  # Scripts
 editor.reload_sources()
 check(editor._source_list.count() == 1, f"scripts listed ({editor._source_list.count()})")
 

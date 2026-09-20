@@ -264,14 +264,6 @@ check([i.label for i in tools_preset.items] == ["Clay/Draw  (1)", "Layers  (2)",
 check(any(child.cid == "$[extension]BendVolume" for child in tools_preset.items[1].children),
       "rows inside a group are runnable tool ids")
 
-print("== saved tool presets (Presets panel) ==")
-saved = catalog.read_presets()
-check([e.label for e in saved] == ["HS_Extrude", "HS_分层Split"],
-      f"order.txt order kept, <Name> used instead of the file name "
-      f"({[e.label for e in saved]})")
-check(saved[1].cid == "HS_分层Split", "the real (non-ASCII) name is the payload")
-check(saved[0].source == "preset", "and it is tagged as a preset source")
-
 print("== the Common list (everyday commands, 3DCoat's own grouping) ==")
 groups = presets.common_groups()
 check([name for name, _ in groups] == ["Edit"],
