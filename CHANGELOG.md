@@ -20,6 +20,9 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ### Added
 
+- **Global keys on rows** — right-click a row ▸ *Set key…* gives it its own entry in
+  3DCoat's Scripts menu, so it runs without opening the menu at all. Opt-in per row:
+  a row without a key is not registered anywhere, so the Scripts list stays clean.
 - **Menu keys in the editor** — a `Key:` button sets the key that opens a menu.
   3DCoat applies it on the next start, through its own `menu_hotkey` API, so
   `Options_Hotkeys.xml` is still only ever *read*. A key you set by hand in

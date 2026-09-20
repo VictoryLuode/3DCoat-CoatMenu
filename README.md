@@ -49,6 +49,9 @@ extension builds on this machine)*
   steps back out one level at a time (submenu → menu), right-click cancels, and
   entries fire on mouse *release*, so press-drag-release works like Blender's. A
   click away still reaches 3D-Coat.
+* **Keys without opening the menu** — a row can take a key of its own (right-click
+  ▸ *Set key…*); it then gets an entry in 3DCoat's Scripts menu and fires from
+  anywhere. Only keyed rows are registered, so nothing else clutters that menu.
 * **Several menus, each with its own hotkey** — each becomes its own entry in
   3D-Coat's `Scripts ▸ CoatMenu` list (and so in Preferences ▸ Hotkeys). A list
   hangs from the cursor; a **pie is centred on it**, Blender-style.

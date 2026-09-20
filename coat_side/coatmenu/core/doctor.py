@@ -167,6 +167,17 @@ def report(config=None) -> str:
             out.append(f"    - {lst.name:<22} editor={want:<14} 3DCoat={have:<14} ({state})")
     except Exception as exc:
         out.append(f"    (unavailable: {exc})")
+    # Rows with a key of their own - each one is an entry in 3DCoat's Scripts menu.
+    try:
+        from coatmenu.core import menus_registry as registry_mod
+
+        keyed_rows = registry_mod.shortcut_rows(cfg)
+        names = ", ".join(f"{menu}: {row.label or row.cid}"
+                          for menu, _i, _s, row in keyed_rows)
+        out.append(f"  row shortcuts : {len(keyed_rows)}"
+                   + (f" ({names})" if names else " (no row has its own key)"))
+    except Exception as exc:
+        out.append(f"  row shortcuts : (unavailable: {exc})")
     # Leftovers from the old insertInMenu path would list every menu twice.
     items_dir = os.path.join(paths.scripts_dir(), "ExtraMenuItems")
     try:

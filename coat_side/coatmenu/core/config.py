@@ -175,7 +175,19 @@ def hotkey_label(hotkey: dict | None) -> str:
 
 
 def item_from_json(raw) -> MenuItem | None:
-    """Build a :class:`MenuItem` from one JSON entry (never raises)."""
+    """Build a :class:`MenuItem` from one JSON entry (never raises).
+
+    Wraps the shape parsing so a row's global key is picked up whichever form the
+    entry takes - ``{"id": ..., "hotkey": ...}``, ``{"label": ..., "hotkey": ...}``
+    and so on.
+    """
+    item = _item_body_from_json(raw)
+    if item is not None and isinstance(raw, dict) and raw.get("hotkey"):
+        item.hotkey = hotkey_from_json(raw.get("hotkey"))
+    return item
+
+
+def _item_body_from_json(raw) -> MenuItem | None:
     if isinstance(raw, str):
         return MenuItem(label=raw, kind="command", cid=raw) if raw else None
 
@@ -229,7 +241,22 @@ def item_from_json(raw) -> MenuItem | None:
 
 
 def item_to_json(item: MenuItem):
-    """Serialise one entry back to the compact shared form."""
+    """Serialise one entry back to the compact shared form.
+
+    A row with a global key needs a dict (a bare string has nowhere to put it), so
+    the plain form is promoted when that is the case.
+    """
+    data = _item_body(item)
+    if getattr(item, "hotkey", None):
+        if isinstance(data, str):
+            data = {"id": data}
+        if isinstance(data, dict):
+            data["hotkey"] = dict(item.hotkey)
+    return data
+
+
+def _item_body(item: MenuItem):
+    """The entry's own shape, without the global key."""
     if item.kind == "separator":
         return {"separator": True}
     if item.kind == "header":

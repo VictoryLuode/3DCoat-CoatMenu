@@ -76,8 +76,8 @@ def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
     """Delete modules that a previous version left behind.
 
     Only python files directly part of the extension are considered: ``data/``
-    holds the user's lists and ``actions/lists/`` holds generated launchers (both
-    managed elsewhere and never pruned here).
+    holds the user's config, ``actions/menus/`` and ``actions/shortcuts/`` hold
+    generated launchers (both managed elsewhere and never pruned here).
     """
     removed: list[str] = []
     for dirpath, dirnames, filenames in os.walk(ext_dir):
@@ -87,7 +87,7 @@ def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
             if not name.endswith(".py"):
                 continue
             rel = name if rel_dir == "." else f"{rel_dir}/{name}"
-            if rel in shipped or rel.startswith("actions/menus/"):
+            if rel in shipped or rel.startswith(("actions/menus/", "actions/shortcuts/")):
                 continue
             try:
                 os.remove(os.path.join(dirpath, name))
@@ -148,7 +148,8 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
         if dirnames or filenames:
             continue
         rel = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
-        if rel in (".", "data", "actions", "actions/menus", "coatmenu", "coatmenu/core", "coatmenu/ui"):
+        if rel in (".", "data", "actions", "actions/menus", "actions/shortcuts",
+                   "coatmenu", "coatmenu/core", "coatmenu/ui"):
             continue
         try:
             os.rmdir(dirpath)
@@ -238,6 +239,8 @@ def install(documents: str) -> int:
     print(f"  menus          : {info['menus']} ({', '.join(lst.name for lst in config.menus)})")
     print(f"  menu items     : 3 fixed in {p['menu_xml']}, "
           f"{info['menus']} registered by the extension (key included)")
+    if info.get("shortcuts"):
+        print(f"  row shortcuts  : {info['shortcuts']} row(s) with their own key")
     print(f"  startup entry  : {'added' if added else 'already present'} in {p['startup']}")
     print("Restart 3DCoat (or restart the extension from Windows > Panels > Extensions),")
     print("then use Scripts > CoatMenu > Show CoatMenu. Each menu takes its key in")

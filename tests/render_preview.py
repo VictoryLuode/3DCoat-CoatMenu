@@ -199,7 +199,7 @@ widget.dismiss()
 app.processEvents()
 
 # 7. the editor panel
-from coatmenu.ui.editor import EDITOR_SIZE, CoatMenuEditor  # noqa: E402
+from coatmenu.ui.editor import EDITOR_SIZE, ROLE_CID, CoatMenuEditor  # noqa: E402
 
 editor_config = starter_config(DOCS)
 editor_config.add_menu("Paint")
@@ -210,6 +210,14 @@ editor.show_editor()
 editor.resize(EDITOR_SIZE)
 editor._source_kind.setCurrentIndex(0)  # the combined 3DCoat command list
 editor.reload_sources()
+# Show a row with its own key: that is how a row earns an entry in 3DCoat's
+# Scripts menu (and a key that works with no menu open).
+editor.refresh_tree()
+for i in range(editor._tree.topLevelItemCount()):
+    node = editor._tree.topLevelItem(i)
+    if node.data(0, ROLE_CID) in ("CastShadows", "$CastShadows"):
+        editor._apply_row_hotkey(node, {"key": "H", "ctrl": True, "shift": True, "alt": False})
+        break
 editor.move(QPoint(60, 60))
 editor._cursor_layer.set_position(QPoint(170, 132))
 app.processEvents()

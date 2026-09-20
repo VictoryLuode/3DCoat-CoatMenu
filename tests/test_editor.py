@@ -72,7 +72,7 @@ os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 from coatmenu.core.config import MenuConfig, Menu  # noqa: E402
 from coatmenu.core.config import sequence_to_hotkey  # noqa: E402
 from coatmenu.core.menu_model import MenuItem  # noqa: E402
-from coatmenu.ui.editor import ROLE_KIND, CoatMenuEditor, HotkeyDialog  # noqa: E402
+from coatmenu.ui.editor import ROLE_CID, ROLE_KIND, CoatMenuEditor, HotkeyDialog  # noqa: E402
 
 failures: list[str] = []
 
@@ -394,6 +394,52 @@ dialog._clear()
 check(dialog.hotkey() == {}, "Clear gives no key at all")
 dialog.deleteLater()
 
+print("== a row can have its own key ==")
+editor.select_menu("Sculpt")
+editor.refresh_tree()
+# Find the row by its command id, not by position: earlier test steps have been
+# dragging rows around and adding new ones.
+row_node = next(
+    editor._tree.topLevelItem(i)
+    for i in range(editor._tree.topLevelItemCount())
+    if editor._tree.topLevelItem(i).data(0, ROLE_CID) == "Resample"
+)
+check(row_node.text(1) == "", f"a row starts with no key ({row_node.text(1)!r})")
+editor._tree.setCurrentItem(row_node)
+editor._apply_row_hotkey(row_node, sequence_to_hotkey("Shift+A"))
+check(row_node.text(1) == "Shift+A", f"the key shows in the row's second column ({row_node.text(1)})")
+# The key must survive the tree -> model trip, or saving would drop it.
+roundtrip = editor._item_from_node(row_node)
+check(roundtrip.hotkey == {"key": "A", "ctrl": False, "shift": True, "alt": False},
+      f"and survives the tree round trip ({roundtrip.hotkey})")
+check(editor._tree.columnCount() == 2, "the tree keeps the key in its own column")
+
+from coatmenu.core import menus_registry as reg2  # noqa: E402
+keyed = reg2.shortcut_rows(editor._config)
+check(len(keyed) == 1, f"only the keyed row counts as a shortcut ({len(keyed)})")
+menu_name, item_id, script_name, item = keyed[0]
+check(item_id == "CoatMenu_Sculpt_Resample", f"its id names menu and row ({item_id})")
+
+short_dir = os.path.join(os.path.dirname(paths.entry_scripts_dir()), "shortcuts")
+written, removed = reg2.write_shortcut_scripts(editor._config, short_dir)
+check(len(written) == 1 and os.path.isfile(written[0]),
+      f"one launcher is written for it ({[os.path.basename(w) for w in written]})")
+with open(written[0], encoding="utf-8") as fh:
+    launcher = fh.read()
+check("run_item" in launcher and "_schedule_self_removal" in launcher,
+      "the launcher runs the row and can be re-pressed")
+check("_ROW = " in launcher, "and carries the row it was built from")
+check(reg2.shortcut_entries(editor._config, short_dir)[0][1].startswith("Sculpt:"),
+      "its Scripts entry is labelled with the menu it came from")
+
+# Clearing the key removes it from the shortcut set entirely.
+editor._apply_row_hotkey(row_node, {})
+check(reg2.shortcut_rows(editor._config) == [],
+      "clearing the key takes the row back out of the Scripts menu")
+written2, removed2 = reg2.write_shortcut_scripts(editor._config, short_dir)
+check(len(removed2) == 1 and not os.path.exists(removed2[0]),
+      f"and its launcher is cleaned up ({[os.path.basename(r) for r in removed2]})")
+
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402
 
@@ -412,18 +458,20 @@ check(layer.testAttribute(Qt.WA_TransparentForMouseEvents),
 check(layer.geometry().size() == chrome.rect().size(), "pointer layer covers the panel")
 check(layer.isVisible(), "pointer layer is visible")
 
+# Whether the arrow gets painted is cursor.draw's own business (it checks the
+# system pointer itself, and test_catalog covers it). What belongs here is that
+# the layer tracks the position and survives being painted - comparing screenshots
+# was flaky: an offscreen repaint can differ by a frame anywhere.
 cursor_mod.system_cursor_visible = lambda: False
 layer.set_position(QPoint(40, 40))
-chrome.repaint()
-app.processEvents()
-with_pointer = chrome.grab().toImage()
-
-cursor_mod.system_cursor_visible = lambda: True
-chrome.repaint()
-app.processEvents()
-without_pointer = chrome.grab().toImage()
-check(with_pointer != without_pointer,
-      "editor draws its own pointer only while the system pointer is hidden")
+check(layer._position == QPoint(40, 40), "the pointer layer follows the cursor")
+_blank_event = type("E", (), {})()
+layer.paintEvent(_blank_event)
+layer.set_position(None)
+layer.paintEvent(_blank_event)
+check(layer._position is None, "and clears when there is no position")
+check(layer.testAttribute(Qt.WA_TransparentForMouseEvents),
+      "painting never blocks the rows underneath (still click-through)")
 
 chrome.close_editor()
 check(not chrome._cursor_timer.isActive(), "pointer polling stops when the editor closes")

@@ -63,6 +63,7 @@ from coatmenu.ui import theme
 ROLE_KIND = Qt.UserRole + 1
 ROLE_CID = Qt.UserRole + 2
 ROLE_CMDS = Qt.UserRole + 3
+ROLE_HOTKEY = Qt.UserRole + 4
 
 _TITLE_ROW_HEIGHT = 30
 # Submenu labels we generate carry a row count ("Shade  (3)"); it belongs in the
@@ -407,6 +408,11 @@ class CoatMenuEditor(QWidget):
 
         self._tree = QTreeWidget()
         self._tree.setHeaderHidden(True)
+        # Two columns: the row, and the global key it can be pressed with. Keeping
+        # the key out of the label matters - the label column is edited in place
+        # and written straight back to the config.
+        self._tree.setColumnCount(2)
+        self._tree.setColumnWidth(1, 150)
         self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self._tree.setDragDropMode(QAbstractItemView.InternalMove)
         self._tree.setDefaultDropAction(Qt.MoveAction)
@@ -849,12 +855,16 @@ class CoatMenuEditor(QWidget):
         self._tree.blockSignals(False)
 
     def _node_for(self, item: MenuItem) -> QTreeWidgetItem:
-        node = QTreeWidgetItem([self._label_for(item)])
+        node = QTreeWidgetItem([self._label_for(item), hotkey_label(item.hotkey)])
         node.setData(0, ROLE_KIND, item.kind)
         node.setData(0, ROLE_CID, item.cid or item.path)
+        if item.hotkey:
+            node.setData(0, ROLE_HOTKEY, dict(item.hotkey))
         if item.cmds:
             node.setData(0, ROLE_CMDS, list(item.cmds))
             node.setToolTip(0, "runs in order: " + "  ->  ".join(item.cmds))
+        if item.hotkey:
+            node.setToolTip(1, "pressing this runs the row without opening the menu")
         flags = node.flags() | Qt.ItemIsEditable
         if item.kind == SUBMENU:
             flags |= Qt.ItemIsDropEnabled
@@ -873,8 +883,14 @@ class CoatMenuEditor(QWidget):
             return item.label
         return item.label or item.cid or item.path
 
-    def _on_item_changed(self, node: QTreeWidgetItem, _column: int) -> None:
-        """Mark dirty when a row is renamed in place."""
+    def _on_item_changed(self, node: QTreeWidgetItem, column: int) -> None:
+        """Mark dirty when a row is renamed in place.
+
+        Only column 0 is a real edit: column 1 shows the row's key and is filled in
+        by the editor, so a change there must not be written back as a rename.
+        """
+        if column != 0:
+            return
         kind = node.data(0, ROLE_KIND)
         text = node.text(0).strip()
         if kind == HEADER and text.startswith("[") and text.endswith("]"):
@@ -888,6 +904,15 @@ class CoatMenuEditor(QWidget):
                 for i in range(self._tree.topLevelItemCount())]
 
     def _item_from_node(self, node: QTreeWidgetItem) -> MenuItem:
+        item = self._item_body_from_node(node)
+        # The row's key lives beside the label, not in it, so it has to be carried
+        # across explicitly - otherwise saving would quietly drop every shortcut.
+        key = node.data(0, ROLE_HOTKEY) or {}
+        if item is not None and key:
+            item.hotkey = dict(key)
+        return item
+
+    def _item_body_from_node(self, node: QTreeWidgetItem) -> MenuItem:
         kind = node.data(0, ROLE_KIND) or COMMAND
         text = node.text(0).strip()
         cid = node.data(0, ROLE_CID) or ""
@@ -976,6 +1001,50 @@ class CoatMenuEditor(QWidget):
         self._tree.setCurrentItem(node)
         self._row_menu().exec(self._tree.viewport().mapToGlobal(pos))
 
+    def set_row_hotkey(self) -> None:
+        """Give the selected row a key of its own.
+
+        Unlike a menu's key this one needs no menu open: the row gets its own entry
+        in 3DCoat's Scripts menu, so 3DCoat can fire it from anywhere. Only rows
+        with a key are registered - the rest stay out of that menu entirely.
+        """
+        node = self._tree.currentItem()
+        if node is None:
+            self.set_status("No row selected")
+            return
+        item = self._item_from_node(node)
+        if item is None or not item.clickable:
+            self.set_status("That row does not run anything - a header or separator "
+                            "cannot have a key")
+            return
+        dialog = HotkeyDialog(hotkey_label(item.hotkey), self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        chosen = dialog.hotkey()
+        self._apply_row_hotkey(node, chosen)
+        if chosen:
+            self.set_status(f"'{item.label or item.cid}' will run on "
+                            f"{hotkey_label(chosen)} after the next 3D-Coat start")
+        else:
+            self.set_status(f"Cleared the key for '{item.label or item.cid}'")
+
+    def clear_row_hotkey(self) -> None:
+        node = self._tree.currentItem()
+        if node is None:
+            return
+        self._apply_row_hotkey(node, {})
+        self.set_status("Cleared the row's key")
+
+    def _apply_row_hotkey(self, node: QTreeWidgetItem, hotkey: dict) -> None:
+        """Store it on the node (and show it), and mark the config changed."""
+        node.setData(0, ROLE_HOTKEY, dict(hotkey) if hotkey else {})
+        node.setText(1, hotkey_label(hotkey))
+        if hotkey:
+            node.setToolTip(1, "pressing this runs the row without opening the menu")
+        else:
+            node.setToolTip(1, "")
+        self._mark_dirty()
+
     def _row_menu(self) -> QMenu:
         """The row's context menu.
 
@@ -993,6 +1062,21 @@ class CoatMenuEditor(QWidget):
             "QMenu::item:disabled { color: rgb(130, 130, 130); }")
 
         menu.addAction("Duplicate").triggered.connect(self.duplicate_row)
+
+        # The row's own global key: pressing it runs the row without opening the
+        # menu at all. Only rows that have one show up in 3DCoat's Scripts menu.
+        menu.addSeparator()
+        current_key = item.hotkey if item else {}
+        set_key = menu.addAction(f"Set key\u2026  ({hotkey_label(current_key)})"
+                                 if current_key else "Set key\u2026")
+        set_key.triggered.connect(self.set_row_hotkey)
+        set_key.setEnabled(bool(item and item.clickable))
+        if not (item and item.clickable):
+            set_key.setToolTip("only rows that run something can have a key")
+        clear_key = menu.addAction("Clear key")
+        clear_key.triggered.connect(self.clear_row_hotkey)
+        clear_key.setEnabled(bool(current_key))
+        menu.addSeparator()
 
         copy_to = menu.addMenu("Copy to")
         move_to = menu.addMenu("Move to")

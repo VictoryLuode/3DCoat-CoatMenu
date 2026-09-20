@@ -96,7 +96,10 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
         info["registered"] = register_menu_items(config)
     log(
         f"sync: {info['menus']} menu(s), wrote {len(info['scripts_written'])} launcher(s), "
-        f"removed {len(info['scripts_removed'])}, registered {info.get('registered', '-')}"
+        f"removed {len(info['scripts_removed'])}, "
+        f"shortcuts {info.get('shortcuts', 0)} "
+        f"(wrote {len(info.get('shortcuts_written') or [])}), "
+        f"registered {info.get('registered', '-')}"
     )
     return info
 
