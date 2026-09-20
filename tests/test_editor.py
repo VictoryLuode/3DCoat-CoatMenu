@@ -239,6 +239,43 @@ editor._tree.clearSelection()
 editor.promote_submenu()
 check("submenu row" in editor._status.text(), "a plain row is refused with a hint")
 
+print("== right-click menu: move a row to another list ==")
+source = editor._config.add_list("Source")
+source.items = [MenuItem(label="Moveable", kind="command", cid="MOVEME"),
+                MenuItem(label="Stays", kind="command", cid="STAY")]
+editor._config.add_list("Sink")
+editor.reload_lists()
+editor.select_list("Source")
+editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
+
+row_menu = editor._row_menu()
+move_menu = row_menu.actions()[0].menu()
+check(move_menu is not None and any(a.text().startswith("Sink") for a in move_menu.actions()),
+      "the row menu offers the other lists")
+check(not any(a.text().startswith("Source") for a in move_menu.actions()),
+      "but not the one the row is already in")
+check(row_menu.actions()[-1].text() == "Remove this row",
+      f"plus the row actions ({[a.text() for a in row_menu.actions()]})")
+
+editor.move_selected_to_list("Sink")
+check([i.label for i in editor._config.find("Source").items] == ["Stays"],
+      "the row left the source list")
+check([i.label for i in editor._config.find("Sink").items] == ["Moveable"],
+      "and landed in the target list")
+check(editor.current_list is not None and editor.current_list.name == "Sink",
+      "the editor follows the row so you can see where it went")
+
+editor.select_list("Source")
+editor.add_submenu()
+sub_node = editor._tree.topLevelItem(editor._tree.topLevelItemCount() - 1)
+sub_node.setText(0, "Group")
+sub_node.addChild(editor._node_for(MenuItem(label="Kid", kind="command", cid="KID")))
+editor._tree.setCurrentItem(sub_node)
+editor.move_selected_to_list("Sink")
+moved_sub = editor._config.find("Sink").items[-1]
+check(moved_sub.kind == "submenu" and moved_sub.children[0].cid == "KID",
+      "a moved submenu takes its children with it")
+
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402
 

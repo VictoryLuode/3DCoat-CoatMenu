@@ -226,6 +226,16 @@ if live is not None:
     live.move(editor.x() + editor.width() + 18, editor.y() + 70)
     app.processEvents()
     compose(os.path.join(OUT_DIR, "preview-editor-live.png"), [editor, live])
+# the row's right-click menu (grab it: a popup is not composited with the panel)
+editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
+row_menu = editor._row_menu()
+row_menu.show()
+app.processEvents()
+row_menu.grab().save(os.path.join(OUT_DIR, "preview-row-menu.png"))
+row_menu.close()
+app.processEvents()
+print("wrote preview-row-menu.png")
+
 editor.close_preview()
 editor.close_editor()
 

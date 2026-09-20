@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -307,6 +308,8 @@ class CoatMenuEditor(QWidget):
         self._tree.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
         self._tree.setIndentation(14)
         self._tree.itemChanged.connect(self._on_item_changed)
+        self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(self._show_row_menu)
         box.addWidget(self._tree, 1)
         return panel
 
@@ -741,6 +744,71 @@ class CoatMenuEditor(QWidget):
         self._tree.setCurrentItem(node)
         self._mark_dirty()
         self.set_status("Submenu added - double-click to rename")
+
+    def _show_row_menu(self, pos: QPoint) -> None:
+        """Right-click a row: move it elsewhere, or act on it."""
+        node = self._tree.itemAt(pos)
+        if node is None:
+            return
+        self._tree.setCurrentItem(node)
+        self._row_menu().exec(self._tree.viewport().mapToGlobal(pos))
+
+    def _row_menu(self) -> QMenu:
+        """The row's context menu (built fresh: which lists exist can change)."""
+        node = self._tree.currentItem()
+        item = self._item_from_node(node) if node is not None else MenuItem()
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background: rgba(45, 46, 50, 255); color: rgb(228, 228, 228);"
+            " border: 1px solid rgba(96, 98, 104, 255); padding: 2px; }"
+            "QMenu::item { padding: 4px 18px; }"
+            "QMenu::item:selected { background: rgba(58, 106, 160, 255); }"
+            "QMenu::item:disabled { color: rgb(130, 130, 130); }")
+
+        move = menu.addMenu("Move to list")
+        targets = [lst for lst in self._config.lists if lst is not self.current_list]
+        if targets:
+            for lst in targets:
+                action = move.addAction(f"{lst.name}  ({len(lst.items)})")
+                action.triggered.connect(
+                    lambda _checked=False, name=lst.name: self.move_selected_to_list(name))
+        else:
+            move.setEnabled(False)
+
+        menu.addSeparator()
+        promote = menu.addAction("Promote to its own list")
+        promote.setEnabled(item.kind == SUBMENU and bool(item.children))
+        promote.triggered.connect(self.promote_submenu)
+        menu.addAction("Rename this row").triggered.connect(self.rename_row)
+        menu.addAction("Remove this row").triggered.connect(self.remove_row)
+        return menu
+
+    def move_selected_to_list(self, target_name: str) -> None:
+        """Move the selected row (and anything under it) into another list."""
+        node = self._tree.currentItem()
+        current = self.current_list
+        target = self._config.find(target_name)
+        if node is None or current is None or target is None or target is current:
+            return
+        moved = self._item_from_node(node)
+
+        # Same order as promoting: drop the row from the tree, collect, then hand
+        # the row to its new list - so nothing edited in the tree is lost.
+        parent = node.parent() or self._tree.invisibleRootItem()
+        parent.removeChild(node)
+        self.collect()
+        target.items.append(moved)
+
+        self.reload_lists()
+        self.select_list(target.name)
+        self._mark_dirty()
+        self.set_status(f"'{moved.label}' moved to '{target.name}'")
+
+    def rename_row(self) -> None:
+        """Start editing the selected row's label in place."""
+        node = self._tree.currentItem()
+        if node is not None:
+            self._tree.editItem(node, 0)
 
     def promote_submenu(self) -> None:
         """Move the selected submenu out into a list of its own.
