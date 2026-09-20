@@ -322,6 +322,54 @@ check(abs(centred.x() - _want_x) <= 2 and abs(centred.y() - _want_y) <= 2,
       f"({centred.x()},{centred.y()} vs {_want_x},{_want_y})")
 centred.close_editor()
 
+print("== adding many rows at once ==")
+editor._config.add_menu("Bulk")
+editor.reload_menus()
+editor.select_menu("Bulk")
+editor._source_kind.setCurrentIndex(0)
+editor._search.clear()
+editor.reload_sources()
+shown = editor._source_list.count()
+editor.add_all_sources()
+check(editor._tree.topLevelItemCount() == min(shown, 200),
+      f"Add all appends what the list shows ({editor._tree.topLevelItemCount()} of {shown})")
+check(f"({min(shown, 200)})" in editor._add_all.text(),
+      f"and the button says how many ({editor._add_all.text()})")
+
+editor._config.add_menu("Bulk2")
+editor.reload_menus()
+editor.select_menu("Bulk2")
+editor.reload_sources()
+editor._source_list.setCurrentRow(0)
+editor._source_list.item(1).setSelected(True)
+editor.add_source_item()
+check(editor._tree.topLevelItemCount() == 2,
+      f"a multi-selection is added row for row ({editor._tree.topLevelItemCount()})")
+
+print("== undo / redo ==")
+editor._new_name.setText("Undo Test")
+editor.add_menu()
+editor.select_menu("Undo Test")
+base_rows = editor._tree.topLevelItemCount()
+editor.add_submenu()
+check(editor._tree.topLevelItemCount() == base_rows + 1, "a row was added")
+editor.undo()
+check(editor._tree.topLevelItemCount() == base_rows,
+      f"Ctrl+Z takes it back ({editor._tree.topLevelItemCount()})")
+check(editor.current_menu is not None and editor.current_menu.name == "Undo Test",
+      "and stays on the same menu")
+editor.redo()
+check(editor._tree.topLevelItemCount() == base_rows + 1,
+      f"Ctrl+Shift+Z puts it back ({editor._tree.topLevelItemCount()})")
+editor.undo()
+check(editor._tree.topLevelItemCount() == base_rows, "and undo works again")
+
+# A fresh editor starts with one state and nothing to undo.
+fresh = fresh_editor()
+fresh.undo()
+check("Nothing to undo" in fresh._status.text(), "an untouched editor has nothing to undo")
+fresh.close_editor()
+
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402
 
@@ -394,7 +442,10 @@ check("*" not in editor._title_label.text(), "saving clears the mark")
 print("== the delete key removes the selected row ==")
 editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
 rows_before_delete = editor._tree.topLevelItemCount()
-editor.keyPressEvent(type("E", (), {"key": lambda _s: Qt.Key_Delete})())
+editor.keyPressEvent(type("E", (), {
+    "key": lambda _s: Qt.Key_Delete,
+    "modifiers": lambda _s: Qt.NoModifier,
+})())
 check(editor._tree.topLevelItemCount() == rows_before_delete - 1,
       f"Delete removed the selected row ({editor._tree.topLevelItemCount()})")
 

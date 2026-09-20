@@ -164,6 +164,8 @@ class _CursorLayer(QWidget):
 class CoatMenuEditor(QWidget):
     """Frameless editor panel (one per process)."""
 
+    MAX_UNDO = 30
+
     def __init__(self, config: MenuConfig | None = None) -> None:
         super().__init__(None)
         self._explicit_config = config is not None
@@ -174,6 +176,9 @@ class CoatMenuEditor(QWidget):
         self._dirty = False
         self._preview = None
         self._title_label: QLabel | None = None
+        self._undo: list[str] = []
+        self._redo: list[str] = []
+        self._push_state()  # the starting point Ctrl+Z comes back to
 
         self.setObjectName("coatmenuEditor")
         self.setWindowTitle("CoatMenu")
@@ -220,8 +225,14 @@ class CoatMenuEditor(QWidget):
         root.addLayout(self._build_footer())
 
     def _mark_dirty(self) -> None:
-        """Flag un-saved edits and show it in the title strip."""
+        """Flag un-saved edits, show it in the title strip, and bank an undo point.
+
+        Every edit already calls this, which is why the undo history is hung here
+        instead of at a dozen call sites: one place to keep right.
+        """
         self._dirty = True
+        self.collect()
+        self._push_state()
         self._refresh_title()
 
     def _refresh_title(self) -> None:
@@ -340,13 +351,20 @@ class CoatMenuEditor(QWidget):
         box.addWidget(self._search)
 
         self._source_list = QListWidget()
+        self._source_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._source_list.itemDoubleClicked.connect(lambda _i: self.add_source_item())
-        self._source_list.setToolTip("double-click (or Add \u2192) to append to this menu")
+        self._source_list.setToolTip("double-click (or Add \u2192) to append to this menu; "
+                                     "select several to add them in one go")
         box.addWidget(self._source_list, 1)
 
         add = QPushButton("Add \u2192")
         add.clicked.connect(self.add_source_item)
         box.addWidget(add)
+        self._add_all = QPushButton("Add all")
+        self._add_all.setToolTip("append everything the list is currently showing "
+                                 "(filter first to narrow it down)")
+        self._add_all.clicked.connect(self.add_all_sources)
+        box.addWidget(self._add_all)
         return panel
 
     def _build_footer(self) -> QHBoxLayout:
@@ -488,8 +506,17 @@ class CoatMenuEditor(QWidget):
     # ------------------------------------------------------------------
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
-        """Delete removes the selected row, Escape closes the editor."""
+        """Delete removes the selected row, Escape closes the editor, Ctrl+Z undoes."""
         try:
+            # getattr: the tests drive this with a minimal stand-in event.
+            modifiers = getattr(event, "modifiers", lambda: Qt.NoModifier)()
+            if modifiers & Qt.ControlModifier:
+                if event.key() in (Qt.Key_Z, Qt.Key_Y):
+                    if event.key() == Qt.Key_Y or modifiers & Qt.ShiftModifier:
+                        self.redo()
+                    else:
+                        self.undo()
+                    return
             if event.key() == Qt.Key_Delete:
                 self.remove_row()
                 return
@@ -499,6 +526,61 @@ class CoatMenuEditor(QWidget):
         except Exception:
             log("editor.keyPressEvent failed", exc=True)
         super().keyPressEvent(event)
+
+    # ------------------------------------------------------------------
+    # undo / redo
+    # ------------------------------------------------------------------
+
+    def _push_state(self) -> None:
+        """Remember the state *after* an edit.
+
+        Hung off :meth:`_mark_dirty`, which every edit already calls, so there is
+        no per-action bookkeeping to forget. Undo then means "drop the newest state
+        and go back to the one before it".
+        """
+        try:
+            state = json.dumps(self._config.to_json(), sort_keys=True)
+        except Exception:
+            return
+        if self._undo and self._undo[-1] == state:
+            return
+        self._undo.append(state)
+        del self._undo[:-self.MAX_UNDO]
+        self._redo.clear()
+
+    def _restore(self, state: str) -> None:
+        self._config = MenuConfig.from_json(json.loads(state))
+        self._index = min(self._index, max(0, len(self._config.menus) - 1))
+        self.reload_menus()
+        self._dirty = True
+        self._refresh_title()
+
+    def undo(self) -> None:
+        """Step back one edit (Ctrl+Z)."""
+        if len(self._undo) < 2:
+            self.set_status("Nothing to undo")
+            return
+        try:
+            self._redo.append(self._undo.pop())
+            self._restore(self._undo[-1])
+        except Exception as exc:
+            self.set_status(f"Undo failed: {exc}")
+            return
+        self.set_status("Undid the last edit - Save & apply to keep it")
+
+    def redo(self) -> None:
+        """Step forward again (Ctrl+Shift+Z or Ctrl+Y)."""
+        if not self._redo:
+            self.set_status("Nothing to redo")
+            return
+        try:
+            state = self._redo.pop()
+            self._undo.append(state)
+            self._restore(state)
+        except Exception as exc:
+            self.set_status(f"Redo failed: {exc}")
+            return
+        self.set_status("Redid the edit - Save & apply to keep it")
 
     def preview_menu(self) -> None:
         """Show the current rows exactly as the menu will open them.
@@ -627,6 +709,7 @@ class CoatMenuEditor(QWidget):
         self._new_name.clear()
         self._index = self._config.menus.index(lst)
         self.reload_menus()
+        self._mark_dirty()
         self.set_status(f"Added menu '{lst.name}'")
 
     def rename_menu(self) -> None:
@@ -640,6 +723,7 @@ class CoatMenuEditor(QWidget):
         self._config.rename_menu(target.name, new_name)
         self._new_name.clear()
         self.reload_menus()
+        self._mark_dirty()
         self.set_status(f"Renamed to '{self.current_menu.name}'")
 
     def remove_menu(self) -> None:
@@ -651,6 +735,7 @@ class CoatMenuEditor(QWidget):
             return
         self._index = max(0, self._index - 1)
         self.reload_menus()
+        self._mark_dirty()
         self.set_status(f"Removed menu '{target.name}'")
 
     def move_menu(self, delta: int) -> None:
@@ -660,6 +745,7 @@ class CoatMenuEditor(QWidget):
         if self._config.move_menu(target.name, delta):
             self._index = self._config.menus.index(target)
             self.reload_menus()
+            self._mark_dirty()
 
     # ------------------------------------------------------------------
     # rows
@@ -737,11 +823,36 @@ class CoatMenuEditor(QWidget):
         return MenuItem(label=text, kind=COMMAND, cid=cid or text)
 
     def add_source_item(self) -> None:
-        entry = self._source_list.currentItem()
-        if entry is None:
+        """Append the selected catalog rows (multi-select works)."""
+        entries = self._source_list.selectedItems()
+        if not entries:
             self.set_status("Pick something on the right")
             return
+        added = sum(1 for entry in entries if self._append_source_entry(entry))
+        if added:
+            self._mark_dirty()
+        self.set_status(f"Added {added} row(s)")
+
+    def add_all_sources(self) -> None:
+        """Append everything the source list is showing.
+
+        Filter first to keep it to a group - this is how a whole 3DCoat menu
+        section (22 Freeze commands, say) lands in one click instead of 22.
+        """
+        entries = [self._source_list.item(i) for i in range(self._source_list.count())]
+        if not entries:
+            self.set_status("Nothing to add")
+            return
+        added = sum(1 for entry in entries if self._append_source_entry(entry))
+        if added:
+            self._mark_dirty()
+        self.set_status(f"Added all {added} row(s)")
+
+    def _append_source_entry(self, entry) -> bool:
+        """Turn one catalog row into a menu row (into the selected submenu, if any)."""
         cid = entry.data(Qt.UserRole) or ""
+        if not cid:
+            return False
         stored_kind = entry.data(Qt.UserRole + 2) or ""
         source = self._source_kind.currentIndex()
         # A stored kind wins: the LKS source mixes commands and scripts, so the
@@ -749,17 +860,15 @@ class CoatMenuEditor(QWidget):
         kind = stored_kind or (SCRIPT if source == 4 else
                                (PRESET if source == 2 else COMMAND))
         label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
-        new_item = MenuItem(label=label, kind=kind, cid=cid, path=cid if kind == SCRIPT else "")
-
+        node = self._node_for(MenuItem(label=label, kind=kind, cid=cid,
+                                       path=cid if kind == SCRIPT else ""))
         parent = self._tree.currentItem()
-        node = self._node_for(new_item)
         if parent is not None and parent.data(0, ROLE_KIND) == SUBMENU:
             parent.addChild(node)
             parent.setExpanded(True)
         else:
             self._tree.addTopLevelItem(node)
-        self._mark_dirty()
-        self.set_status(f"Added {label}")
+        return True
 
     def add_submenu(self) -> None:
         node = self._node_for(MenuItem(label="New submenu", kind=SUBMENU))
@@ -1009,6 +1118,8 @@ class CoatMenuEditor(QWidget):
             if shown >= 2000:
                 break
         self._sources_loaded = True
+        self._add_all.setText(f"Add all ({shown})")
+        self._add_all.setEnabled(shown > 0)
         self.set_status(f"{shown} of {len(rows)} source(s)")
 
     # ------------------------------------------------------------------
