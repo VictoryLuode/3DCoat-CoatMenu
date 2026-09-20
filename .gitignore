@@ -10,3 +10,6 @@ desktop.ini
 
 # local scratch
 *.log
+
+# build output (python tools/make_release.py)
+dist/

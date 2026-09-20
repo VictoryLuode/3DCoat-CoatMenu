@@ -3,99 +3,98 @@
 > Custom pop-up action menus for **3D-Coat** — at the cursor, from a hotkey.
 
 CoatMenu is the 3D-Coat sibling of [Krita **MenuBelt**](https://github.com/VictoryLuode/Krita-Menubelt):
-you build your own lists of 3D-Coat commands and scripts, then reach them from a
-frameless overlay that appears where your cursor is.
+you build your own menus out of 3D-Coat commands, tools, presets and scripts, then
+reach them from a frameless overlay that appears where your cursor is.
 
-Press the hotkey once: the menu appears at your cursor and **stays** after you
-release the key. Click an entry to run it — in a pie you can also press its
-digit — or click anywhere else / press `Esc` to close.
+Press the hotkey once: the menu appears and **stays** after you let the key go.
+Click an entry to run it — in a pie you can also press its digit — or click
+anywhere else / press `Esc` to close.
 
-> **Status: M3.** Multiple lists, submenus, per-list hotkeys, a drag-and-drop
-> editor and a radial **pie** renderer are in.
+A **menu** is the thing you build. `List` and `Pie` are only the two forms it can
+take.
 
 ## Demo
 
-Index (one row per list), a list opened as a submenu, and a single list flat:
+A menu opened as a list, and the same kind of menu as a radial pie — the wheel is
+centred on the cursor, so every slot is the same distance away:
 
-![CoatMenu index](docs/preview-popup.png)
-![CoatMenu submenu](docs/preview-submenu.png)
 ![CoatMenu list](docs/preview-list.png)
-
-The same list as a radial pie — the highlighted segment carries the accent dot
-that marks a submenu (rest on it for a moment and the child panel unfolds):
-
 ![CoatMenu pie](docs/preview-pie.png)
+
+A pie with a submenu (rest on a slot for a moment and the child panel unfolds),
+and 3D-Coat's own `Prims` flattened onto the menu — built-in shapes right there,
+mesh and FFD folded into a submenu:
+
 ![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
-
-The `Prims` list (ported from the LKS add-on's Add-Prims menu) — the built-in
-shapes sit straight on the menu, while mesh and FFD stay folded into submenus:
-
 ![CoatMenu Prims](docs/preview-prims.png)
-![CoatMenu Prims, a group submenu](docs/preview-prims-submenu.png)
 
-The editor:
+The editor — every menu is a row on the left, the command catalog on the right:
 
 ![CoatMenu editor](docs/preview-editor.png)
 
-*(previews rendered offscreen from real 3D-Coat data — the same lists the
+…with a live preview that shows a menu exactly as it will open, un-saved edits
+included:
+
+![CoatMenu live preview](docs/preview-editor-live.png)
+
+*(previews rendered offscreen from real 3D-Coat data — the same menus the
 extension builds on this machine)*
 
 ## Highlights
 
-* **Rows at the cursor** — a frameless, always-on-top overlay that never takes
-  focus from 3D-Coat.
-* **Blender-style interaction** — the menu opens under the cursor and **stays**
-  after you let the key go: `↑`/`↓` + `Enter` drive it, `1..9` run the N-th entry,
-  `Esc` steps back out one level at a time (submenu → menu), right-click cancels,
-  and entries fire on mouse *release*, so press-drag-release works like Blender's.
-  A click away still reaches 3DCoat.
-* **Multiple menus, each with its own hotkey** — `Sculpt`, `Paint`, whatever you
-  want; each becomes its own entry in 3DCoat's menu (and so in
-  Preferences ▸ Hotkeys). A *menu* is the thing you build; `List` and `Pie` are
-  only how it opens.
-* **Rows *or* a pie** — each list opens as a vertical list or as a radial pie
-  (pick per list in the editor). The pie is laid out the way Blender's is:
-  rounded buttons around a small centre ring, each showing its `1..9` shortcut,
-  so you can hit the digit instead of aiming. The ring grows with the label
-  widths (button spacing is `2*R*sin(pi/N)`) so buttons can never overlap. A slot
-  that is a small group (three children or fewer) stacks its buttons in place, the
-  way Blender's Shading pie shows Material/Wireframe; bigger groups still unfold
-  into a panel beside the wheel.
-* **Multi-step rows** — a row can fire several 3DCoat commands in order, which
-  is how primitives work ("neutralise the tool → open the primitive tool → pick
-  the shape"). The bundled `Prims` list is a port of the LKS add-on's Add-Prims
-  menu built from exactly that.
-* **Submenus** — a row (or wedge) can open a child panel (nested, hover to open,
-  grace timer so diagonal mouse moves don't close it; in a pie a short dwell
-  unfolds it).
-* **Built-in editor** — add rows from 3D-Coat's own command catalog
-  (3D-Coat's own menu definitions → **900+ commands**, hotkey ids, `CustomMenu`
-  entries, tool presets, scripts), with readable names taken from `English.xml`;
-  drag to reorder, double-click to rename, nest submenus, import/export, save &
-  apply.
-* **Keyboard and wheel** — a long list scrolls (the panel caps itself so the last
-  rows are always reachable): wheel or `↑`/`↓` to scroll/move, `Enter` opens a
-  group or runs the entry, `1..9` runs the N-th row (in a pie the digit is printed
-  on the slot).
-* **Live preview** — the editor's `Preview` button opens the current list exactly
-  as it will appear (list or pie, un-saved edits included). That panel never runs
-  anything, so it is safe to poke at the layout while editing.
-* **Diagnostics built in** — the editor shows each list's hotkey next to its name
-  and flags two lists fighting over one key, and `Scripts ▸ CoatMenu ▸
-  CoatMenu_Doctor` writes a full report (paths, startup state, catalog sizes,
-  per-list rows/keys, clashes, log tail) to `data/doctor.txt`.
-* **Shared list format** — the same JSON shape as Krita
-  [MenuBelt](https://github.com/VictoryLuode/Krita-MenuBelt), so lists move
-  between the two add-ons.
-* **Never touches your hotkeys file** — `Options_Hotkeys.xml` is read-only.
+* **At the cursor** — a frameless, always-on-top overlay that never takes focus
+  from 3D-Coat.
+* **Blender-style interaction** — the menu opens on the hotkey and **stays** after
+  you release it: `↑`/`↓` + `Enter` drive it, `1..9` run the N-th entry, `Esc`
+  steps back out one level at a time (submenu → menu), right-click cancels, and
+  entries fire on mouse *release*, so press-drag-release works like Blender's. A
+  click away still reaches 3D-Coat.
+* **Several menus, each with its own hotkey** — each becomes its own entry in
+  3D-Coat's `Scripts ▸ CoatMenu` list (and so in Preferences ▸ Hotkeys). A list
+  hangs from the cursor; a **pie is centred on it**, Blender-style.
+* **Rows *or* a pie** — pick per menu. The pie is laid out the way Blender's is:
+  rounded buttons around a small centre ring, each showing its `1..9` shortcut, so
+  you can hit the digit instead of aiming. The ring grows with the label widths
+  (spacing is `2*R*sin(pi/N)`) so buttons can never overlap. A slot that is a small
+  group (three children or fewer) stacks its buttons in place, the way Blender's
+  Shading pie shows Material/Wireframe; bigger groups unfold into a panel beside
+  the wheel.
+* **Multi-step rows** — a row can fire several 3D-Coat commands in order, which is
+  how primitives work ("neutralise the tool → open the primitive tool → pick the
+  shape"). The bundled `Prims` menu is a port of the LKS add-on's Add-Prims menu
+  built from exactly that.
+* **Submenus**, nested, unfold on hover (with a grace timer so diagonal mouse
+  moves don't close them); in a pie a short dwell opens them. **Promote** turns a
+  submenu into a menu of its own, hotkey and all.
+* **Editor** — add rows from five sources, with readable names:
+  | Source | What it gives you |
+  |---|---|
+  | 3D-Coat commands | 3D-Coat's own menu definitions — **900+ commands** |
+  | My tools | the tools from 3D-Coat's `CustomTools` panel |
+  | Presets | your saved tool presets (tool + parameter snapshots) |
+  | LKS menus | the LKS add-on's radial menus, imported read-only |
+  | Scripts | your own scripts (other extensions' internals are skipped) |
+  Plus drag-to-reorder, double-click to rename, multi-select, **Add all** (a whole
+  section in one click), **undo/redo** (`Ctrl+Z`), import/export, save & apply, and
+  a right-click row menu (duplicate, copy/move to another menu, insert below,
+  promote, rename, delete).
+* **Keyboard and wheel** — a long list caps its height and scrolls, so the last
+  rows are always reachable.
+* **Diagnostics built in** — the editor shows each menu's hotkey next to its name
+  and flags two menus fighting over one key; `Scripts ▸ CoatMenu ▸
+  CoatMenu_Doctor` writes a full report (paths, startup state, catalog sizes, rows
+  and keys per menu, clashes, a tool-switch probe, log tail) to `data/doctor.txt`.
+* **Never touches your hotkeys file** — `Options_Hotkeys.xml` is opened read-only,
+  never written. The file is easy to corrupt and 3D-Coat itself has done it before.
 
 ## Install
 
-**Requirements:** 3D-Coat 2025 (ships its own Python 3.11 + PySide6 — nothing to
+**Requirements:** 3D-Coat 2025 (it ships its own Python 3.11 + PySide6 — nothing to
 install).
 
-1. Clone or unzip this repository.
-2. Run the installer:
+1. Grab the release zip from Releases (or build one with
+   `python tools/make_release.py`), or clone this repository.
+2. Run the installer from the unzipped folder:
 
    ```
    install\install.cmd
@@ -112,15 +111,18 @@ install).
    line to `Scripts\cExtensions\startup.txt` (the previous file is backed up
    first). Nothing outside 3D-Coat's user folder is touched.
 3. Restart 3D-Coat.
-4. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
-5. Optional: bind a key to that item in **Preferences ▸ Hotkeys**. With a key
-   bound, the overlay supports *hold to open, release to run*.
+4. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu** (or **Edit menus** to build yours).
+5. Optional: in **Preferences ▸ Hotkeys**, bind a key to `Show CoatMenu` and to any
+   `CoatMenu_<Menu>` entry.
 
 Uninstall:
 
 ```
 install\install.cmd --uninstall
 ```
+
+Your `data/menus.json` is backed up next to the extension instead of being
+deleted.
 
 ## How it works
 
@@ -130,27 +132,31 @@ install\install.cmd --uninstall
 * The overlay is a frameless, always-on-top `Qt.ToolTip` widget, never a normal
   window: no title bar, no taskbar entry, and it never takes focus away from
   3D-Coat.
-* Keyboard is read with `GetAsyncKeyState` polling instead of `grabKeyboard()`,
-  so 3D-Coat keeps receiving its own keys.
+* Keyboard is read with `GetAsyncKeyState` polling instead of `grabKeyboard()`, so
+  3D-Coat keeps receiving its own keys.
 * Entries run through `coat.ui.cmd("$CommandID")`; script entries go through
-  `coat.io.executeScript`.
-* Every list gets a **generated launcher script** (`actions/lists/<slug>.py`) plus
-  a menu item in `Scripts/ExtraMenuItems/CoatMenu.xml`, because a 3D-Coat menu item
-  points at a file and one file cannot know which list it belongs to. Saving in the
-  editor also calls `coat.ui.insertInMenu` so the new items exist right away.
-* Your lists live in `<ext>/data/lists.json`; uninstalling backs that file up
-  instead of deleting it.
-* `Preferences/Options_Hotkeys.xml` is **read only** — CoatMenu never writes to
-  it (that file is easy to corrupt).
+  `coat.io.executeScript`; presets through `coat.AppOptions.ActivateToolPreset`.
+* Every menu gets a **generated launcher script**
+  (`actions/menus/CoatMenu_<Menu>.py`) plus a menu item in
+  `Scripts/ExtraMenuItems/CoatMenu.xml`, because a 3D-Coat menu item points at a
+  file and one file cannot know which menu it belongs to. Saving in the editor also
+  calls `coat.ui.insertInMenu` so new items exist right away.
+* Your menus live in `<ext>/data/menus.json`.
+* The command catalog is cached for the session, so switching source in the editor
+  is instant (3D-Coat's 7711-entry translation table is parsed once).
 
 ## Roadmap
 
 | Stage | Content |
 |---|---|
-| ✔ M1 | extension skeleton, cursor overlay, linear list, click/hold/`Esc`, installer, tests |
-| ✔ M2 | `data/lists.json`, multi-list + per-list hotkeys, submenus, built-in editor (sources, drag-and-drop, import/export), generated launchers |
-| ✔ M3 | radial pie renderer (same data), dwell submenus, per-list list/pie switch |
-| M4 | conflict detection, live preview, packaging, README polish |
+| ✔ M1 | extension skeleton, cursor overlay, linear menu, click/hold/`Esc`, installer, tests |
+| ✔ M2 | `data/menus.json`, several menus + per-menu hotkeys, submenus, editor (sources, drag-and-drop, import/export), generated launchers |
+| ✔ M3 | radial pie renderer (same data), dwell submenus, per-menu list/pie switch |
+| ✔ M4 | Blender-style interaction, live preview, tools/presets/LKS sources, conflict detection, doctor report |
+| M5 | packaging and polish (this pass) |
+
+A screen-edge menu belt was considered and dropped — the overlay-at-the-cursor
+idea covers the same ground with less to hit by accident.
 
 ## Tests
 
@@ -162,15 +168,17 @@ Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
 
 | Suite | Covers |
 |---|---|
-| `test_catalog.py` | hotkey/`CustomMenu`/script parsing, key-code mapping, trigger-key lookup |
-| `test_config.py` | list model, JSON round trip, launcher + menu-XML generation, stale cleanup |
-| `test_popup.py` | layout, hit testing, hover, click-to-run, trigger release, `Esc`, submenus, pie geometry (drawn = hit) |
-| `test_editor.py` | view↔model round trip, list ops, source catalog, save & reload |
+| `test_catalog.py` | command/menu/hotkey/script parsing, readable names, key-code mapping |
+| `test_config.py` | menu model, JSON round trip, launcher + menu-XML generation, stale cleanup |
+| `test_popup.py` | layout, hit testing, hover, click-to-run, release-to-run, `Esc`, submenus, pie geometry (drawn = hit), centring |
+| `test_editor.py` | view↔model round trip, menu ops, catalog sources, Add all, undo/redo, save & reload |
 | `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
 | `test_install.py` | install/reinstall/uninstall into a throwaway tree (other extensions untouched) |
+| `test_installed_copy.py` | the copy actually installed under `Documents/3DCoat` |
 
 `tests/render_preview.py` renders the overlay and editor against the real data on
-the machine and writes the PNGs used above.
+the machine and writes the PNGs used above. `tools/make_release.py` builds the
+release zip.
 
 ## License
 

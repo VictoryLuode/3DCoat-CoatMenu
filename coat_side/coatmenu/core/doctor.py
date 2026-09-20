@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import time
 
+from coatmenu import __version__
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, menus, paths
 from coatmenu.core.log import log, log_path
@@ -137,6 +138,7 @@ def report(config=None) -> str:
 
     out: list[str] = [
         "CoatMenu doctor",
+        f"  version       : {__version__}",
         f"  time          : {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"  extension     : {paths.extension_root()}",
         f"  data          : {paths.data_dir()}",
