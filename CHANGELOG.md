@@ -2,6 +2,18 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.5.1 — 2026-09-20
+
+### Fixed
+
+- **Menu entries were not registered at all.** The previous change routed them
+  through a menu-building hook that this 3D-Coat build never calls, and the
+  registration function then died on a missing import before doing anything. Between
+  the two, every per-menu entry disappeared — so a key bound to it did nothing,
+  which is what "the shortcuts I set do not work" turned out to be. Entries are back
+  on the runtime path (`coat.ui.insertInMenu`), and a key is applied immediately
+  after its own entry. **Do not use v0.5.0** — install this instead.
+
 ## v0.5.0 — 2026-09-20
 
 ### Changed
