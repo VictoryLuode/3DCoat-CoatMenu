@@ -439,13 +439,32 @@ class CoatMenuEditor(QWidget):
         self.reload_menus()
         if self._dirty:
             self.set_status("un-saved edits kept - press Save & apply")
-        self._clamp_to_screen()
+        self.center_on_screen()
         self.show()
+        # Qt can adjust the frame size once the window is mapped; centring again in
+        # the same event-loop turn keeps it exact without a visible jump.
+        QTimer.singleShot(0, self.center_on_screen)
         self.raise_()
         self.setWindowOpacity(1.0)
         self._cursor_layer.setGeometry(self.rect())
         self._cursor_layer.raise_()
         self._cursor_timer.start()
+
+    def center_on_screen(self) -> None:
+        """Put the panel in the middle of the screen.
+
+        The editor is opened from a menu entry, so there is no cursor position to
+        anchor it to - and 3DCoat hides the pointer in brush mode anyway. The
+        middle of the screen is the one place that is always easy to find.
+        """
+        try:
+            area = QGuiApplication.primaryScreen().availableGeometry()
+        except Exception:
+            return
+        x = int(area.left() + (area.width() - self.width()) / 2)
+        y = int(area.top() + (area.height() - self.height()) / 2)
+        # A panel bigger than the screen would land off the top-left corner.
+        self.move(max(area.left(), x), max(area.top(), y))
 
     def _clamp_to_screen(self) -> None:
         """Keep the panel on screen - at 1240px it can hang off the right edge."""

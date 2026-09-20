@@ -308,6 +308,20 @@ check(editor._tree.topLevelItemCount() == before + 1, "Add below inserts beside 
 check(editor._tree.currentItem().data(0, ROLE_KIND) == "separator",
       "as the kind that was asked for")
 
+print("== the editor opens centred ==")
+from PySide6.QtGui import QGuiApplication as _QGA  # noqa: E402
+
+centred = fresh_editor()
+centred.show_editor()
+app.processEvents()
+_area = _QGA.primaryScreen().availableGeometry()
+_want_x = max(_area.left(), int(_area.left() + (_area.width() - centred.width()) / 2))
+_want_y = max(_area.top(), int(_area.top() + (_area.height() - centred.height()) / 2))
+check(abs(centred.x() - _want_x) <= 2 and abs(centred.y() - _want_y) <= 2,
+      f"the panel sits in the middle of the screen "
+      f"({centred.x()},{centred.y()} vs {_want_x},{_want_y})")
+centred.close_editor()
+
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402
 
