@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(1,1) scale(0.9167)">
+  <!-- Disc (thin cylinder viewed from slight angle) -->
+  <!-- Top face (ellipse) -->
+  <ellipse cx="12" cy="9" rx="7.5" ry="2.8" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.8"/>
+  <!-- Bottom face -- front half arc only -->
+  <path d="M 4.5 15.5 A 7.5 2.8 0 0 0 19.5 15.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <!-- Side edges -->
+  <line x1="4.5" y1="9" x2="4.5" y2="15.5" stroke-width="1.6"/>
+  <line x1="19.5" y1="9" x2="19.5" y2="15.5" stroke-width="1.6"/>
+  </g>
+</svg>

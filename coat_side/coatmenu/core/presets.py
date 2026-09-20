@@ -1,15 +1,15 @@
 """
 CoatMenu - built-in preset lists.
 
-The ``Prims`` list is a port of the LKS extension's "Add Prims" radial menu
-(``LKS/data/library/radial_menus/LKS_Radial_AddPrims.json``).  LKS fires three
+The ``Prims`` list is a port of a radial "Add Prims" menu that shipped with an
+older extension.  It fires three
 3DCoat commands in order for every entry, and this port keeps that exact order:
 
     $SCULPT_TRANSFORM                      neutralise whatever tool is active
     $SCULP_PRIM   /  $SCULP_MERGE          open the primitive / merge tool
     $VoxelSculptTool::prm_*  /  $select_*  pick the shape
 
-Those command strings are 3DCoat's own UI ids (LKS's
+Those command strings are 3DCoat's own UI ids (that extension's
 ``utils/primitives_constants.py``: "magic strings observed via RMB+MMB on UI
 elements"), so nothing here is invented - the sequence is the part 3DCoat needs
 to make the pick land.
@@ -29,7 +29,7 @@ from coatmenu.core.menu_model import (
     submenu,
 )
 
-# --- command ids (from LKS utils/primitives_constants.py) --------------------
+# --- command ids (from the same radial menu's constants) ----------------------
 NEUTRALISE = "$SCULPT_TRANSFORM"
 PRIM_TOOL = "$SCULP_PRIM"
 MERGE_TOOL = "$SCULP_MERGE"
@@ -74,7 +74,7 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # so the installer refreshes the user's copy (a hand-built list of the same name
 # has no marker and is never touched).
 PRESET_MARKERS = {"Common": "common/1", "Prims": "prims/2", "Tools": "tools/1",
-                  "Presets": "presets/1", "LKS": "lks/1"}
+                  "Presets": "presets/1"}
 
 
 def builtin_row(label: str, param: str) -> MenuItem:
@@ -90,7 +90,7 @@ def ffd_row(label: str, param: str) -> MenuItem:
 
 
 def primitive_groups() -> list[tuple[str, list[MenuItem]]]:
-    """(group label, rows) - the three groups LKS groups its pie menu into."""
+    """(group label, rows) - the three groups that menu sorted its rows into."""
     return [
         ("Built-in Prims\u2026", [builtin_row(l, p) for l, p in BUILTIN_PRIMITIVES]),
         ("Mesh Prims\u2026", [mesh_row(l, f) for l, f in MESH_PRIMITIVES]),
@@ -159,23 +159,6 @@ def presets_list(mode: str = LIST) -> Menu:
                     preset=PRESET_MARKERS["Presets"])
 
 
-def lks_list(mode: str = LIST) -> Menu:
-    """The ``LKS`` list: the radial menus from the LKS extension.
-
-    LKS owns those JSON files and its users edit them in place, so this is a
-    read-only import - one submenu per LKS menu, with LKS's own labels and order.
-    """
-    from coatmenu.core import lks
-
-    items: list[MenuItem] = []
-    for menu in lks.read_menus():
-        items.append(submenu(f"{menu.name}  ({len(menu.items)})", menu.items))
-    if not items:
-        items.append(header("no LKS radial menus found"))
-    return Menu(name="LKS", items=items, mode=mode,
-                    preset=PRESET_MARKERS["LKS"])
-
-
 # The main menus whose commands get reached for constantly. Using 3DCoat's own
 # grouping keeps "common" 3DCoat's opinion rather than ours.
 COMMON_MENUS = ("Edit", "View", "Freeze", "Symmetry", "Hide", "Layers")
@@ -213,7 +196,7 @@ def common_list(mode: str = LIST) -> Menu:
 
 
 def install_presets(config: MenuConfig,
-                    names: tuple[str, ...] = ("Common", "Prims", "Tools", "Presets", "LKS")
+                    names: tuple[str, ...] = ("Common", "Prims", "Tools", "Presets")
                     ) -> list[str]:
     """Add missing preset lists, and refresh ones shipped by an older version.
 
@@ -221,7 +204,7 @@ def install_presets(config: MenuConfig,
     hand - even one called ``Prims`` - has no marker and is never touched.
     """
     built = {"Common": common_list, "Prims": primitives_list, "Tools": tools_list,
-             "Presets": presets_list, "LKS": lks_list}
+             "Presets": presets_list}
     added: list[str] = []
     for name in names:
         make = built.get(name)

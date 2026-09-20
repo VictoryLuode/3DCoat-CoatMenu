@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -40,16 +41,22 @@ from PySide6.QtWidgets import (
 
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, menus
-from coatmenu.core import lks as lks_mod
 from coatmenu.core.config import MenuConfig, Menu, item_to_json
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (
     COMMAND,
+    EXPAND_AUTO,
+    EXPAND_LABELS,
+    EXPAND_MODES,
     HEADER,
+    PIE,
     PRESET,
     SCRIPT,
     SEPARATOR,
     SUBMENU,
+    POSITION_AUTO,
+    POSITION_LABELS,
+    POSITION_MODES,
     MenuItem,
     flatten,
 )
@@ -60,6 +67,8 @@ from coatmenu.ui import theme
 ROLE_KIND = Qt.UserRole + 1
 ROLE_CID = Qt.UserRole + 2
 ROLE_CMDS = Qt.UserRole + 3
+ROLE_EXPAND = Qt.UserRole + 5
+ROLE_POSITION = Qt.UserRole + 6
 
 _TITLE_ROW_HEIGHT = 30
 # Submenu labels we generate carry a row count ("Shade  (3)"); it belongs in the
@@ -288,7 +297,7 @@ class CoatMenuEditor(QWidget):
         self._mode_combo.addItems(["List", "Pie"])
         self._mode_combo.setToolTip("How this menu opens: rows (List), or a radial Pie")
         self._mode_combo.currentIndexChanged.connect(self.set_mode_from_combo)
-        row.addWidget(QLabel("as"))
+        row.addWidget(QLabel("Mode"))
         row.addWidget(self._mode_combo)
 
         row.addStretch(1)
@@ -311,6 +320,7 @@ class CoatMenuEditor(QWidget):
             return
         self._config.set_mode(target.name, mode)
         self.save()
+        self._refresh_columns()   # the Where column only applies to a pie
         self.set_status(f"'{target.name}' opens as a {mode}")
 
     def _build_items_panel(self) -> QWidget:
@@ -318,20 +328,38 @@ class CoatMenuEditor(QWidget):
         box = QVBoxLayout(panel)
         box.setContentsMargins(0, 0, 0, 0)
         box.setSpacing(4)
-        box.addWidget(QLabel("Rows (drag to reorder, double-click to rename)"))
+        hint = QLabel("Rows \u2014 drag to reorder, double-click to rename")
+        hint.setToolTip("Expand: how a group unfolds (Auto / Inline / Panel).\n"
+                        "Position: which way a row sits in a pie menu.")
+        box.addWidget(hint)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderHidden(True)
+        self._tree.setHeaderLabels(["Row", "Expand", "Position"])
+        self._tree.setHeaderHidden(False)
         self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self._tree.setDragDropMode(QAbstractItemView.InternalMove)
         self._tree.setDefaultDropAction(Qt.MoveAction)
         self._tree.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
         self._tree.setIndentation(14)
+        # Row takes whatever is left, the two control columns keep a fixed width -
+        # otherwise the tree ends mid-panel with a band of dead space to its right.
+        header = self._tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        self._tree.setColumnWidth(1, 78)
+        self._tree.setColumnWidth(2, 92)
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._show_row_menu)
+        self._tree.model().rowsMoved.connect(self._after_drop)
         box.addWidget(self._tree, 1)
         return panel
+
+    def _after_drop(self, *_args) -> None:
+        """A dropped row can become a group - give it its Expand control."""
+        QTimer.singleShot(0, self._refresh_columns)
 
     def _build_sources_panel(self) -> QWidget:
         panel = QWidget()
@@ -342,7 +370,7 @@ class CoatMenuEditor(QWidget):
 
         self._source_kind = QComboBox()
         self._source_kind.addItems(
-            ["3DCoat commands", "My tools", "Presets", "LKS menus", "Scripts"])
+            ["3DCoat commands", "My tools", "Presets", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -354,6 +382,10 @@ class CoatMenuEditor(QWidget):
         self._source_list = QListWidget()
         self._source_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._source_list.itemDoubleClicked.connect(lambda _i: self.add_source_item())
+        # Entries are long and the panel is narrow: elide instead of offering a
+        # horizontal scrollbar, and show the full text in a tooltip.
+        self._source_list.setTextElideMode(Qt.ElideRight)
+        self._source_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._source_list.setToolTip("double-click (or Add \u2192) to append to this menu; "
                                      "select several to add them in one go")
         box.addWidget(self._source_list, 1)
@@ -666,8 +698,9 @@ class CoatMenuEditor(QWidget):
         self._menu_combo.clear()
         for lst in self._config.menus:
             key = self._bindings.for_menu(lst.name)
+            shape = "  pie" if lst.mode == PIE else ""
             self._menu_combo.addItem(
-                f"{lst.name}  ({len(lst.items)})" + (f"  [{key}]" if key else "")
+                f"{lst.name}  ({len(lst.items)})" + shape + (f"  [{key}]" if key else "")
             )
         self._index = min(self._index, max(0, len(self._config.menus) - 1))
         self._menu_combo.setCurrentIndex(self._index)
@@ -698,6 +731,14 @@ class CoatMenuEditor(QWidget):
         if which < 0:
             return
         self._index = which
+        # Keep the dropdown in step: callers select by name as well as by click. The
+        # combo may not know about this menu yet (it is rebuilt by reload_menus), so
+        # refresh it first rather than setting an index it does not have.
+        if which >= self._menu_combo.count():
+            self.reload_menus()
+        self._menu_combo.blockSignals(True)
+        self._menu_combo.setCurrentIndex(which)
+        self._menu_combo.blockSignals(False)
         self.refresh_tree()
         self._sync_mode_combo()
 
@@ -761,21 +802,123 @@ class CoatMenuEditor(QWidget):
                 self._tree.addTopLevelItem(self._node_for(item))
         self._tree.expandAll()
         self._tree.blockSignals(False)
+        self._refresh_columns()
 
     def _node_for(self, item: MenuItem) -> QTreeWidgetItem:
         node = QTreeWidgetItem([self._label_for(item)])
         node.setData(0, ROLE_KIND, item.kind)
         node.setData(0, ROLE_CID, item.cid or item.path)
+        node.setData(0, ROLE_EXPAND, item.expand)
+        node.setData(0, ROLE_POSITION, item.position)
         if item.cmds:
             node.setData(0, ROLE_CMDS, list(item.cmds))
             node.setToolTip(0, "runs in order: " + "  ->  ".join(item.cmds))
+        elif item.path:
+            node.setToolTip(0, item.path)
+        elif item.cid:
+            node.setToolTip(0, item.cid)
         flags = node.flags() | Qt.ItemIsEditable
-        if item.kind == SUBMENU:
+        if item.kind == SUBMENU or item.children:
             flags |= Qt.ItemIsDropEnabled
         node.setFlags(flags)
         for child in item.children:
             node.addChild(self._node_for(child))
         return node
+
+    # -- the Expand column ---------------------------------------------------
+
+    def _is_group(self, node: QTreeWidgetItem) -> bool:
+        """Rows that can unfold: a submenu, or anything holding children."""
+        if (node.data(0, ROLE_KIND) or COMMAND) == SUBMENU:
+            return True
+        return node.childCount() > 0
+
+    def _expand_combo(self, node: QTreeWidgetItem) -> QComboBox:
+        """A fresh combo for one row, wired to write back into the node."""
+        combo = QComboBox()
+        for mode in EXPAND_MODES:
+            combo.addItem(EXPAND_LABELS[mode], mode)
+        current = node.data(0, ROLE_EXPAND) or EXPAND_AUTO
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.setToolTip(
+            "Auto   - small groups open in the slot, big ones open a panel\n"
+            "Inline - always open in the slot (pie) / always unfold\n"
+            "Panel  - always open a separate panel")
+        combo.currentIndexChanged.connect(
+            lambda _i, n=node, c=combo: self._on_expand_changed(n, c))
+        return combo
+
+    def _on_expand_changed(self, node: QTreeWidgetItem, combo: QComboBox) -> None:
+        mode = combo.currentData() or EXPAND_AUTO
+        if node.data(0, ROLE_EXPAND) == mode:
+            return
+        node.setData(0, ROLE_EXPAND, mode)
+        self._mark_dirty()
+        self.set_status(f"'{node.text(0).strip()}' unfolds: {EXPAND_LABELS[mode]}")
+
+    def _position_combo(self, node: QTreeWidgetItem) -> QComboBox:
+        """Compass picker for a pie row."""
+        combo = QComboBox()
+        for spot in POSITION_MODES:
+            combo.addItem(POSITION_LABELS[spot], spot)
+        current = node.data(0, ROLE_POSITION) or POSITION_AUTO
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.setToolTip(
+            "Where this row sits in a pie.\n"
+            "Auto spreads the rows evenly, first one straight up.")
+        combo.currentIndexChanged.connect(
+            lambda _i, n=node, c=combo: self._on_position_changed(n, c))
+        return combo
+
+    def _on_position_changed(self, node: QTreeWidgetItem, combo: QComboBox) -> None:
+        spot = combo.currentData() or POSITION_AUTO
+        if node.data(0, ROLE_POSITION) == spot:
+            return
+        node.setData(0, ROLE_POSITION, spot)
+        self._mark_dirty()
+        self.set_status(f"'{node.text(0).strip()}' sits: {POSITION_LABELS[spot]}")
+
+    def _refresh_columns(self) -> None:
+        """Keep the Expand and Where controls in step with the tree.
+
+        Called after a drop (a row can become a group) and after a rebuild, since
+        the widgets do not survive ``clear()``. Where is only meaningful for a pie,
+        so the column hides itself for a list.
+        """
+        menu = self.current_menu
+        pie = bool(menu is not None and menu.mode == PIE)
+        self._tree.setColumnHidden(2, not pie)
+
+        self._tree.blockSignals(True)
+        try:
+            stack = [self._tree.topLevelItem(i)
+                     for i in range(self._tree.topLevelItemCount())]
+            while stack:
+                node = stack.pop()
+                if node is None:
+                    continue
+                stack.extend(node.child(i) for i in range(node.childCount()))
+                if self._is_group(node):
+                    if self._tree.itemWidget(node, 1) is None:
+                        self._tree.setItemWidget(node, 1, self._expand_combo(node))
+                else:
+                    self._tree.removeItemWidget(node, 1)
+                    node.setData(0, ROLE_EXPAND, EXPAND_AUTO)
+
+                if pie and (node.data(0, ROLE_KIND) or COMMAND) not in (SEPARATOR, HEADER):
+                    if self._tree.itemWidget(node, 2) is None:
+                        self._tree.setItemWidget(node, 2, self._position_combo(node))
+                else:
+                    self._tree.removeItemWidget(node, 2)
+                    node.setData(0, ROLE_POSITION, POSITION_AUTO)
+        finally:
+            self._tree.blockSignals(False)
+
+    # kept for callers that only care about the Expand side
+    def _refresh_expand_column(self) -> None:
+        self._refresh_columns()
 
     @staticmethod
     def _label_for(item: MenuItem) -> str:
@@ -805,15 +948,23 @@ class CoatMenuEditor(QWidget):
         kind = node.data(0, ROLE_KIND) or COMMAND
         text = node.text(0).strip()
         cid = node.data(0, ROLE_CID) or ""
+        expand = node.data(0, ROLE_EXPAND) or EXPAND_AUTO
+        position = node.data(0, ROLE_POSITION) or POSITION_AUTO
 
         if kind == SEPARATOR:
             return MenuItem(kind=SEPARATOR)
         if kind == HEADER:
             label = text[1:-1] if text.startswith("[") and text.endswith("]") else text
             return MenuItem(label=label, kind=HEADER)
-        if kind == SUBMENU:
-            children = [self._item_from_node(node.child(i)) for i in range(node.childCount())]
-            return MenuItem(label=text, kind=SUBMENU, children=children)
+
+        # A row holding children is a group whatever its original kind: dragging a
+        # command onto another one makes it a submenu, and its children must survive
+        # the round trip.
+        children = [self._item_from_node(node.child(i)) for i in range(node.childCount())]
+        if children or kind == SUBMENU:
+            return MenuItem(label=text, kind=SUBMENU, children=children,
+                            expand=expand, position=position)
+
         if kind == SCRIPT:
             return MenuItem(label=text, kind=SCRIPT, path=cid, cid=cid)
         if kind == PRESET:
@@ -821,7 +972,7 @@ class CoatMenuEditor(QWidget):
         cmds = node.data(0, ROLE_CMDS) or []
         if cmds:
             return MenuItem(label=text, kind=COMMAND, cid=cid, cmds=list(cmds))
-        return MenuItem(label=text, kind=COMMAND, cid=cid or text)
+        return MenuItem(label=text, kind=COMMAND, cid=cid or text, position=position)
 
     def add_source_item(self) -> None:
         """Append the selected catalog rows (multi-select works)."""
@@ -856,9 +1007,9 @@ class CoatMenuEditor(QWidget):
             return False
         stored_kind = entry.data(Qt.UserRole + 2) or ""
         source = self._source_kind.currentIndex()
-        # A stored kind wins: the LKS source mixes commands and scripts, so the
-        # row knows what it is better than the dropdown does.
-        kind = stored_kind or (SCRIPT if source == 4 else
+        # A stored kind wins: a source can mix commands and scripts, so the row
+        # knows what it is better than the dropdown does.
+        kind = stored_kind or (SCRIPT if source == 3 else
                                (PRESET if source == 2 else COMMAND))
         label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
         node = self._node_for(MenuItem(label=label, kind=kind, cid=cid,
@@ -1088,18 +1239,6 @@ class CoatMenuEditor(QWidget):
             for entry in catalog.read_presets():
                 rows.append((f"{entry.label}  \u2014  preset", entry.cid, entry.label,
                              PRESET))
-        elif kind == 3:
-            # The LKS extension's radial menus, flattened. LKS rows carry their
-            # own kind, so a script stays a script when you add it.
-            flat: list[MenuItem] = []
-            for menu in lks_mod.read_menus():
-                flat.extend(flatten(menu.items))
-            for row in flat:
-                if not row.clickable:
-                    continue
-                target = row.path or row.cid
-                rows.append((f"{row.label}  \u2014  {target}   [LKS]", target,
-                             row.label, row.kind))
         else:
             for entry in catalog.read_script_commands():
                 rows.append((entry.label, entry.cid, os.path.basename(entry.cid),
@@ -1113,6 +1252,8 @@ class CoatMenuEditor(QWidget):
             node.setData(Qt.UserRole, cid)
             node.setData(Qt.UserRole + 1, label)
             node.setData(Qt.UserRole + 2, item_kind)
+            # The list is narrow and the entries are long; hovering shows the whole
+            # thing rather than making you drag the horizontal scrollbar.
             node.setToolTip(text)
             self._source_list.addItem(node)
             shown += 1

@@ -61,7 +61,9 @@ for _font_file in ("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/msyh.ttc"):
 print(f"font families available: {len(QFontDatabase.families())}")
 
 from coatmenu.core.config import starter_config  # noqa: E402
-from coatmenu.core.menu_model import submenu  # noqa: E402
+from coatmenu.core.menu_model import (  # noqa: E402
+    COMMAND, PIE, POSITION_RIGHT, SUBMENU, MenuItem, submenu,
+)
 from coatmenu.ui import popup  # noqa: E402
 
 OUT_DIR = os.path.join(ROOT, "docs")
@@ -210,13 +212,26 @@ editor.show_editor()
 editor.resize(EDITOR_SIZE)
 editor._source_kind.setCurrentIndex(0)  # the combined 3DCoat command list
 editor.reload_sources()
-# Show a row with its own key: that is how a row earns an entry in 3DCoat's
-# Scripts menu (and a key that works with no menu open).
+# Pick a pie menu, so the Expand and Position columns both have something to show.
+wheel = editor._config.add_menu("Wheel")
+wheel.mode = PIE
+wheel.items = [
+    MenuItem(label="Freeze", kind=COMMAND, cid="MENU_FREEZE"),
+    MenuItem(label="Smooth", kind=COMMAND, cid="SmoothSurface"),
+    MenuItem(label="Invert", kind=COMMAND, cid="MENU_INVERT"),
+    MenuItem(label="Shade", kind=SUBMENU, children=[
+        MenuItem(label="Vertex", kind=COMMAND, cid="SHOW_VERTEX_PAINT"),
+        MenuItem(label="Texture", kind=COMMAND, cid="SHOW_TEXTURE_PAINT"),
+    ]),
+]
+editor.select_menu("Wheel")
 editor.refresh_tree()
+# Pin one row so the Position column is visibly doing something.
 for i in range(editor._tree.topLevelItemCount()):
     node = editor._tree.topLevelItem(i)
-    if node.data(0, ROLE_CID) in ("CastShadows", "$CastShadows"):
-        editor._apply_row_hotkey(node, {"key": "H", "ctrl": True, "shift": True, "alt": False})
+    combo = editor._tree.itemWidget(node, 2)
+    if combo is not None:
+        combo.setCurrentIndex(combo.findData(POSITION_RIGHT))
         break
 editor.move(QPoint(60, 60))
 editor._cursor_layer.set_position(QPoint(170, 132))
@@ -275,22 +290,6 @@ compose(os.path.join(OUT_DIR, "preview-presets.png"), [saved_widget])
 saved_widget.dismiss()
 app.processEvents()
 print(f"presets preview: {len(saved.items)} presets")
-
-# 12. the LKS list - the LKS extension's radial menus, imported read-only
-lks_preset = presets.lks_list()
-manager.show_menu(lks_preset.items, anchor=QPoint(120, 90), title=lks_preset.name)
-lks_widget = manager.popup
-app.processEvents()
-compose(os.path.join(OUT_DIR, "preview-lks.png"), [lks_widget])
-lks_branch = lks_widget._first_branch()
-if lks_branch >= 0:
-    lks_widget._hover = lks_branch
-    lks_widget._open_child(lks_branch)
-    app.processEvents()
-    compose(os.path.join(OUT_DIR, "preview-lks-sub.png"), [lks_widget, lks_widget._child])
-lks_widget.dismiss()
-app.processEvents()
-print(f"lks preview: {len(lks_preset.items)} menu(s)")
 
 # 13. the Common list - everyday commands, grouped like 3DCoat's main menu
 common = presets.common_list()

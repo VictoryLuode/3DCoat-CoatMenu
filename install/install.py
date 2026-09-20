@@ -136,7 +136,7 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
     them, so "remove if empty" would never get rid of them.
     """
     removed: list[str] = []
-    keep_top = {"data", "actions", "coatmenu"}
+    keep_top = {"data", "actions", "coatmenu", "ported"}
 
     for name in sorted(os.listdir(ext_dir)):
         path = os.path.join(ext_dir, name)
@@ -253,7 +253,7 @@ def install(documents: str) -> int:
     rewrite = added_presets or not os.path.exists(config_path) or _uses_old_key(config_path)
     for candidate in (config_path, legacy_path):
         if rewrite and os.path.exists(candidate):
-            shutil.copy2(candidate, f"{candidate}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}")
+            _backup(candidate, "coatmenu")
     if rewrite:
         # Written whenever the file is new, a preset changed, or the file still
         # carries the pre-terminology key - so it ends up in the current shape.
@@ -334,17 +334,53 @@ def clean_per_entry_xml(extra_menu_items_dir: str) -> list[str]:
     return removed
 
 
+def _backup(path: str, tag: str, keep: int = 3) -> str | None:
+    """Back a file up, but only when it actually differs from the last backup.
+
+    The first version copied on every run, so a month of reinstalling left 88
+    ``.bak-*`` files behind. Now the copy happens only when the content changed,
+    and older backups beyond ``keep`` are pruned.
+    """
+    if not os.path.isfile(path):
+        return None
+    folder, name = os.path.split(path)
+    prefix = f"{name}.bak-{tag}-"
+
+    with open(path, "rb") as fh:
+        current = fh.read()
+
+    existing = sorted(n for n in os.listdir(folder) if n.startswith(prefix))
+    if existing:
+        newest = os.path.join(folder, existing[-1])
+        try:
+            with open(newest, "rb") as fh:
+                if fh.read() == current:
+                    return None  # nothing changed, no new backup
+        except OSError:
+            pass
+
+    backup = os.path.join(folder, f"{prefix}{time.strftime('%Y%m%d-%H%M%S')}")
+    shutil.copy2(path, backup)
+
+    for stale in sorted(n for n in os.listdir(folder) if n.startswith(prefix))[:-keep]:
+        try:
+            os.remove(os.path.join(folder, stale))
+        except OSError:
+            pass
+    return backup
+
+
 def _ensure_startup_entry(startup_path: str) -> bool:
     """Append our name to startup.txt. Returns True when a line was added."""
     existing = ""
     if os.path.exists(startup_path):
         with open(startup_path, encoding="utf-8", errors="replace") as fh:
             existing = fh.read()
-        backup = f"{startup_path}.bak-coatmenu-{time.strftime('%Y%m%d-%H%M%S')}"
-        shutil.copy2(startup_path, backup)
     lines = [ln.strip() for ln in existing.splitlines()]
     if EXTENSION_NAME in lines:
         return False
+    if existing:
+        _backup(startup_path, "coatmenu")
     if existing and not existing.endswith("\n"):
         existing += "\n"
     with open(startup_path, "w", encoding="utf-8", newline="\n") as fh:

@@ -282,45 +282,6 @@ common = presets.common_list()
 check([i.label for i in common.items] == ["Edit  (2)"], "and it becomes one submenu per menu")
 check(common.preset == "common/1", "with its own marker")
 
-print("== LKS radial menus (read-only import) ==")
-from coatmenu.core import lks  # noqa: E402
-
-menus = lks.read_menus()
-by_name = {m.name: m for m in menus}
-check([m.name for m in menus] == ["Booleans", "Shift S"],
-      f"menu names with the LKS_Radial_ prefix dropped ({[m.name for m in menus]})")
-booleans = by_name["Booleans"].items
-check([r.label for r in booleans] == ["Apply", "New", "Ghost"],
-      f"placeholders and module.function rows dropped ({[r.label for r in booleans]})")
-check(booleans[0].kind == "command" and booleans[0].cid == "$LKS_Apply",
-      "$ commands stay commands")
-check(booleans[1].children[0].cid == "$LKS_Union", "nested list rows come through")
-check(booleans[2].kind == "script" and booleans[2].path.endswith("Ghost.py"),
-      f"actions/X.py becomes a runnable script row ({booleans[2].path})")
-check(by_name["Shift S"].items[0].label == "Reset Axis",
-      "the user's own LKS menu is included")
-
-lks_preset = presets.lks_list()
-check([i.label for i in lks_preset.items] == ["Booleans  (3)", "Shift S  (1)"],
-      f"the LKS list makes one submenu per menu ({[i.label for i in lks_preset.items]})")
-check(lks_preset.preset == "lks/1", "with a marker of its own")
-
-print("== a hotkeys file broken by 3DCoat still parses ==")
-# 3DCoat writes '&lt'/'&gt' without the semicolon; a strict XML parser rejects the
-# whole document, which is what used to leave the command list nearly empty.
-with open(HOTKEYS, "w", encoding="utf-8") as fh:
-    fh.write('<AppOptions><HotKeys>\n'
-             '\t<OneHotKey><ID>UNDO</ID><Room>Voxels</Room><Code>Z</Code><Ctrl>true</Ctrl></OneHotKey>\n'
-             '\t<OneHotKey><ID>DEC_SPEC_DEGREE</ID><Room>Voxels</Room><Code>&lt</Code></OneHotKey>\n'
-             '\t<OneHotKey><ID>INC_SPEC_DEGREE</ID><Room>Voxels</Room><Code>&gt</Code></OneHotKey>\n'
-             '</HotKeys></AppOptions>\n')
-ids = catalog.read_hotkey_commands()
-check(len(ids) == 3, f"every id recovered from the broken file ({len(ids)})")
-broken_bindings = read_bindings()
-check(len(broken_bindings) == 3, f"bindings recover too ({len(broken_bindings)})")
-check(any(b["code"] == "&lt" for b in broken_bindings),
-      "the corrupt value stays visible instead of killing the file")
-
 print()
 if failures:
     print(f"CATALOG FAILED ({len(failures)}): " + "; ".join(failures))

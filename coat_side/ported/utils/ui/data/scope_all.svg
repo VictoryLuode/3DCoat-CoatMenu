@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <clipPath id="planet-earth-clip">
+      <circle cx="12" cy="12" r="9"/>
+    </clipPath>
+  </defs>
+  <g stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.08"/>
+    <g clip-path="url(#planet-earth-clip)" fill="currentColor" fill-opacity="0.5" stroke="none">
+      <!-- Left continent (Americas shape, ~25% area) -->
+      <path d="M5.5 4.5 Q6 8 5 12 Q4.5 15 5.5 19 Q6.5 20 8 19.5 Q9 17.5 8.5 15 Q8 13 9 10 Q9.5 7.5 8 4.5 Z"/>
+      <!-- Upper right continent (Europe/Asia, ~12% area) -->
+      <path d="M14 4 Q13 5.5 13.5 7 Q14 8.5 15 8 Q16.5 7.5 17 6 Q17 4.5 15.5 3.5 Q14.5 3 14 4 Z"/>
+      <!-- Lower right continent (Africa, ~8% area) -->
+      <path d="M15 12 Q14.5 14 15 16 Q15.5 17.5 17 17 Q18 16 18 14 Q17.5 12.5 16.5 12 Q15.5 12 15 12 Z"/>
+      <!-- Far right island (Australia, ~5% area) -->
+      <circle cx="18" cy="9.5" r="2.2"/>
+    </g>
+    <circle cx="12" cy="12" r="9"/>
+  </g>
+</svg>

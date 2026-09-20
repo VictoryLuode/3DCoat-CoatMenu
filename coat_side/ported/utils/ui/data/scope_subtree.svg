@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Root node -->
+  <circle cx="12" cy="4" r="2.5"/>
+  <!-- Vertical trunk down to branch point -->
+  <line x1="12" y1="6.5" x2="12" y2="13"/>
+  <!-- Horizontal branch bar -->
+  <line x1="5" y1="13" x2="19" y2="13"/>
+  <!-- Left child -->
+  <circle cx="5" cy="19" r="2.5"/>
+  <line x1="5" y1="13" x2="5" y2="16.5"/>
+  <!-- Right child -->
+  <circle cx="19" cy="19" r="2.5"/>
+  <line x1="19" y1="13" x2="19" y2="16.5"/>
+</svg>

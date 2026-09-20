@@ -30,7 +30,9 @@ FAKE = install_fake_coat(DOCS, COAT_SIDE)
 
 from coatmenu.core import menus_registry as registry  # noqa: E402
 from coatmenu.core.config import MenuConfig, Menu, item_from_json, item_to_json, slugify, starter_config  # noqa: E402
-from coatmenu.core.menu_model import MenuItem  # noqa: E402
+from coatmenu.core.menu_model import (  # noqa: E402
+    COMMAND, EXPAND_AUTO, EXPAND_MODES, SUBMENU, POSITION_MODES, MenuItem,
+)
 
 failures: list[str] = []
 
@@ -283,6 +285,28 @@ check(len(rows) == 1 and rows[0].kind == "header",
 filled = Menu(name="Some", items=[MenuItem(label="A", cid="A")])
 check(len(show_mod.list_rows(filled)) == 1 and show_mod.list_rows(filled)[0].label == "A",
       "a filled list is passed through untouched")
+
+print("== a row's expand mode survives the config ==")
+for mode in EXPAND_MODES:
+    row = MenuItem(label="G", kind=SUBMENU, expand=mode,
+                              children=[MenuItem(label="c", kind=COMMAND, cid="c")])
+    body = item_to_json(row)
+    back = item_from_json(body)
+    check(back.expand == mode, f"{mode} round trips ({back.expand})")
+check("expand" not in item_to_json(
+    MenuItem(label="G", kind=SUBMENU,
+                        children=[MenuItem(label="c", kind=COMMAND, cid="c")])),
+    "auto is left out, so the file stays as short as it was")
+
+print("== a row's pie position survives the config ==")
+for spot in POSITION_MODES:
+    row = MenuItem(label="G", kind=SUBMENU, position=spot,
+                   children=[MenuItem(label="c", kind=COMMAND, cid="c")])
+    back = item_from_json(item_to_json(row))
+    check(back.position == spot, f"{spot} round trips ({back.position})")
+_plain = MenuItem(label="G", kind=SUBMENU,
+                  children=[MenuItem(label="c", kind=COMMAND, cid="c")])
+check("where" not in item_to_json(_plain), "auto is left out of the file")
 
 print()
 if failures:

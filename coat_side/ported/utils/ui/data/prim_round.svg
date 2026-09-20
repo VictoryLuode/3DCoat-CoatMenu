@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(1,1) scale(0.9167)">
+  <!-- Rounded square shape -->
+  <rect x="4" y="5" width="16" height="14" rx="6" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>
+  <!-- Inner highlight suggesting rounded 3D form -->
+  <rect x="7" y="8" width="10" height="8" rx="4" fill="currentColor" fill-opacity="0.06" stroke="currentColor" stroke-width="1.2"/>
+  </g>
+</svg>

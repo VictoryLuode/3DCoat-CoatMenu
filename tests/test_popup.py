@@ -301,7 +301,9 @@ check(not any(item.kind == TITLE for item in pie._items),
 check(pie._hover == -1, "a pie starts with nothing pre-selected")
 
 centre = pie._centre_point()
-for index, sx, sy in ((0, 1, -1), (1, 1, 1), (2, -1, 1), (3, -1, -1)):
+# Auto spreads four slots onto up / right / down / left - a layout your hand can
+# learn, rather than the four corners (which is where (index + 0.5) put them).
+for index, sx, sy in ((0, 0, -1), (1, 1, 0), (2, 0, 1), (3, -1, 0)):
     point = pie._slot_centre(index)
     dx = point.x() - centre.x()
     dy = point.y() - centre.y()
@@ -311,8 +313,15 @@ for index, sx, sy in ((0, 1, -1), (1, 1, 1), (2, -1, 1), (3, -1, -1)):
     hit_point = QPoint(int(first_button.center().x()), int(first_button.center().y()))
     check(pie._pie_index_at(hit_point) == index,
           f"slot {index} hit-tests to itself ({pie._pie_index_at(hit_point)})")
-    check(dx * sx > 0 and dy * sy > 0,
-          f"slot {index} sits in its own direction ({dx:.0f}, {dy:.0f})")
+    if sx == 0:
+        check(abs(dx) < 2 and dy * sy > 0,
+              f"slot {index} sits straight {'up' if sy < 0 else 'down'} ({dx:.0f}, {dy:.0f})")
+    elif sy == 0:
+        check(abs(dy) < 2 and dx * sx > 0,
+              f"slot {index} sits straight {'right' if sx > 0 else 'left'} ({dx:.0f}, {dy:.0f})")
+    else:
+        check(dx * sx > 0 and dy * sy > 0,
+              f"slot {index} sits in its own direction ({dx:.0f}, {dy:.0f})")
     reach = math.hypot(dx, dy)
     check(abs(reach - pie._slot_distance) < 8,
           f"button {index} sits one pie radius out ({reach:.0f}px)")
@@ -390,7 +399,10 @@ check(FAKE.commands_run() == ["$PIE_A"],
       f"a digit aimed at a stacked slot runs its first button ({FAKE.commands_run()})")
 
 print("== a multi-command row fires its commands in order ==")
-from coatmenu.core.menu_model import sequence  # noqa: E402
+from coatmenu.core.menu_model import (  # noqa: E402
+    COMMAND, EXPAND_AUTO, EXPAND_INLINE, EXPAND_PANEL, POSITION_LEFT, POSITION_MODES, POSITION_TOP,
+    SUBMENU, MenuItem, sequence,
+)
 
 FAKE.calls.clear()
 run_item(sequence("Cube", ["$SCULPT_TRANSFORM", "$SCULP_PRIM",
@@ -463,6 +475,59 @@ popup.is_key_down = lambda vk: vk == popup.VK_ESCAPE
 widget._on_poll()
 popup.is_key_down = kept_key_down
 check(not widget.isVisible(), "second escape closes the menu")
+
+print("== Expand pins a pie slot either way ==")
+def _pie(expand):
+    kids = [MenuItem(label=f"k{i}", kind=COMMAND, cid=f"c{i}")
+            for i in range(4)]           # 4 children: over PIE_INLINE_MAX
+    item = MenuItem(label="G", kind=SUBMENU, children=kids,
+                              expand=expand)
+    mgr = popup.get_manager()
+    mgr.show_menu([item], anchor=QPoint(200, 200), title="T", mode="pie")
+    app.processEvents()
+    w = mgr.popup
+    expanded = list(w._pie_expanded)
+    w.dismiss()
+    return expanded
+
+check(_pie(EXPAND_INLINE) == [True],
+      "Inline forces 4 children into the slot")
+check(_pie(EXPAND_PANEL) == [False],
+      "Panel forces a separate panel")
+check(_pie(EXPAND_AUTO) == [False],
+      "Auto still says panel for 4")
+small = [MenuItem(label=f"s{i}", kind=COMMAND, cid=f"d{i}")
+         for i in range(2)]                # 2 children: under the limit
+auto_item = MenuItem(label="S", kind=SUBMENU, children=small)
+mgr2 = popup.get_manager()
+mgr2.show_menu([auto_item], anchor=QPoint(200, 200), title="T", mode="pie")
+app.processEvents()
+w2 = mgr2.popup
+check(list(w2._pie_expanded) == [True], "Auto keeps small groups inline")
+w2.dismiss()
+
+print("== Where pins a slot to a compass point ==")
+pinned_items = [
+    MenuItem(label="pinned-left", kind="command", cid="a", position=POSITION_LEFT),
+    MenuItem(label="pinned-top", kind="command", cid="b", position=POSITION_TOP),
+    MenuItem(label="free", kind="command", cid="c"),
+]
+mgr4 = popup.get_manager()
+mgr4.show_menu(pinned_items, anchor=QPoint(300, 300), title="W", mode="pie")
+app.processEvents()
+pinned = mgr4.popup
+_c = pinned._centre_point()
+_l = pinned._slot_centre(pinned._pie_items.index(
+    [i for i in pinned._pie_items if i.label == "pinned-left"][0]))
+_t = pinned._slot_centre(pinned._pie_items.index(
+    [i for i in pinned._pie_items if i.label == "pinned-top"][0]))
+check(_l.x() < _c.x() - 20 and abs(_l.y() - _c.y()) < 3,
+      f"a row pinned Left lands straight left ({_l.x() - _c.x():.0f}, {_l.y() - _c.y():.0f})")
+check(abs(_t.x() - _c.x()) < 3 and _t.y() < _c.y() - 20,
+      f"a row pinned Top lands straight up ({_t.x() - _c.x():.0f}, {_t.y() - _c.y():.0f})")
+check(pinned._slot_angle(2) == 2 * 360.0 / 3,
+      f"an Auto row still spreads evenly ({pinned._slot_angle(2):.1f} deg)")
+pinned.dismiss()
 
 print()
 if failures:

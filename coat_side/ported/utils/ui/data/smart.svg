@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Wand shaft -->
+  <line x1="5" y1="19" x2="13" y2="11"/>
+  <!-- Wand tip star (4-point) -->
+  <line x1="10" y1="11" x2="16" y2="11"/>
+  <line x1="13" y1="8" x2="13" y2="14"/>
+  <!-- Sparkle 1 (upper-right) -->
+  <line x1="18" y1="5" x2="18" y2="7.5"/>
+  <line x1="17" y1="6.25" x2="19" y2="6.25"/>
+  <!-- Sparkle 2 (lower-right) -->
+  <line x1="21" y1="12" x2="21" y2="14.5"/>
+  <line x1="20" y1="13.25" x2="22" y2="13.25"/>
+</svg>

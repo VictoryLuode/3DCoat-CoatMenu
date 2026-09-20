@@ -62,29 +62,42 @@ extension builds on this machine)*
 * **Rows *or* a pie** — pick per menu. The pie is laid out the way Blender's is:
   rounded buttons around a small centre ring, each showing its `1..9` shortcut, so
   you can hit the digit instead of aiming. The ring grows with the label widths
-  (spacing is `2*R*sin(pi/N)`) so buttons can never overlap. A slot that is a small
-  group (three children or fewer) stacks its buttons in place, the way Blender's
-  Shading pie shows Material/Wireframe; bigger groups unfold into a panel beside
-  the wheel.
+  (spacing is `2*R*sin(pi/N)`) so buttons can never overlap. Slots start **straight
+  up** and go clockwise, so four slots land on up / right / down / left.
+* **`Expand` per row** — a group row decides how it unfolds instead of leaving it to
+  the child count: **Auto** (three children or fewer stack in the slot, more opens a
+  panel), **Inline** (always draw them in the slot), **Panel** (always a separate
+  panel).
+* **`Position` per row** — pin a row to a compass point (`Top`, `Top right`, `Right`,
+  … `Top left`) so a pie becomes muscle memory: Freeze always up, Smooth always down.
+  The column only appears for pie menus. Rows left on `Auto` spread evenly, first one
+  straight up.
 * **Multi-step rows** — a row can fire several 3D-Coat commands in order, which is
   how primitives work ("neutralise the tool → open the primitive tool → pick the
-  shape"). The bundled `Prims` menu is a port of the LKS add-on's Add-Prims menu
-  built from exactly that.
+  shape"). The bundled `Prims` menu is built from exactly that: a port of an
+  Add-Prims radial menu an older extension shipped.
 * **Submenus**, nested, unfold on hover (with a grace timer so diagonal mouse
   moves don't close them); in a pie a short dwell opens them. **Promote** turns a
-  submenu into a menu of its own, hotkey and all.
-* **Editor** — add rows from five sources, with readable names:
+  submenu into a menu of its own.
+* **`Sculpt Ops`, bundled** — 93 sculpt actions in six groups (Object, Scene,
+  Autopo, Brush, Export, Other), ported from an older radial-menu extension so they
+  keep working now that extension is gone. Each entry keeps its own readable name.
+* **Independent** — no other extension is required, and none is imported. Everything
+  CoatMenu ships lives under its own namespace, because `cExtensions` shares one
+  interpreter: a generic top-level name would collide with a neighbour's (a sibling
+  extension's `ui` package did exactly that once).
+* **Editor** — add rows from four sources, with readable names:
   | Source | What it gives you |
   |---|---|
   | 3D-Coat commands | 3D-Coat's own menu definitions — **900+ commands** |
   | My tools | the tools from 3D-Coat's `CustomTools` panel |
   | Presets | your saved tool presets (tool + parameter snapshots) |
-  | LKS menus | the LKS add-on's radial menus, imported read-only |
   | Scripts | your own scripts (other extensions' internals are skipped) |
-  Plus drag-to-reorder, double-click to rename, multi-select, **Add all** (a whole
-  section in one click), **undo/redo** (`Ctrl+Z`), import/export, save & apply, and
-  a right-click row menu (duplicate, copy/move to another menu, insert below,
-  promote, rename, delete).
+  Plus drag-to-reorder (a row dropped onto another becomes its group), a second and
+  third column to set how each group unfolds and where each row sits in a pie,
+  double-click to rename, multi-select, **Add all** (a whole section in one click),
+  **undo/redo** (`Ctrl+Z`), import/export, save & apply, and a right-click row menu
+  (duplicate, copy/move to another menu, insert below, promote, rename, delete).
 * **Keyboard and wheel** — a long list caps its height and scrolls, so the last
   rows are always reachable.
 * **Diagnostics built in** — the editor shows each menu's hotkey next to its name
@@ -143,8 +156,9 @@ Nothing here hard-codes a path:
 
    It copies the extension to `Documents\3DCoat\UserPrefs\Scripts\cExtensions\CoatMenu\`,
    writes the menu item to `Scripts\ExtraMenuItems\CoatMenu.xml` and appends one
-   line to `Scripts\cExtensions\startup.txt` (the previous file is backed up
-   first). Nothing outside 3D-Coat's user folder is touched.
+   line to `Scripts\cExtensions\startup.txt`. Each of those is backed up only when
+   its content actually changes (the three most recent copies are kept). Nothing
+   outside 3D-Coat's user folder is touched.
 3. Restart 3D-Coat.
 4. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu** (or **Edit menus** to build yours).
 5. Optional: in **Preferences ▸ Hotkeys**, bind a key to `Show CoatMenu` and to any
@@ -177,6 +191,10 @@ deleted.
   file and one file cannot know which menu it belongs to. Saving in the editor also
   calls `coat.ui.insertInMenu` so new items exist right away.
 * Your menus live in `<ext>/data/menus.json`.
+* The ported sculpt actions live in `<ext>/ported/` and import as `ported.*`. They
+  are the original scripts with one mechanical change — every `utils` / `ops` /
+  `lks_utils` reference got the `ported.` prefix — so they cannot collide with
+  another extension's top-level names in the shared interpreter.
 * The command catalog is cached for the session, so switching source in the editor
   is instant (3D-Coat's 7711-entry translation table is parsed once).
 
@@ -185,10 +203,11 @@ deleted.
 | Stage | Content |
 |---|---|
 | ✔ M1 | extension skeleton, cursor overlay, linear menu, click/hold/`Esc`, installer, tests |
-| ✔ M2 | `data/menus.json`, several menus + per-menu hotkeys, submenus, editor (sources, drag-and-drop, import/export), generated launchers |
+| ✔ M2 | `data/menus.json`, several menus + submenus, editor (sources, drag-and-drop, import/export), generated launchers |
 | ✔ M3 | radial pie renderer (same data), dwell submenus, per-menu list/pie switch |
-| ✔ M4 | Blender-style interaction, live preview, tools/presets/LKS sources, conflict detection, doctor report |
-| M5 | packaging and polish (this pass) |
+| ✔ M4 | Blender-style interaction, live preview, tools/presets/script sources, conflict detection, doctor report |
+| ✔ M5 | packaging and polish: one-command release zip, changelog, README |
+| ✔ M6 | per-row `Expand` and `Position`, ported sculpt actions, independence from other extensions |
 
 A screen-edge menu belt was considered and dropped — the overlay-at-the-cursor
 idea covers the same ground with less to hit by accident.
@@ -204,9 +223,9 @@ Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
 | Suite | Covers |
 |---|---|
 | `test_catalog.py` | command/menu/hotkey/script parsing, readable names, key-code mapping |
-| `test_config.py` | menu model, JSON round trip, launcher + menu-XML generation, stale cleanup |
-| `test_popup.py` | layout, hit testing, hover, click-to-run, release-to-run, `Esc`, submenus, pie geometry (drawn = hit), centring |
-| `test_editor.py` | view↔model round trip, menu ops, catalog sources, Add all, undo/redo, save & reload |
+| `test_config.py` | menu model, JSON round trip (including `expand` / `position`), launcher + menu-XML generation, stale cleanup |
+| `test_popup.py` | layout, hit testing, hover, click-to-run, release-to-run, `Esc`, submenus, pie geometry (drawn = hit), centring, slot direction and pinned positions, forced inline/panel |
+| `test_editor.py` | view↔model round trip, menu ops, catalog sources, Add all, undo/redo, save & reload, the `Expand` and `Position` columns, dragged-in groups keeping their children |
 | `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
 | `test_install.py` | install/reinstall/uninstall into a throwaway tree (other extensions untouched) |
 | `test_installed_copy.py` | the copy actually installed under `Documents/3DCoat` |

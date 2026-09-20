@@ -4,8 +4,8 @@ Menu item: Scripts > CoatMenu > CoatMenu_Doctor.
 Output: ``<ext>/data/doctor.txt`` and the 3DCoat Python console.
 
 The logging below is deliberately dependency-free: if importing our own package
-fails, the reason has to still reach a file (see the LKS/`ui` package clash we
-already hit once).
+fails, the reason has to still reach a file (we already had a sibling extension's
+top-level package name shadow ours once).
 """
 import os
 import sys

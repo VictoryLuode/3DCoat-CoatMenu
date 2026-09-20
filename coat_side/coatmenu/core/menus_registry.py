@@ -6,7 +6,7 @@ bound in 3DCoat - hover the entry and press END):
 
 1. **a thin launcher script** - ``actions/menus/<Name>.py``. 3DCoat menu items
    point at a *file*, and one file cannot know which menu it belongs to, so each
-   menu gets its own generated wrapper (this is how LKS does it too).
+   menu gets its own generated wrapper.
 2. **a menu item** - ``Scripts/ExtraMenuItems/CoatMenu.xml`` (persistent, read at
    startup) *and* a runtime ``coat.ui.insertInMenu`` call (visible immediately).
 

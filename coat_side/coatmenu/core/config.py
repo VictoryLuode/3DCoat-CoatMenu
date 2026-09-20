@@ -39,6 +39,10 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from coatmenu.core.menu_model import (
+    EXPAND_AUTO,
+    EXPAND_MODES,
+    POSITION_AUTO,
+    POSITION_MODES,
     MenuItem,
     header as header_item,
     separator as separator_item,
@@ -81,7 +85,15 @@ class Menu:
 
 def item_from_json(raw) -> MenuItem | None:
     """Build a :class:`MenuItem` from one JSON entry (never raises)."""
-    return _item_body_from_json(raw)
+    item = _item_body_from_json(raw)
+    if item is not None and isinstance(raw, dict):
+        mode = str(raw.get("expand") or "").strip().lower()
+        if mode in EXPAND_MODES:
+            item.expand = mode
+        spot = str(raw.get("position") or raw.get("where") or "").strip().lower()
+        if spot in POSITION_MODES:
+            item.position = spot
+    return item
 
 
 def _item_body_from_json(raw) -> MenuItem | None:
@@ -139,7 +151,16 @@ def _item_body_from_json(raw) -> MenuItem | None:
 
 def item_to_json(item: MenuItem):
     """Serialise one entry back to the compact shared form."""
-    return _item_body(item)
+    body = _item_body(item)
+    # Only mention how it unfolds / where it sits when that is not the default -
+    # the config stays as short as it was.
+    if isinstance(body, dict) and (item.expand != EXPAND_AUTO or item.position != POSITION_AUTO):
+        body = dict(body)
+        if item.expand != EXPAND_AUTO:
+            body["expand"] = item.expand
+        if item.position != POSITION_AUTO:
+            body["position"] = item.position
+    return body
 
 
 def _item_body(item: MenuItem):

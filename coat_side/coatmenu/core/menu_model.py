@@ -21,6 +21,63 @@ TITLE = "title"          # list title row
 LIST = "list"
 PIE = "pie"
 
+# How a branch row unfolds. ``auto`` is the built-in behaviour (a pie shows up to
+# PIE_INLINE_MAX children in the slot, more than that opens a panel on dwell); the
+# others pin it either way.
+EXPAND_AUTO = "auto"
+EXPAND_INLINE = "inline"
+EXPAND_PANEL = "panel"
+EXPAND_MODES = (EXPAND_AUTO, EXPAND_INLINE, EXPAND_PANEL)
+
+EXPAND_LABELS = {
+    EXPAND_AUTO: "Auto",
+    EXPAND_INLINE: "Inline",
+    EXPAND_PANEL: "Panel",
+}
+
+# Where a pie slot sits. ``auto`` spreads the slots evenly with the first one
+# straight up; the rest pin a row to a compass point so your hand can learn it
+# (Freeze always up, Smooth always down).
+POSITION_AUTO = "auto"
+POSITION_TOP = "top"
+POSITION_TOP_RIGHT = "top-right"
+POSITION_RIGHT = "right"
+POSITION_BOTTOM_RIGHT = "bottom-right"
+POSITION_BOTTOM = "bottom"
+POSITION_BOTTOM_LEFT = "bottom-left"
+POSITION_LEFT = "left"
+POSITION_TOP_LEFT = "top-left"
+
+POSITION_MODES = (
+    POSITION_AUTO,
+    POSITION_TOP, POSITION_TOP_RIGHT, POSITION_RIGHT, POSITION_BOTTOM_RIGHT,
+    POSITION_BOTTOM, POSITION_BOTTOM_LEFT, POSITION_LEFT, POSITION_TOP_LEFT,
+)
+
+POSITION_LABELS = {
+    POSITION_AUTO: "Auto",
+    POSITION_TOP: "Top",
+    POSITION_TOP_RIGHT: "Top right",
+    POSITION_RIGHT: "Right",
+    POSITION_BOTTOM_RIGHT: "Bottom right",
+    POSITION_BOTTOM: "Bottom",
+    POSITION_BOTTOM_LEFT: "Bottom left",
+    POSITION_LEFT: "Left",
+    POSITION_TOP_LEFT: "Top left",
+}
+
+# Degrees clockwise from straight up - the same convention ``_slot_angle`` uses.
+POSITION_ANGLES = {
+    POSITION_TOP: 0.0,
+    POSITION_TOP_RIGHT: 45.0,
+    POSITION_RIGHT: 90.0,
+    POSITION_BOTTOM_RIGHT: 135.0,
+    POSITION_BOTTOM: 180.0,
+    POSITION_BOTTOM_LEFT: 225.0,
+    POSITION_LEFT: 270.0,
+    POSITION_TOP_LEFT: 315.0,
+}
+
 
 @dataclass
 class MenuItem:
@@ -34,6 +91,8 @@ class MenuItem:
     enabled: bool = True
     children: list["MenuItem"] = field(default_factory=list)
     cmds: list[str] = field(default_factory=list)
+    expand: str = EXPAND_AUTO
+    position: str = POSITION_AUTO
 
     @property
     def clickable(self) -> bool:

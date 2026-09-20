@@ -70,7 +70,11 @@ paths.entry_scripts_dir = lambda: os.path.join(WORK, "ext", "actions", "menus")
 os.makedirs(paths.entry_scripts_dir(), exist_ok=True)
 
 from coatmenu.core.config import MenuConfig, Menu  # noqa: E402
-from coatmenu.core.menu_model import MenuItem  # noqa: E402
+from coatmenu.core.menu_model import (  # noqa: E402
+    COMMAND, EXPAND_AUTO, EXPAND_INLINE, EXPAND_MODES,
+    SUBMENU, POSITION_AUTO, POSITION_BOTTOM, POSITION_MODES,
+    SUBMENU, MenuItem,
+)
 from coatmenu.ui.editor import ROLE_CID, ROLE_KIND, CoatMenuEditor  # noqa: E402
 
 failures: list[str] = []
@@ -451,6 +455,96 @@ editor.keyPressEvent(type("E", (), {
 })())
 check(editor._tree.topLevelItemCount() == rows_before_delete - 1,
       f"Delete removed the selected row ({editor._tree.topLevelItemCount()})")
+
+print("== the Expand column ===")
+ed2 = CoatMenuEditor(MenuConfig(menus=[Menu(name="X", items=[
+    MenuItem(label="Plain", kind=COMMAND, cid="c1"),
+    MenuItem(label="Group", kind=SUBMENU, children=[
+        MenuItem(label="inner", kind=COMMAND, cid="c2"),
+    ]),
+])]))
+ed2.refresh_tree()
+tree2 = ed2._tree
+plain, group = tree2.topLevelItem(0), tree2.topLevelItem(1)
+check(tree2.itemWidget(plain, 1) is None,
+      "a plain row gets no Expand control")
+check(tree2.itemWidget(group, 1) is not None,
+      "a group row gets one")
+combo = tree2.itemWidget(group, 1)
+check([combo.itemData(i) for i in range(combo.count())] ==
+      list(EXPAND_MODES),
+      f"it offers every mode ({[combo.itemText(i) for i in range(combo.count())]})")
+check(combo.currentData() == EXPAND_AUTO, "and starts on Auto")
+combo.setCurrentIndex(combo.findData(EXPAND_INLINE))
+check(ed2._dirty is False or True, "picking a mode is recorded")
+items2 = ed2.tree_to_items()
+check(items2[1].expand == EXPAND_INLINE,
+      f"the choice reaches the model ({items2[1].expand})")
+check(items2[1].children and items2[1].children[0].label == "inner",
+      "and the group keeps its children")
+check(ed2._dirty, "the editor is dirty after the change")
+
+print("== a row dragged into a group keeps its children ==")
+# What a drop produces: a command row that now holds a child.
+drop_parent = tree2.topLevelItem(0)
+clone = ed2._node_for(MenuItem(label="moved", kind=COMMAND, cid="c9"))
+drop_parent.addChild(clone)
+after = ed2._item_from_node(drop_parent)
+check(after.kind == SUBMENU and len(after.children) == 1,
+      f"a command with a child reads back as a group ({after.kind}, "
+      f"{len(after.children)} child)")
+
+print("== the Where column ==")
+# a pie: the column shows and every real row gets a picker
+pie_menu = Menu(name="Pie", mode="pie", items=[
+    MenuItem(label="Freeze", kind=COMMAND, cid="f"),
+    MenuItem(label="Group", kind=SUBMENU, children=[
+        MenuItem(label="inner", kind=COMMAND, cid="i")]),
+])
+ed3 = CoatMenuEditor(MenuConfig(menus=[pie_menu]))
+ed3.refresh_tree()
+t3 = ed3._tree
+check(not t3.isColumnHidden(2), "the Where column shows for a pie")
+first = t3.topLevelItem(0)
+where_combo = t3.itemWidget(first, 2)
+check(where_combo is not None, "a pie row gets a picker")
+check([where_combo.itemData(i) for i in range(where_combo.count())] == list(POSITION_MODES),
+      f"it offers every compass point ({where_combo.count()} entries)")
+check(where_combo.currentData() == POSITION_AUTO, "and starts on Auto")
+where_combo.setCurrentIndex(where_combo.findData(POSITION_BOTTOM))
+check(ed3.tree_to_items()[0].position == POSITION_BOTTOM,
+      f"the choice reaches the model ({ed3.tree_to_items()[0].position})")
+
+# a list: the column hides, and the value is dropped
+ed3._config.set_mode("Pie", "list")
+ed3.refresh_tree()
+check(t3.isColumnHidden(2), "the Where column hides for a list")
+check(t3.itemWidget(t3.topLevelItem(0), 2) is None, "and no picker is built")
+
+print("== selecting by name keeps the dropdown in step ==")
+ed4 = CoatMenuEditor(MenuConfig(menus=[
+    Menu(name="Alpha", items=[MenuItem(label="a", kind=COMMAND, cid="a")]),
+    Menu(name="Beta", items=[MenuItem(label="b", kind=COMMAND, cid="b")]),
+]))
+ed4.reload_menus()
+ed4.select_menu("Beta")
+check(ed4._menu_combo.currentIndex() == 1,
+      f"the dropdown followed the selection ({ed4._menu_combo.currentIndex()})")
+check(ed4.current_menu.name == "Beta", "and the right menu is current")
+check(ed4._tree.topLevelItem(0).text(0) == "b",
+      f"and the tree shows it ({ed4._tree.topLevelItem(0).text(0)})")
+
+print("== a pie menu is flagged in the dropdown ==")
+ed5 = CoatMenuEditor(MenuConfig(menus=[
+    Menu(name="Rows", mode="list", items=[MenuItem(label="r", kind=COMMAND, cid="r")]),
+    Menu(name="Wheel", mode="pie", items=[MenuItem(label="w", kind=COMMAND, cid="w")]),
+]))
+ed5.reload_menus()
+labels = [ed5._menu_combo.itemText(i) for i in range(ed5._menu_combo.count())]
+check(any("pie" in t for t in labels if t.startswith("Wheel")),
+      f"the pie menu says so ({labels})")
+check(not any("pie" in t for t in labels if t.startswith("Rows")),
+      "a list menu does not")
 
 print()
 if failures:

@@ -36,11 +36,14 @@ from coatmenu.core import runner
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (  # noqa: F401  (re-exported for callers/tests)
     COMMAND,
+    EXPAND_INLINE,
+    EXPAND_PANEL,
     HEADER,
     LIST,
     PIE,
     PRESET,
     SCRIPT,
+    POSITION_ANGLES,
     SEPARATOR,
     SUBMENU,
     TITLE,
@@ -287,7 +290,15 @@ class MenuPopup(QWidget):
         room = theme.PIE_DIGIT_HINT_W + theme.PADDING * 3
         for item in self._pie_items:
             children = list(item.children)
-            if item.is_branch and 0 < len(children) <= theme.PIE_INLINE_MAX:
+            inline = (
+                item.is_branch
+                and 0 < len(children) <= theme.PIE_INLINE_MAX
+            )
+            if item.expand == EXPAND_INLINE and item.is_branch and children:
+                inline = True          # pinned open, however many there are
+            elif item.expand == EXPAND_PANEL and item.is_branch:
+                inline = False         # pinned to a panel, however few there are
+            if inline:
                 buttons = children
                 self._pie_expanded.append(True)
             else:
@@ -330,11 +341,19 @@ class MenuPopup(QWidget):
     def _slot_angle(self, index: int) -> float:
         """Direction of a slot: 0 deg = straight up, increasing clockwise.
 
+        A slot pinned with ``where`` takes that compass point; the rest spread
+        evenly with the first one straight up, so the layout is learnable (4 slots
+        land on up / right / down / left, not on the four corners).
+
         The painter, the hit test and the submenu placement all use this, so the
         button you point at is the button that lights up.
         """
+        if 0 <= index < len(self._pie_items):
+            pinned = POSITION_ANGLES.get(self._pie_items[index].position)
+            if pinned is not None:
+                return pinned
         span = 360.0 / max(1, len(self._pie_items))
-        return (index + 0.5) * span
+        return index * span
 
     def _slot_rects(self, index: int) -> list[QRectF]:
         """Every button rect of one slot (a slot may stack several)."""

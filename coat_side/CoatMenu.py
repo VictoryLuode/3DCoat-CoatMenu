@@ -6,7 +6,7 @@ CoatMenu - 3DCoat extension entry point.
 ``cExtension`` instance alive. The per-frame hooks are what keep the Qt overlay
 responsive: without ``processEvents()`` nothing on the overlay would ever run.
 
-Rules learned from CoatLink / LKS (both live in this same 3DCoat install):
+Rules learned from the other extensions in this 3DCoat install:
 
 * 3DCoat imports scripts *by module name*, so ``__name__`` is never
   ``"__main__"`` - never guard the entry point with ``if __name__ == ...``.

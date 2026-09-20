@@ -25,10 +25,10 @@ TITLE_HEIGHT = 24
 # used full-screen, and a menu whose last rows are unreachable looks broken.
 MAX_MENU_HEIGHT = 560
 SCROLLBAR_W = 3
-FONT_SIZE = 9          # points, matching LKS's radial menu type size
+FONT_SIZE = 9          # points, matching 3DCoat's own menu type size
 FONT_FAMILY = "Segoe UI"
 
-# --- colours (r, g, b, a) - tuned to 3DCoat's dark chrome / LKS palette ---
+# --- colours (r, g, b, a) - tuned to 3DCoat's dark chrome ---
 BG = (43, 43, 43, 240)
 BORDER = (85, 85, 85, 200)
 TEXT = (224, 224, 224)

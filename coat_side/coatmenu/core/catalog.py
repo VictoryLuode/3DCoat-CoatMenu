@@ -408,8 +408,8 @@ def read_script_commands(root: str | None = None, limit: int = 400) -> list[Comm
                 continue
             rel = os.path.relpath(os.path.join(dirpath, name), root).replace("\\", "/")
             if rel.startswith(("cExtensions/", "cModules/")):
-                # Another extension's internals are not the user's scripts - LKS
-                # actions come in through the LKS menu source instead.
+                # Another extension's internals are not the user's scripts - what a
+                # ported action looks like is decided by the ported tree itself.
                 continue
             out.append(CommandEntry(cid=os.path.join(dirpath, name), label=rel, source="script"))
             if len(out) >= limit:

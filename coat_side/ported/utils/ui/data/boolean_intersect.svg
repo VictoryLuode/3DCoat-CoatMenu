@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <clipPath id="bool-intersect-square">
+      <rect x="4" y="10" width="10" height="10" rx="0.75"/>
+    </clipPath>
+    <clipPath id="bool-intersect-circle">
+      <circle cx="14" cy="8" r="6"/>
+    </clipPath>
+  </defs>
+  <g stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.35 10H14V14A6 6 0 0 1 8.35 10Z" fill="currentColor" fill-opacity="0.5" stroke="none"/>
+    <rect x="4" y="10" width="10" height="10" rx="0.75" stroke-dasharray="0.6 2.4"/>
+    <circle cx="14" cy="8" r="6" stroke-dasharray="0.6 2.4"/>
+    <rect x="4" y="10" width="10" height="10" rx="0.75" clip-path="url(#bool-intersect-circle)"/>
+    <circle cx="14" cy="8" r="6" clip-path="url(#bool-intersect-square)"/>
+  </g>
+</svg>

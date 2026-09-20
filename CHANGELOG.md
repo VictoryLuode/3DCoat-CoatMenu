@@ -2,6 +2,56 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## v0.6.0 — 2026-09-20
+
+### Added
+
+- **`Expand` column** — every group row can now say how it unfolds, instead of
+  leaving it to the child count: **Auto** (the old behaviour: a pie shows up to
+  three children in the slot, more opens a panel), **Inline** (always draw the
+  children in the slot), **Panel** (always open a separate panel). Set per row in
+  the editor; `auto` is not written to the config, so nothing changes for existing
+  menus.
+- **`Position` column** — pin a row to a compass point in a pie
+  (`Top` / `Top right` / `Right` … `Top left`) so your hand can learn the layout.
+  The column appears only for pie menus and hides itself for lists. `Auto` rows
+  spread evenly, **first one straight up**.
+- **`Sculpt Ops`, a bundled menu** — the sculpt actions that shipped with an older
+  radial-menu extension, ported into CoatMenu so they keep working after that
+  extension was removed. 93 entries in six groups (Object, Scene, Autopo, Brush,
+  Export, Other), each a script with a readable name taken from its own docstring.
+- Editor: hover a row to see its command id or script path; the menu dropdown now
+  marks pie menus (`Wheel (4)  pie`) and follows programmatic selection.
+- Installer: a backup is taken **only when a file actually changes**, and older
+  backups are pruned to three. The old behaviour copied on every run and left 88
+  `.bak-*` files behind after a day of reinstalling.
+
+### Changed
+
+- **A pie's slots now start straight up.** The old layout offset every slot by half
+  a step, so four slots landed on the four *corners* — no slot was ever on a plain
+  direction. Four slots are now up / right / down / left, eight are a clean compass.
+- The editor's tree gained the two control columns above; the `Row` column stretches
+  to fill the panel instead of leaving a band of dead space.
+
+### Fixed
+
+- **A row holding children is a group, whatever its original kind.** Dragging a
+  command onto another one made it a submenu, but saving wrote it back as a plain
+  command and silently dropped the children.
+- The editor's `Menu` dropdown could disagree with the menu actually shown when the
+  selection was made by name rather than by clicking the dropdown.
+
+### Removed
+
+- **Every dependency on other extensions.** The ported scripts used generic
+  top-level names (`utils`, `ops`, `lks_utils`); inside `cExtensions` those collide
+  with any other add-on, so the whole tree now lives under `ported.*`. The modules
+  that existed only to drive the old extension (`import LKS`) are gone, and the one
+  runtime hook they provided — development-time hot reload — is now optional.
+- The old extension's own actions and radial-menu launchers, its menu source in the
+  editor, and its remaining traces in our files.
+
 ## v0.5.5 — 2026-09-20
 
 ### Removed

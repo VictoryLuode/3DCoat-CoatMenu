@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Bottom-left triangle (remaining geometry) - subtle fill -->
+  <polygon points="4,4 4,20 20,20" fill="currentColor" fill-opacity="0.12"/>
+  <!-- Solid edges: left + bottom -->
+  <line x1="4" y1="4" x2="4" y2="20"/>
+  <line x1="4" y1="20" x2="20" y2="20"/>
+  <!-- Dashed edges: top + right + diagonal (triangles being removed) -->
+  <line x1="4" y1="4" x2="20" y2="4" stroke-dasharray="3 3"/>
+  <line x1="20" y1="4" x2="20" y2="20" stroke-dasharray="3 3"/>
+  <line x1="4" y1="4" x2="20" y2="20" stroke-dasharray="3 3"/>
+</svg>
