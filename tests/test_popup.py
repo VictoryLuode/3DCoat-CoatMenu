@@ -342,6 +342,17 @@ pie._hover = 0
 check(pie._deepest_hover() is not None and pie._deepest_hover().cid == "PIE_TOP",
       "release over a segment runs that command")
 
+print("== hovering one stacked button does not light the whole group ==")
+second_rect = pie._slot_rects(3)[1]
+centre = second_rect.center().toPoint()
+check(pie._pie_hit(centre) == (3, 1),
+      f"the second button is hit on its own ({pie._pie_hit(centre)})")
+pie._hover, pie._hover_button = 3, 1
+check(pie._hover_item() is pie._slot_targets(3)[1],
+      "and the hovered entry follows the button, not the whole slot")
+pie._hover, pie._hover_button = 3, 0
+check(pie._hover_item() is pie._slot_targets(3)[0], "button 0 gives the first child")
+
 print("== pie: a stacked slot runs the button you clicked ==")
 FAKE.calls.clear()
 pair_rect = pie._slot_rects(3)[1]  # the "B" button of the stacked slot

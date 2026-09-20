@@ -108,6 +108,9 @@ class MenuPopup(QWidget):
         self._rows: list[tuple[int, MenuItem, int]] = []  # (y, item, height)
         self._title: str = ""
         self._hover: int = -1
+        # Which button inside the hovered slot (a small group stacks several); a
+        # one-button slot ignores it.
+        self._hover_button: int = 0
         self._trigger_vk: int = 0
         self._transient: bool = True
         self._parent = parent_popup
@@ -547,7 +550,7 @@ class MenuPopup(QWidget):
         popup: MenuPopup | None = self
         found: MenuItem | None = None
         while popup is not None:
-            candidate = popup._item_at_index(popup._hover)
+            candidate = popup._hover_item()
             if candidate is not None and candidate.clickable:
                 found = candidate
             child = popup._child
@@ -614,9 +617,16 @@ class MenuPopup(QWidget):
         for index, item in enumerate(self._pie_items):
             slot_rects = self._slot_rects(index)
             targets = self._slot_targets(index)
-            highlighted = index == self._hover and (item.clickable or item.is_branch)
+            slot_hot = index == self._hover
             for button_index, rect in enumerate(slot_rects):
                 target = targets[button_index] if button_index < len(targets) else item
+                # Only the button under the cursor lights up: a slot that stacks a
+                # small group draws several buttons, and lighting all of them (what
+                # one highlight flag per slot did) makes the group look like one big
+                # button.
+                highlighted = (slot_hot
+                               and (len(slot_rects) == 1 or button_index == self._hover_button)
+                               and (target.clickable or target.is_branch))
                 enabled = target.enabled and target.clickable
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(QColor(*(theme.HOVER_BG if highlighted else theme.SEGMENT_BG)))
@@ -777,8 +787,14 @@ class MenuPopup(QWidget):
         pos = self._event_pos(event)
         self._cursor_local = pos
         idx = self._index_at_pos(pos)
-        if idx != self._hover:
+        button = 0
+        if self._mode == PIE:
+            hit = self._pie_hit(pos)
+            if hit is not None:
+                idx, button = hit
+        if idx != self._hover or button != self._hover_button:
             self._hover = idx
+            self._hover_button = button
             self.update()
         item = self._item_at_index(idx)
         if item is None:
@@ -970,14 +986,28 @@ class MenuPopup(QWidget):
             index = (index + delta) % count
             if self._is_actionable(index):
                 self._hover = index
+                self._hover_button = 0  # the keyboard works a slot at a time
                 self._ensure_visible(index)
                 self.update()
                 return
 
+    def _hover_item(self) -> MenuItem | None:
+        """The entry the cursor is on.
+
+        In a pie a slot can stack several buttons (a small group), so the hovered
+        slot alone is not the answer - the button inside it is.
+        """
+        if self._mode == PIE:
+            targets = self._slot_targets(self._hover)
+            if not targets:
+                return None
+            return targets[min(max(self._hover_button, 0), len(targets) - 1)]
+        return self._item_at_index(self._hover)
+
     def _activate_hover(self) -> None:
         """Enter: unfold a group, otherwise run the highlighted entry."""
         index = self._hover
-        item = self._item_at_index(index)
+        item = self._hover_item()
         if item is None:
             return
         if item.is_branch and not (self._mode == PIE and self._slot_expanded(index)):
