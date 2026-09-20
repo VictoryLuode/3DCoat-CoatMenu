@@ -249,13 +249,16 @@ editor.select_list("Source")
 editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
 
 row_menu = editor._row_menu()
-move_menu = row_menu.actions()[0].menu()
-check(move_menu is not None and any(a.text().startswith("Sink") for a in move_menu.actions()),
-      "the row menu offers the other lists")
+texts = [a.text() for a in row_menu.actions()]
+move_menu = row_menu.actions()[texts.index("Move to")].menu()
+check(texts[0] == "Duplicate", f"the common actions come first ({texts})")
+check("Copy to" in texts and "Move to" in texts, "copy and move are both offered")
+check(texts[-2:] == ["Rename", "Delete"], f"short labels at the end ({texts[-2:]})")
+check(not any("this row" in t for t in texts), "no redundant 'this row' anywhere")
+check(any(a.text().startswith("Sink") for a in move_menu.actions()),
+      "the move submenu lists the other lists")
 check(not any(a.text().startswith("Source") for a in move_menu.actions()),
       "but not the one the row is already in")
-check(row_menu.actions()[-1].text() == "Remove this row",
-      f"plus the row actions ({[a.text() for a in row_menu.actions()]})")
 
 editor.move_selected_to_list("Sink")
 check([i.label for i in editor._config.find("Source").items] == ["Stays"],
@@ -275,6 +278,23 @@ editor.move_selected_to_list("Sink")
 moved_sub = editor._config.find("Sink").items[-1]
 check(moved_sub.kind == "submenu" and moved_sub.children[0].cid == "KID",
       "a moved submenu takes its children with it")
+
+print("== right-click actions: duplicate, copy, add below ==")
+editor.select_list("Source")
+editor._tree.setCurrentItem(editor._tree.topLevelItem(0))
+editor.duplicate_row()
+check([i.label for i in editor.tree_to_items()] == ["Stays", "Stays"],
+      f"duplicate lands right below itself ({[i.label for i in editor.tree_to_items()]})")
+
+editor.copy_selected_to_list("Sink")
+check(editor._config.find("Sink").items[-1].label == "Stays", "copy reaches the target list")
+check(len(editor._config.find("Source").items) == 2, "and the original stays put")
+
+before = editor._tree.topLevelItemCount()
+editor.insert_row_after("separator")
+check(editor._tree.topLevelItemCount() == before + 1, "Add below inserts beside the row")
+check(editor._tree.currentItem().data(0, ROLE_KIND) == "separator",
+      "as the kind that was asked for")
 
 print("== panel chrome + pointer ==")
 from coatmenu.ui import cursor as cursor_mod  # noqa: E402

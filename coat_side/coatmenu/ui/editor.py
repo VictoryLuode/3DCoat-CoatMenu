@@ -754,7 +754,11 @@ class CoatMenuEditor(QWidget):
         self._row_menu().exec(self._tree.viewport().mapToGlobal(pos))
 
     def _row_menu(self) -> QMenu:
-        """The row's context menu (built fresh: which lists exist can change)."""
+        """The row's context menu.
+
+        Labels stay short: the right-click already says which row this is, so
+        "Rename" beats "Rename this row".
+        """
         node = self._tree.currentItem()
         item = self._item_from_node(node) if node is not None else MenuItem()
         menu = QMenu(self)
@@ -765,23 +769,77 @@ class CoatMenuEditor(QWidget):
             "QMenu::item:selected { background: rgba(58, 106, 160, 255); }"
             "QMenu::item:disabled { color: rgb(130, 130, 130); }")
 
-        move = menu.addMenu("Move to list")
+        menu.addAction("Duplicate").triggered.connect(self.duplicate_row)
+
+        copy_to = menu.addMenu("Copy to")
+        move_to = menu.addMenu("Move to")
         targets = [lst for lst in self._config.lists if lst is not self.current_list]
         if targets:
             for lst in targets:
-                action = move.addAction(f"{lst.name}  ({len(lst.items)})")
-                action.triggered.connect(
+                label = f"{lst.name}  ({len(lst.items)})"
+                copy_to.addAction(label).triggered.connect(
+                    lambda _checked=False, name=lst.name: self.copy_selected_to_list(name))
+                move_to.addAction(label).triggered.connect(
                     lambda _checked=False, name=lst.name: self.move_selected_to_list(name))
         else:
-            move.setEnabled(False)
+            copy_to.setEnabled(False)
+            move_to.setEnabled(False)
 
         menu.addSeparator()
-        promote = menu.addAction("Promote to its own list")
+        add = menu.addMenu("Add below")
+        add.addAction("Submenu").triggered.connect(
+            lambda: self.insert_row_after(SUBMENU))
+        add.addAction("Header").triggered.connect(
+            lambda: self.insert_row_after(HEADER))
+        add.addAction("Separator").triggered.connect(
+            lambda: self.insert_row_after(SEPARATOR))
+
+        menu.addSeparator()
+        promote = menu.addAction("Promote")
         promote.setEnabled(item.kind == SUBMENU and bool(item.children))
         promote.triggered.connect(self.promote_submenu)
-        menu.addAction("Rename this row").triggered.connect(self.rename_row)
-        menu.addAction("Remove this row").triggered.connect(self.remove_row)
+        menu.addAction("Rename").triggered.connect(self.rename_row)
+        menu.addAction("Delete").triggered.connect(self.remove_row)
         return menu
+
+    def duplicate_row(self) -> None:
+        """Copy the selected row (subtree included) right below itself."""
+        node = self._tree.currentItem()
+        if node is None:
+            return
+        copy_node = self._node_for(self._item_from_node(node))
+        parent = node.parent() or self._tree.invisibleRootItem()
+        parent.insertChild(parent.indexOfChild(node) + 1, copy_node)
+        self._tree.setCurrentItem(copy_node)
+        self._mark_dirty()
+        self.set_status("Row duplicated")
+
+    def copy_selected_to_list(self, target_name: str) -> None:
+        """Copy the selected row (subtree included) into another list."""
+        node = self._tree.currentItem()
+        target = self._config.find(target_name)
+        if node is None or target is None or target is self.current_list:
+            return
+        copied = self._item_from_node(node)
+        self.collect()  # pick up anything edited in the tree before we add to it
+        target.items.append(copied)
+        self._mark_dirty()
+        self.set_status(f"Copied '{copied.label or copied.cid}' to '{target.name}' "
+                        f"({len(target.items)} rows)")
+
+    def insert_row_after(self, kind: str) -> None:
+        """Insert a submenu / header / separator right below the selected row."""
+        new_item = MenuItem(label={SUBMENU: "New submenu", HEADER: "Section"}.get(kind, ""),
+                            kind=kind)
+        node = self._node_for(new_item)
+        current = self._tree.currentItem()
+        if current is None:
+            self._tree.addTopLevelItem(node)
+        else:
+            parent = current.parent() or self._tree.invisibleRootItem()
+            parent.insertChild(parent.indexOfChild(current) + 1, node)
+        self._tree.setCurrentItem(node)
+        self._mark_dirty()
 
     def move_selected_to_list(self, target_name: str) -> None:
         """Move the selected row (and anything under it) into another list."""
