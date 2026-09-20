@@ -86,6 +86,17 @@ for tool in ("SCULP_SCLAY", "MagnifyLayers", "BendVolume", "SomePersonalTool"):
     with open(os.path.join(USERPREF, "CustomTools", f"{tool}.txt"), "w",
               encoding="utf-8") as fh:
         fh.write(f"<CustomExtension><Name>{tool}</Name></CustomExtension>\n")
+
+# Saved presets (the Presets panel), including 3DCoat's non-ASCII file naming.
+PRESETS_DIR = os.path.join(USERPREF, "Presets")
+os.makedirs(PRESETS_DIR, exist_ok=True)
+with open(os.path.join(PRESETS_DIR, "HS_Extrude.xml"), "w", encoding="utf-8") as fh:
+    fh.write("<OnePreset><Name>HS_Extrude</Name></OnePreset>\n")
+with open(os.path.join(PRESETS_DIR, "HS_E58886E5B182Split.xml"), "w",
+          encoding="utf-8") as fh:
+    fh.write("<OnePreset><Name>HS_分层Split</Name></OnePreset>\n")
+with open(os.path.join(PRESETS_DIR, "order.txt"), "w", encoding="utf-8") as fh:
+    fh.write("HS_Extrude.xml\nHS_E58886E5B182Split.xml\n")
 LANG = os.path.join(INSTALL, "data", "Languages")
 os.makedirs(LANG, exist_ok=True)
 with open(os.path.join(LANG, "English.xml"), "w", encoding="utf-8") as fh:
@@ -213,6 +224,14 @@ check([i.label for i in tools_preset.items] == ["Clay/Draw  (1)", "Layers  (2)",
       f"({[i.label for i in tools_preset.items]})")
 check(any(child.cid == "$[extension]BendVolume" for child in tools_preset.items[1].children),
       "rows inside a group are runnable tool ids")
+
+print("== saved tool presets (Presets panel) ==")
+saved = catalog.read_presets()
+check([e.label for e in saved] == ["HS_Extrude", "HS_分层Split"],
+      f"order.txt order kept, <Name> used instead of the file name "
+      f"({[e.label for e in saved]})")
+check(saved[1].cid == "HS_分层Split", "the real (non-ASCII) name is the payload")
+check(saved[0].source == "preset", "and it is tagged as a preset source")
 
 print("== a hotkeys file broken by 3DCoat still parses ==")
 # 3DCoat writes '&lt'/'&gt' without the semicolon; a strict XML parser rejects the

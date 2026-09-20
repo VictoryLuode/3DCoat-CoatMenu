@@ -42,6 +42,14 @@ os.makedirs(TOOLS_DIR, exist_ok=True)
 with open(os.path.join(TOOLS_DIR, "BaseVoxBrush.txt"), "w", encoding="utf-8") as fh:
     fh.write("tool preset\n")
 
+# ...and one saved preset, for the "Presets" source.
+PRESETS_DIR = os.path.join(DOCS, "3DCoat", "UserPrefs", "Presets")
+os.makedirs(PRESETS_DIR, exist_ok=True)
+with open(os.path.join(PRESETS_DIR, "HS_Test.xml"), "w", encoding="utf-8") as fh:
+    fh.write("<OnePreset><Name>HS_Test</Name></OnePreset>\n")
+with open(os.path.join(PRESETS_DIR, "order.txt"), "w", encoding="utf-8") as fh:
+    fh.write("HS_Test.xml\n")
+
 # ...and one script, for the "Scripts" source.
 SCRIPTS_DIR = os.path.join(DOCS, "3DCoat", "UserPrefs", "Scripts")
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
@@ -143,11 +151,20 @@ appended = editor.tree_to_items()[-1]
 check("Resample" in appended.cid, f"appended entry carries the id ({appended.cid})")
 
 editor._search.clear()
-editor._source_kind.setCurrentIndex(1)  # Tools
+editor._source_kind.setCurrentIndex(1)  # My tools
 editor.reload_sources()
 check(editor._source_list.count() == 1, f"tool presets listed ({editor._source_list.count()})")
 
-editor._source_kind.setCurrentIndex(2)  # Scripts
+editor._source_kind.setCurrentIndex(2)  # Presets
+editor.reload_sources()
+check(editor._source_list.count() == 1, f"saved presets listed ({editor._source_list.count()})")
+editor._source_list.setCurrentRow(0)
+editor.add_source_item()
+from_preset = editor.tree_to_items()[-1]
+check(from_preset.kind == "preset" and from_preset.cid == "HS_Test",
+      f"a row added from Presets is a preset entry ({from_preset.kind}, {from_preset.cid})")
+
+editor._source_kind.setCurrentIndex(3)  # Scripts
 editor.reload_sources()
 check(editor._source_list.count() == 1, f"scripts listed ({editor._source_list.count()})")
 

@@ -18,7 +18,16 @@ from __future__ import annotations
 
 from coatmenu.core import catalog
 from coatmenu.core.config import MenuConfig, MenuList
-from coatmenu.core.menu_model import COMMAND, LIST, MenuItem, header, separator, sequence, submenu
+from coatmenu.core.menu_model import (
+    COMMAND,
+    LIST,
+    PRESET,
+    MenuItem,
+    header,
+    separator,
+    sequence,
+    submenu,
+)
 
 # --- command ids (from LKS utils/primitives_constants.py) --------------------
 NEUTRALISE = "$SCULPT_TRANSFORM"
@@ -64,7 +73,7 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # Version markers for the lists we ship: bump the number when the preset changes
 # so the installer refreshes the user's copy (a hand-built list of the same name
 # has no marker and is never touched).
-PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1"}
+PRESET_MARKERS = {"Prims": "prims/2", "Tools": "tools/1", "Presets": "presets/1"}
 
 
 def builtin_row(label: str, param: str) -> MenuItem:
@@ -130,13 +139,33 @@ def tools_list(mode: str = LIST) -> MenuList:
                     preset=PRESET_MARKERS["Tools"])
 
 
-def install_presets(config: MenuConfig, names: tuple[str, ...] = ("Prims", "Tools")) -> list[str]:
+def preset_rows() -> list[MenuItem]:
+    """The user's tool presets, in the order 3DCoat's Presets panel shows them."""
+    return [MenuItem(label=e.label, kind=PRESET, cid=e.cid)
+            for e in catalog.read_presets()]
+
+
+def presets_list(mode: str = LIST) -> MenuList:
+    """The ``Presets`` list: the presets stored in 3DCoat's Presets panel.
+
+    Unlike ``Tools`` (which only switches the tool), a preset carries the tool
+    *and* the settings saved with it, and is applied through
+    ``AppOptions.ActivateToolPreset`` - so a row restores exactly what you stored.
+    """
+    rows = preset_rows()
+    items = rows or [header("no presets in UserPrefs/Presets")]
+    return MenuList(name="Presets", items=items, mode=mode,
+                    preset=PRESET_MARKERS["Presets"])
+
+
+def install_presets(config: MenuConfig,
+                    names: tuple[str, ...] = ("Prims", "Tools", "Presets")) -> list[str]:
     """Add missing preset lists, and refresh ones shipped by an older version.
 
     A preset list is recognised by its ``preset`` marker: a list you built by
     hand - even one called ``Prims`` - has no marker and is never touched.
     """
-    built = {"Prims": primitives_list, "Tools": tools_list}
+    built = {"Prims": primitives_list, "Tools": tools_list, "Presets": presets_list}
     added: list[str] = []
     for name in names:
         make = built.get(name)

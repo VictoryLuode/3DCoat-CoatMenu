@@ -205,6 +205,16 @@ check(round_trip.find("Prims").preset == "prims/2", "the preset marker survives 
 check(isinstance(round_trip.to_json()["lists"][0]["items"][0], dict),
       "a multi-command row is written as an object, not a bare id")
 
+saved_cfg = MenuConfig(lists=[MenuList(name="Saved", items=[
+    MenuItem(label="HS_Extrude", kind="preset", cid="HS_Extrude")])])
+saved_json = saved_cfg.to_json()["lists"][0]["items"][0]
+check(saved_json == {"preset": "HS_Extrude", "label": "HS_Extrude"},
+      f"a saved preset is written as {{preset: ...}} ({saved_json})")
+saved_back = MenuConfig.from_json(saved_cfg.to_json()).find("Saved").items[0]
+check(saved_back.kind == "preset" and saved_back.cid == "HS_Extrude",
+      "and comes back as a runnable preset entry")
+check(saved_back.clickable, "so the row can actually be clicked")
+
 print("== key bindings, clashes and the doctor report ==")
 from coatmenu.core import bindings as bindings_mod  # noqa: E402
 from coatmenu.core import doctor  # noqa: E402

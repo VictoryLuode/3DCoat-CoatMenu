@@ -103,6 +103,14 @@ def item_from_json(raw) -> MenuItem | None:
             return None
         return submenu_item(label, children)
 
+    if "preset" in raw:
+        # A 3DCoat tool preset (UserPrefs/Presets/*.xml): applied by name through
+        # AppOptions.ActivateToolPreset, not through the command bus.
+        name = str(raw.get("preset") or "").strip()
+        if not name:
+            return None
+        return MenuItem(label=str(raw.get("label") or name).strip(), kind="preset", cid=name)
+
     if "script" in raw:
         path = str(raw.get("script") or "").strip()
         if not path:
@@ -137,6 +145,8 @@ def item_to_json(item: MenuItem):
         return {"name": item.label, "items": [item_to_json(c) for c in item.children]}
     if item.kind == "script":
         return {"script": item.path or item.cid, "label": item.label}
+    if item.kind == "preset":
+        return {"preset": item.cid, "label": item.label}
     if item.cmds:
         return {"cmds": list(item.cmds), "label": item.label}
     cid = item.cid or item.label

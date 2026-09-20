@@ -40,7 +40,7 @@ from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, lists
 from coatmenu.core.config import MenuConfig, MenuList, item_to_json
 from coatmenu.core.log import log
-from coatmenu.core.menu_model import COMMAND, HEADER, SCRIPT, SEPARATOR, SUBMENU, MenuItem
+from coatmenu.core.menu_model import COMMAND, HEADER, PRESET, SCRIPT, SEPARATOR, SUBMENU, MenuItem
 from coatmenu.ui import cursor as cursor_tool
 from coatmenu.ui import system
 from coatmenu.ui import theme
@@ -308,7 +308,7 @@ class CoatMenuEditor(QWidget):
         box.addWidget(QLabel("Add from"))
 
         self._source_kind = QComboBox()
-        self._source_kind.addItems(["3DCoat commands", "My tools", "Scripts"])
+        self._source_kind.addItems(["3DCoat commands", "My tools", "Presets", "Scripts"])
         self._source_kind.currentIndexChanged.connect(self.reload_sources)
         box.addWidget(self._source_kind)
 
@@ -683,6 +683,8 @@ class CoatMenuEditor(QWidget):
             return MenuItem(label=text, kind=SUBMENU, children=children)
         if kind == SCRIPT:
             return MenuItem(label=text, kind=SCRIPT, path=cid, cid=cid)
+        if kind == PRESET:
+            return MenuItem(label=text, kind=PRESET, cid=cid)
         cmds = node.data(0, ROLE_CMDS) or []
         if cmds:
             return MenuItem(label=text, kind=COMMAND, cid=cid, cmds=list(cmds))
@@ -694,7 +696,8 @@ class CoatMenuEditor(QWidget):
             self.set_status("Pick something from the list on the right")
             return
         cid = entry.data(Qt.UserRole) or ""
-        kind = SCRIPT if self._source_kind.currentIndex() == 2 else COMMAND
+        source = self._source_kind.currentIndex()
+        kind = SCRIPT if source == 3 else (PRESET if source == 2 else COMMAND)
         label = entry.data(Qt.UserRole + 1) or (os.path.basename(cid) if kind == SCRIPT else cid)
         new_item = MenuItem(label=label, kind=kind, cid=cid, path=cid if kind == SCRIPT else "")
 
@@ -766,6 +769,10 @@ class CoatMenuEditor(QWidget):
                 where = entry.hint or "tool"
                 rows.append((f"{entry.label}  \u2014  {entry.cid}   [{where}]",
                              entry.cid, entry.label))
+        elif kind == 2:
+            # Your saved tool presets - a tool *plus* its settings.
+            for entry in catalog.read_presets():
+                rows.append((f"{entry.label}  \u2014  preset", entry.cid, entry.label))
         else:
             for entry in catalog.read_script_commands():
                 rows.append((entry.label, entry.cid, os.path.basename(entry.cid)))

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 # kinds
 COMMAND = "command"      # 3DCoat command id -> coat.ui.cmd("$id")
 SCRIPT = "script"        # python file -> coat.io.executeScript(path)
+PRESET = "preset"        # 3DCoat tool preset -> AppOptions.ActivateToolPreset(name)
 SUBMENU = "submenu"      # opens a child panel
 SEPARATOR = "separator"
 HEADER = "header"        # dim group label
@@ -36,7 +37,7 @@ class MenuItem:
 
     @property
     def clickable(self) -> bool:
-        if not self.enabled or self.kind not in (COMMAND, SCRIPT):
+        if not self.enabled or self.kind not in (COMMAND, SCRIPT, PRESET):
             return False
         return bool(self.cid or self.path or self.cmds)
 

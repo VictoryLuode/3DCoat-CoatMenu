@@ -247,3 +247,13 @@ if branch >= 0:
 tools_widget.dismiss()
 app.processEvents()
 print(f"tools preview: {len(tools.items)} group(s), {sum(len(i.children) for i in tools.items)} tools")
+
+# 11. the Presets list - a tool *plus* the settings stored with it
+saved = presets.presets_list()
+manager.show_menu(saved.items, anchor=QPoint(120, 90), title=saved.name)
+saved_widget = manager.popup
+app.processEvents()
+compose(os.path.join(OUT_DIR, "preview-presets.png"), [saved_widget])
+saved_widget.dismiss()
+app.processEvents()
+print(f"presets preview: {len(saved.items)} presets")
