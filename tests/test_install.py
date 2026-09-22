@@ -6,6 +6,7 @@ Run:  python tests/test_install.py
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -90,6 +91,86 @@ check(os.path.isfile(os.path.join(ext, "data", "menus.json")),
       "menus.json materialised on first install")
 check(os.path.isdir(os.path.join(ext, "actions", "menus")), "launcher folder created")
 check(os.path.isdir(os.path.join(ext, "coatmenu", "core")), "namespaced package intact")
+
+print("== an update deletes nothing it did not write ==")
+mine_dir = os.path.join(ext, "my_scripts")
+os.makedirs(mine_dir, exist_ok=True)
+for path, text in ((os.path.join(mine_dir, "mine.py"), "# a script of the user's\n"),
+                   (os.path.join(ext, "Loose.py"), "# dropped in by hand\n"),
+                   (os.path.join(ext, "notes.txt"), "notes\n")):
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+# ...next to a stale `ported/` tree, which is what the version before this one put
+# there: its own .py files plus icons and 3DCoat's .env stubs, none of which
+# pruning alone would have taken away.
+ported_dir = os.path.join(ext, "ported")
+os.makedirs(os.path.join(ported_dir, "ops"), exist_ok=True)
+os.makedirs(os.path.join(ported_dir, "ui", "data"), exist_ok=True)
+for path, text in ((os.path.join(ported_dir, "ops", "Decimate.py"), "# old copy\n"),
+                   (os.path.join(ported_dir, "ops", ".env"), "3DCoat debug stub\n"),
+                   (os.path.join(ported_dir, "ui", "data", "decimate.svg"), "<svg/>\n")):
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+result = run()
+check(result.returncode == 0, "install exits 0")
+check(os.path.isfile(os.path.join(mine_dir, "mine.py")),
+      "a folder of your own inside the extension is left alone")
+check(os.path.isfile(os.path.join(ext, "Loose.py")), "a loose .py of yours is left alone")
+check(os.path.isfile(os.path.join(ext, "notes.txt")), "a file of your own is left alone")
+check(not os.path.isdir(ported_dir),
+      "while the retired ported/ tree is removed whole - stubs and icons included")
+check(not os.path.exists(stale), "and a stale module of ours is still pruned")
+
+print("== an update leaves your own menus alone ==")
+# The rule this whole section exists for: 3DCoat's menus are the user's. An
+# install may add a list that is missing; it must never rename, reorder, edit or
+# drop one he built.
+config_path = os.path.join(ext, "data", "menus.json")
+mine = {
+    "version": 1,
+    "menus": [
+        {"name": "My Stuff", "items": [{"id": "Resample", "label": "Resample"}],
+         "mode": "pie"},
+        # ...and a hand-built list that happens to shadow a built-in name.
+        {"name": "Prims", "items": [{"id": "Mine", "label": "Mine"}]},
+    ],
+}
+with open(config_path, "w", encoding="utf-8", newline="\n") as fh:
+    json.dump(mine, fh, indent=2)
+
+def row_ids(rows) -> list:
+    """Command ids of a saved menu's rows (a row may be a bare string or an object)."""
+    return [r if isinstance(r, str) else r.get("id") for r in rows]
+
+
+result = run()
+check(result.returncode == 0, f"install exits 0 with a hand-written config ({result.stderr.strip()})")
+with open(config_path, encoding="utf-8") as fh:
+    after = json.load(fh)
+names = [m["name"] for m in after["menus"]]
+check("My Stuff" in names, "a hand-built menu survives an update")
+_mine = after["menus"][names.index("My Stuff")]
+check(_mine.get("mode") == "pie" and _mine["name"] == "My Stuff",
+      "with his name and his pie mode untouched")
+check(row_ids(_mine["items"]) == ["Resample"], "and his rows, in his order")
+check(names.count("Prims") == 1 and row_ids(after["menus"][names.index("Prims")]["items"]) == ["Mine"],
+      "a hand-built 'Prims' is never mistaken for the built-in preset")
+check(any(m.get("preset") for m in after["menus"]),
+      "while a preset that is actually missing still installs")
+
+print("== a menus file we cannot read is never written over ==")
+bad_text = '{"version": 1, "menus": [ {oops\n'
+with open(config_path, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write(bad_text)
+result = run()
+check(result.returncode == 0, "install still exits 0")
+check(result.stdout.count("unreadable") >= 1, "and says so out loud")
+with open(config_path, encoding="utf-8") as fh:
+    check(fh.read() == bad_text, "the file is byte-for-byte what it was")
+check(any(n.startswith("menus.json.unreadable-") for n in os.listdir(os.path.dirname(config_path))),
+      "with a dated copy kept beside it")
 
 print("== uninstall ==")
 result = run("--uninstall")

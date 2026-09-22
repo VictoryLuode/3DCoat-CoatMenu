@@ -54,10 +54,11 @@ def check(condition: bool, label: str) -> None:
 
 
 # --- simulate another cExtension having claimed the generic names first ------
-# Every cExtension shares one interpreter and LKS ships its own top-level 'ui'
-# package. These stubs stand in for it: if CoatMenu went back to a top-level
-# 'ui'/'core', the import below would fail - which is exactly the bug that made
-# the first release silently do nothing when clicked.
+# Every cExtension shares one interpreter, and extensions in the wild do ship
+# top-level 'ui' / 'core' packages. These stubs stand in for one of them: if
+# CoatMenu went back to a top-level 'ui'/'core', the import below would fail -
+# which is exactly the bug that made the first release silently do nothing when
+# clicked.
 _stub_ui = types.ModuleType("ui")
 _stub_ui.__path__ = []
 _stub_core = types.ModuleType("core")
@@ -107,13 +108,16 @@ check("main()\n" in entry_source, "action entry calls main() unconditionally")
 
 print("== internal packages are namespaced ==")
 # Every cExtension shares one interpreter: a top-level 'core' or 'ui' package
-# collides with another add-on's (LKS ships its own 'ui', and it wins because it
-# imported first). This test exists because that bug broke the first release.
+# collides with another add-on's (a sibling extension ships its own 'ui', and it
+# wins because it imported first). This test exists because that bug broke the
+# first release.
 top_dirs = {n for n in os.listdir(COAT_SIDE)
             if os.path.isdir(os.path.join(COAT_SIDE, n)) and not n.startswith(".")}
 check("core" not in top_dirs and "ui" not in top_dirs,
       f"no generic top-level package ({sorted(top_dirs)})")
 check("coatmenu" in top_dirs, "code lives under the coatmenu package")
+check("ported" not in top_dirs,
+      f"and another extension's code does not ship here at all ({sorted(top_dirs)})")
 
 bad: list[str] = []
 for dirpath, dirnames, filenames in os.walk(COAT_SIDE):

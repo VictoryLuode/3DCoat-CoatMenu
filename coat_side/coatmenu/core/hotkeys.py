@@ -18,7 +18,6 @@ candidate whose key is *currently held*.
 from __future__ import annotations
 
 import os
-import xml.etree.ElementTree as ET
 
 from coatmenu.core.log import log
 
@@ -94,18 +93,6 @@ def read_bindings(path: str | None = None) -> list[dict]:
     except Exception as exc:
         log(f"hotkeys: cannot read {path or 'hotkeys file'}: {exc}")
         return []
-
-
-def user_defined_ids(path: str | None = None) -> set[str]:
-    """Hotkey ids the *user* set by hand in Preferences ▸ Hotkeys.
-
-    3DCoat marks those ``<UserDefined>1</UserDefined>``. CoatMenu only proposes a
-    default for the ones nobody has touched, so setting a key in the editor never
-    fights with a key you picked yourself.
-    """
-    return {entry["id"] for entry in read_bindings(path) if entry.get("user_defined")}
-
-
 def find_trigger_vk(candidates: list[str], path: str | None = None) -> int:
     """Virtual key currently used to launch us, or 0 if we cannot tell.
 

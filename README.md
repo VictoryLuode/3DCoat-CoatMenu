@@ -22,8 +22,8 @@ centred on the cursor, so every slot is the same distance away:
 ![CoatMenu pie](docs/preview-pie.png)
 
 A pie with a submenu (rest on a slot for a moment and the child panel unfolds),
-and 3D-Coat's own `Prims` flattened onto the menu — built-in shapes right there,
-mesh and FFD folded into a submenu:
+and 3D-Coat's own primitives flattened onto the menu — built-in shapes right
+there, the FFD shapes folded into a submenu:
 
 ![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
 ![CoatMenu Prims](docs/preview-prims.png)
@@ -74,18 +74,30 @@ extension builds on this machine)*
   straight up.
 * **Multi-step rows** — a row can fire several 3D-Coat commands in order, which is
   how primitives work ("neutralise the tool → open the primitive tool → pick the
-  shape"). The bundled `Prims` menu is built from exactly that: a port of an
-  Add-Prims radial menu an older extension shipped.
+  shape"). The bundled `Add` menu is built from exactly that.
 * **Submenus**, nested, unfold on hover (with a grace timer so diagonal mouse
   moves don't close them); in a pie a short dwell opens them. **Promote** turns a
   submenu into a menu of its own.
-* **`Sculpt Ops`, bundled** — 93 sculpt actions in six groups (Object, Scene,
-  Autopo, Brush, Export, Other), ported from an older radial-menu extension so they
-  keep working now that extension is gone. Each entry keeps its own readable name.
-* **Independent** — no other extension is required, and none is imported. Everything
-  CoatMenu ships lives under its own namespace, because `cExtensions` shares one
-  interpreter: a generic top-level name would collide with a neighbour's (a sibling
-  extension's `ui` package did exactly that once).
+* **`Sculpt Ops`, bundled** — 71 of 3D-Coat's own object commands (the ones on the
+  VoxTree right-click menu) in seven groups: Decimate, Density & Resample, Boolean,
+  Merge & Clone, Hide/Show/Ghost, Object Tools, Autopo & Retopo. The names are
+  3D-Coat's own, and every id is looked up before it becomes a row (see below), so
+  a command this build does not have is left out rather than shipped as a row that
+  does nothing.
+* **Seven lists on a first run** — `Sculpt`, `Modeling`, `Add`, `Tools`, `Common`,
+  `Shade` (a pie) and `Sculpt Ops`, in that order. Every one of them is built
+  against the 3D-Coat that is running: the primitives, the sculpt and modelling
+  commands and the shading pie are curated lists of **3D-Coat's own command ids**,
+  `Tools` reads your `CustomTools` presets, `Common` takes its grouping from
+  3D-Coat's own main menu, and `Sculpt Ops` its names and its rows from 3D-Coat's
+  own definitions. An id this build does not define is dropped at build time
+  (`English.xml`, 3D-Coat's own id table, is the authority), so no shipped row is
+  ever a row that does nothing.
+* **Independent** — no other extension is required, none is imported, and none of
+  its code ships here. Everything CoatMenu ships lives under its own namespace,
+  because `cExtensions` shares one interpreter: a generic top-level name would
+  collide with a neighbour's (a sibling extension's `ui` package did exactly that
+  once).
 * **Editor** — add rows from three sources, with readable names:
   | Source | What it gives you |
   |---|---|
@@ -105,18 +117,28 @@ extension builds on this machine)*
   and keys per menu, clashes, a tool-switch probe, log tail) to `data/doctor.txt`.
 * **Never touches your hotkeys file** — `Options_Hotkeys.xml` is opened read-only,
   never written. The file is easy to corrupt and 3D-Coat itself has done it before.
+* **Your menus are yours** — an update only ever adds a menu that is **missing**.
+  Nothing already in your file is renamed, reordered, edited or dropped (a menu we
+  shipped counts as yours the moment it is in there), and a `menus.json` that cannot
+  be parsed is left alone with a dated copy beside it instead of being replaced by a
+  starter. Deleting things is limited to what an install wrote: `coatmenu/`,
+  `actions/`, plus the retired top-level folders (`core/`, `ui/`, and `ported/` from
+  the version that shipped another extension's sculpt actions there).
 
 ## Install
 
 **Requirements:** 3D-Coat 2025 (it ships its own Python 3.11 + PySide6 — nothing to
-install).
+install). The installer itself only needs Python 3.8+, and it runs on 3D-Coat's own
+interpreter when that can be found.
 
 ### Option 1 — the package (no terminal)
 
 1. Download `CoatMenu-v<version>.zip` from Releases and unzip it anywhere.
-2. Double-click `install\install.cmd` — it runs on 3D-Coat's own Python, and checks
-   the usual Documents folders (including OneDrive-redirected ones) before falling
-   back. Nothing outside 3D-Coat's user folder is touched.
+2. Double-click `install\install.cmd` — it runs on 3D-Coat's own Python (any
+   `python-*` folder inside 3D-Coat's data folder, whichever version it is), asks
+   Windows where `Documents` is, and only falls back to the `py` launcher or a
+   `python` on `PATH` after checking that the candidate actually runs. Nothing
+   outside 3D-Coat's user folder is touched.
 3. Restart 3D-Coat — or open **Windows ▸ Panels ▸ Extensions** and hit **Start** to
    avoid a restart.
 4. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
@@ -134,8 +156,9 @@ Nothing here hard-codes a path:
 
 | What | How it is found |
 |---|---|
-| 3D-Coat's user data | `coat.io.documents()` at runtime; the installer checks the usual `Documents` spots (and OneDrive) and takes `--documents DIR` / `COATMENU_DOCUMENTS` |
+| 3D-Coat's user data | `coat.io.dataPath()` at runtime (checked for a `UserPrefs` folder, never assumed); the installer asks the registry where `Documents` is, then the usual spots (and OneDrive), and takes `--documents DIR` / `COATMENU_DOCUMENTS` |
 | 3D-Coat's program folder | `coat.io.installPath()`, falling back to the path in the user folder's `executable.txt` |
+| 3D-Coat's own Python | any `python-*` folder in its data folder; every candidate has to run before it is used |
 | The extension itself | from its own location (inferred from `paths.py`) |
 
 ### Option 2 — from a checkout
@@ -185,15 +208,18 @@ deleted.
 * Entries run through `coat.ui.cmd("$CommandID")`; script entries go through
   `coat.io.executeScript`.
 * Every menu gets a **generated launcher script**
-  (`actions/menus/CoatMenu_<Menu>.py`) plus a menu item in
-  `Scripts/ExtraMenuItems/CoatMenu.xml`, because a 3D-Coat menu item points at a
-  file and one file cannot know which menu it belongs to. Saving in the editor also
-  calls `coat.ui.insertInMenu` so new items exist right away.
+  (`actions/menus/CoatMenu_<Menu>.py`), because a 3D-Coat menu item points at a
+  file and one file cannot know which menu it belongs to. The three fixed entries
+  (Show CoatMenu / Edit menus / Diagnostics) live in
+  `Scripts/ExtraMenuItems/CoatMenu.xml`, which 3D-Coat reads at startup; the
+  one-per-menu entries are registered at runtime with `coat.ui.insertInMenu`, so a
+  menu built in the editor is usable without a restart. Writing them in both places
+  would list every menu twice.
 * Your menus live in `<ext>/data/menus.json`.
-* The ported sculpt actions live in `<ext>/ported/` and import as `ported.*`. They
-  are the original scripts with one mechanical change — every `utils` / `ops` /
-  `lks_utils` reference got the `ported.` prefix — so they cannot collide with
-  another extension's top-level names in the shared interpreter.
+* The bundled lists are built from **3D-Coat's own data** at the moment they are
+  made — its `cTemplates` menu files, its `English.xml` id table, your
+  `CustomTools` — and every id in a curated list is looked up in that id table
+  first, so a row is always something this build of 3D-Coat actually has.
 * The command catalog is cached for the session, so switching source in the editor
   is instant (3D-Coat's 7711-entry translation table is parsed once).
 
@@ -206,7 +232,7 @@ deleted.
 | ✔ M3 | radial pie renderer (same data), dwell submenus, per-menu list/pie switch |
 | ✔ M4 | Blender-style interaction, live preview, tools/script sources, conflict detection, doctor report |
 | ✔ M5 | packaging and polish: one-command release zip, changelog, README |
-| ✔ M6 | per-row `Expand` and `Position`, ported sculpt actions, independence from other extensions |
+| ✔ M6 | per-row `Expand` and `Position`, a bundled `Sculpt Ops` list, independence from other extensions |
 
 A screen-edge menu belt was considered and dropped — the overlay-at-the-cursor
 idea covers the same ground with less to hit by accident.
@@ -226,8 +252,9 @@ Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
 | `test_popup.py` | layout, hit testing, hover, click-to-run, release-to-run, `Esc`, submenus, pie geometry (drawn = hit), centring, slot direction and pinned positions, forced inline/panel |
 | `test_editor.py` | view↔model round trip, menu ops, catalog sources, Add all, undo/redo, save & reload, the `Expand` and `Position` columns, dragged-in groups keeping their children |
 | `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
-| `test_install.py` | install/reinstall/uninstall into a throwaway tree (other extensions untouched) |
+| `test_install.py` | install/reinstall/uninstall into a throwaway tree — including that your own menus, folders and scripts survive an update, the retired `ported/` tree is cleaned up whole, and a config it cannot read is left byte-for-byte alone |
 | `test_installed_copy.py` | the copy actually installed under `Documents/3DCoat` |
+| `test_verify.py` | whole-tree health: every module imports, every referenced name resolves, the built-in menus build, and the installer runs |
 
 `tests/render_preview.py` renders the overlay and editor against the real data on
 the machine and writes the PNGs used above. `tools/make_release.py` builds the

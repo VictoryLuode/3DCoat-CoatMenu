@@ -15,6 +15,7 @@ import time
 from coatmenu import __version__
 from coatmenu.core import bindings as bindings_mod
 from coatmenu.core import catalog, menus, paths
+from coatmenu.core.config import config_readable, unreadable_copies
 from coatmenu.core.log import log, log_path
 
 REPORT_NAME = "doctor.txt"
@@ -83,6 +84,23 @@ def tool_probe(limit: int = PROBE_LIMIT) -> list[str]:
     return lines
 
 
+def config_line() -> str:
+    """One line about the config file: present, readable, anything kept aside.
+
+    A config that cannot be parsed is the one thing that makes "my menus are gone"
+    look true, so the doctor says it outright instead of reporting "ok".
+    """
+    path = paths.config_path()
+    if not os.path.exists(path):
+        return "MISSING (a starter is written on the next start)"
+    copies = unreadable_copies(path)
+    if not config_readable(path):
+        return f"UNREADABLE - left as it is ({path})"
+    if copies:
+        return f"ok, but {len(copies)} unreadable copy kept: {os.path.basename(copies[-1])}"
+    return "ok"
+
+
 def report(config=None) -> str:
     """The whole picture, as plain text."""
     cfg = config if config is not None else menus.get_config()
@@ -95,7 +113,7 @@ def report(config=None) -> str:
         f"  time          : {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"  extension     : {paths.extension_root()}",
         f"  data          : {paths.data_dir()}",
-        f"  menus.json    : {'ok' if os.path.exists(paths.config_path()) else 'MISSING'}",
+        f"  menus.json    : {config_line()}",
         f"  startup.txt   : {'CoatMenu listed' if _startup_lists_us(startup) else 'CoatMenu NOT listed'}"
         f"  ({startup})",
         f"  command source: {catalog.describe_counts()}",

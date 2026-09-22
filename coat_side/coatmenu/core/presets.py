@@ -1,26 +1,45 @@
 """
-CoatMenu - built-in preset lists.
+CoatMenu - the lists we ship on a first run.
 
-The ``Prims`` list is a port of a radial "Add Prims" menu that shipped with an
-older extension.  It fires three
-3DCoat commands in order for every entry, and this port keeps that exact order:
+The shipped set is one person's own set - ``Sculpt``, ``Modeling``, ``Add``,
+``Tools``, ``Common``, ``Shade`` and ``Sculpt Ops`` - in that order. What each of
+them holds is decided **at the moment the list is built**, against the build of
+3DCoat that is running, so a list can never hold a row that does nothing:
+
+* ``Common`` - the everyday commands, grouped the way 3DCoat's main menu groups
+  them (read from ``cTemplates``).
+* ``Tools`` - the tool presets in your ``CustomTools``, grouped by the section
+  3DCoat's own panel puts them in.
+* ``Sculpt Ops`` - 3DCoat's own object commands (the ones on the VoxTree
+  right-click menu), sorted into groups we chose.
+* ``Sculpt`` / ``Modeling`` / ``Shade`` - curated lists of 3DCoat's own commands
+  (see the data below).
+
+``Add`` is the one list whose rows fire a *sequence* of commands:
 
     $SCULPT_TRANSFORM                      neutralise whatever tool is active
-    $SCULP_PRIM   /  $SCULP_MERGE          open the primitive / merge tool
-    $VoxelSculptTool::prm_*  /  $select_*  pick the shape
+    $SCULP_PRIM                            open the primitive tool
+    $VoxelSculptTool::prm_*  /  ::ff*      pick the shape
 
-Those command strings are 3DCoat's own UI ids (that extension's
-``utils/primitives_constants.py``: "magic strings observed via RMB+MMB on UI
-elements"), so nothing here is invented - the sequence is the part 3DCoat needs
-to make the pick land.
+Those ids and that order are 3DCoat's own (its ``Scripts/Missions/Primitives.as``
+drives the same buttons). Reaching primitives from a menu is an idea earlier
+3DCoat extensions had - this is our own take on it, built from 3DCoat's ids.
+
+Every id that is written down here is looked up in
+:func:`coatmenu.core.catalog.known_command_ids` - 3DCoat's own id table - before
+it becomes a row, and left out when this build does not define it. That is what
+keeps a curated list honest on a build whose commands differ from the one it was
+written on.
 """
 from __future__ import annotations
 
 from coatmenu.core import catalog
-from coatmenu.core.config import MenuConfig, Menu
+from coatmenu.core.config import Menu, MenuConfig, item_from_json
 from coatmenu.core.menu_model import (
     COMMAND,
     LIST,
+    PIE,
+    SUBMENU,
     MenuItem,
     header,
     separator,
@@ -28,11 +47,9 @@ from coatmenu.core.menu_model import (
     submenu,
 )
 
-# --- command ids (from the same radial menu's constants) ----------------------
+# --- command ids (3DCoat's own, as its UI uses them) --------------------------
 NEUTRALISE = "$SCULPT_TRANSFORM"
 PRIM_TOOL = "$SCULP_PRIM"
-MERGE_TOOL = "$SCULP_MERGE"
-MODELS_DIR = "UserPrefs/Models/SculptModels"
 
 BUILTIN_PRIMITIVES: list[tuple[str, str]] = [
     ("Sphere", "prm_SpherePrim"),
@@ -49,14 +66,6 @@ BUILTIN_PRIMITIVES: list[tuple[str, str]] = [
     ("Image", "prm_ImagePrim"),
 ]
 
-MESH_PRIMITIVES: list[tuple[str, str]] = [
-    ("Cube", "Cube.obj"),
-    ("Sphere", "Sphere.obj"),
-    ("Cylinder", "Cylinder.obj"),
-    ("Capsule", "Capsule.obj"),
-    ("Cone", "Cone.obj"),
-]
-
 FFD_PRIMITIVES: list[tuple[str, str]] = [
     ("Blob", "ffBlob"),
     ("Cube", "ffCube"),
@@ -70,48 +79,326 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 
 
 # Version markers for the lists we ship: bump the number when the preset changes
-# so the installer refreshes the user's copy (a hand-built list of the same name
-# has no marker and is never touched).
-PRESET_MARKERS = {"Common": "common/1", "Prims": "prims/2", "Tools": "tools/1"}
+# so the installer offers the new rows (a hand-built list of the same name has no
+# marker and is never touched; a shipped list the user has edited only ever gains
+# whole lists - see install_presets). The family (the part before the "/") is what
+# identifies a list we shipped once, under whatever name the user gave it.
+PRESET_MARKERS = {
+    "Sculpt": "sculpt/1",
+    "Modeling": "modeling/1",
+    "Add": "prims/2",
+    "Tools": "tools/1",
+    "Common": "common/1",
+    "Shade": "shade/1",
+    "Sculpt Ops": "sculptops/1",
+}
+
+# The lists a fresh install gets, in the order 3DCoat's Scripts menu shows them.
+DEFAULT_LISTS: tuple[str, ...] = (
+    "Sculpt",
+    "Modeling",
+    "Add",
+    "Tools",
+    "Common",
+    "Shade",
+    "Sculpt Ops",
+)
 
 
-def builtin_row(label: str, param: str) -> MenuItem:
-    return sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
+def _universe() -> set[str]:
+    """The command ids this build of 3DCoat defines (empty when unknowable)."""
+    return catalog.known_command_ids()
 
 
-def mesh_row(label: str, filename: str) -> MenuItem:
-    return sequence(label, [NEUTRALISE, MERGE_TOOL, f"$select_{MODELS_DIR}/{filename}"])
+def _known(universe: set[str], cid: str) -> bool:
+    """True when *cid* is a command this build has (or when we cannot tell)."""
+    if not universe:
+        return True
+    key = str(cid or "").lstrip("$").strip().lower()
+    if not key:
+        return False
+    return key in universe or key.split("::")[0] in universe
 
 
-def ffd_row(label: str, param: str) -> MenuItem:
-    return sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
+def _drop_unknown(items: list[MenuItem], universe: set[str]) -> list[MenuItem]:
+    """Rows whose command this build does not define are left out; rest is kept.
+
+    An empty *universe* means the program folder could not be read, so nothing can
+    be checked: the rows stay as they are rather than being dropped wholesale.
+    """
+    out: list[MenuItem] = []
+    for item in items:
+        if item.kind == SUBMENU:
+            children = _drop_unknown(list(item.children or []), universe)
+            if children:
+                item.children = children
+                out.append(item)
+            continue
+        if item.kind == COMMAND and item.cid and not _known(universe, item.cid):
+            continue
+        out.append(item)
+    return out
+
+
+def _list_from_rows(name: str, rows: list, mode: str = LIST) -> Menu:
+    """Build one curated list: parse the rows, then drop what this build lacks."""
+    items = [item for item in (item_from_json(raw) for raw in rows) if item is not None]
+    return Menu(name=name, items=_drop_unknown(items, _universe()), mode=mode,
+                preset=PRESET_MARKERS[name])
+
+
+# --- Sculpt / Modeling / Shade ------------------------------------------------
+# Written down in the config's own JSON shape, so a list edited in the panel can be
+# pasted straight back in here. Ids are 3DCoat's; labels are ours.
+#
+# The shade ids are the ones 3DCoat defines: ``VIEW_GLOSS_ONLY``,
+# ``VIEW_SPECULAR_COLOR_ONLY`` and ``VIEW_WIREFRAME``. (``VIEW_GLOSSONLY``,
+# ``VIEWSPECULARCOLORONLY`` and ``VIEWWIREFRAME`` - no underscores - are not in
+# 3DCoat's id table at all, so a row using them does nothing.)
+SCULPT_MENU_ROWS: list = [
+    {"header": "Object"},
+    {"id": "BendVolume", "label": "Array/Bend Volume"},
+    {"id": "TubeOrModels", "label": "Attach Tube or Models Array"},
+    "Resample",
+    "RegularGizmo::ToCenterMass",
+    {"id": "ToUniformSpaceAll", "label": "Make All Uniform"},
+    {"name": "Voxel Operator", "items": [
+        {"id": "SeparateHidden", "label": "Separate Hidden Volumes"},
+        {"id": "Invert_vox_visibility", "label": "Invert Volumes Visibility"},
+        {"id": "SCULP_HIDE", "label": "Vox Hide"},
+    ]},
+    {"separator": True},
+    {"header": "Scena"},
+    {"id": "DefineScaleCorrespondence", "label": "Scene Scale Master"},
+]
+
+MODELING_MENU_ROWS: list = [
+    "ApplyTopoSubdiv",
+    "Bevel",
+    {"id": "RtWeldingVertexs", "label": "WeldingVertexs"},
+    {"id": "SculptMesh", "label": "Display In Sculpt"},
+    "Subdivide1",
+    "Subdivide2",
+]
+
+SHADE_MENU_ROWS: list = [
+    {"name": "Shade Mode", "expand": "inline", "position": "right", "items": [
+        {"id": "$CastShadows", "label": "CastShadows"},
+        {"id": "$VIEW_SHADED", "label": "Shade"},
+        {"id": "$VIEW_RELIEF_ONLY", "label": "Solid"},
+        {"id": "$VIEW_NON_SHADED", "label": "Flat Color"},
+        {"id": "$VIEW_GLOSS_ONLY", "label": "Roughness"},
+        {"id": "$VIEW_SPECULAR_COLOR_ONLY", "label": "Specular Color"},
+        {"id": "$VIEW_METALNESS_ONLY", "label": "Metalness"},
+    ]},
+    {"name": "Shade Setting", "expand": "inline", "position": "top-left", "items": [
+        {"id": "$BackfaceCulling", "label": "BackfaceCulling"},
+        {"id": "$GreyscaleLight", "label": "HDR Grey Mode"},
+    ]},
+    {"name": "Overlay", "expand": "inline", "position": "bottom-left", "items": [
+        {"id": "$SHOW_AXIS", "label": "Axis"},
+        {"id": "$VIEW_WIREFRAME", "label": "WireFrame"},
+        {"id": "$RenderSculptSelection", "label": "Selection"},
+    ]},
+]
+
+
+def sculpt_list(mode: str = LIST) -> Menu:
+    """The ``Sculpt`` list: the volume/curve commands reached for while sculpting."""
+    return _list_from_rows("Sculpt", SCULPT_MENU_ROWS, mode)
+
+
+def modeling_list(mode: str = LIST) -> Menu:
+    """The ``Modeling`` list: subdivision and retopo-side commands."""
+    return _list_from_rows("Modeling", MODELING_MENU_ROWS, mode)
+
+
+def shade_list(mode: str = PIE) -> Menu:
+    """The ``Shade`` pie: view modes, shading switches and overlays."""
+    return _list_from_rows("Shade", SHADE_MENU_ROWS, mode)
+
+
+# --- primitives --------------------------------------------------------------
+def _prim_rows(pairs: list[tuple[str, str]], universe: set[str]) -> list[MenuItem]:
+    return [sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
+            for label, param in pairs if _known(universe, param)]
 
 
 def primitive_groups() -> list[tuple[str, list[MenuItem]]]:
-    """(group label, rows) - the three groups that menu sorted its rows into."""
+    """(group label, rows) - the shapes, in the order the menu presents them.
+
+    A ``Mesh Prims`` group used to sit in here, pointing
+    ``$select_UserPrefs/Models/SculptModels/<shape>.obj`` at files 3DCoat does not
+    ship - the shapes live in the program folder's ``data/ObjPens`` - so every row
+    of it did nothing. It is gone rather than shipped broken.
+    """
+    universe = _universe()
     return [
-        ("Built-in Prims\u2026", [builtin_row(l, p) for l, p in BUILTIN_PRIMITIVES]),
-        ("Mesh Prims\u2026", [mesh_row(l, f) for l, f in MESH_PRIMITIVES]),
-        ("FFD Prims\u2026", [ffd_row(l, p) for l, p in FFD_PRIMITIVES]),
+        ("Built-in Prims\u2026", _prim_rows(BUILTIN_PRIMITIVES, universe)),
+        ("FFD Prims\u2026", _prim_rows(FFD_PRIMITIVES, universe)),
     ]
 
 
 def primitives_list(mode: str = LIST) -> Menu:
-    """The ``Prims`` list.
+    """The ``Add`` list.
 
-    The built-in shapes sit straight on the list - they are the ones you reach
-    for constantly - while the mesh and FFD groups stay folded into submenus so
-    the list does not grow past a screenful.
+    The built-in shapes sit straight on the list - they are the ones you reach for
+    constantly - while the FFD group stays folded into a submenu so the list does
+    not grow past a screenful.
     """
     items: list[MenuItem] = [builtin_row(label, param)
-                             for label, param in BUILTIN_PRIMITIVES]
+                             for label, param in BUILTIN_PRIMITIVES
+                             if _known(_universe(), param)]
     items.append(separator())
     for label, rows in primitive_groups()[1:]:
-        items.append(submenu(label, rows))
-    return Menu(name="Prims", items=items, mode=mode,
-                    preset=PRESET_MARKERS["Prims"])
+        if rows:
+            items.append(submenu(label, rows))
+    return Menu(name="Add", items=items, mode=mode,
+                preset=PRESET_MARKERS["Add"])
 
 
+def builtin_row(label: str, param: str) -> MenuItem:
+    """One built-in primitive: neutralise, open the tool, pick the shape."""
+    return sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
+
+
+# --- Sculpt Ops: 3DCoat's own object commands, in groups we chose -------------
+# Ids only. Every one of them is looked up in 3DCoat's own id table when the list
+# is built (see `sculpt_ops_groups`), and one this build does not define is
+# skipped - so the list can never contain a row that does nothing. Groups that
+# come back empty are dropped as well.
+SCULPT_OPS: list[tuple[str, list[str]]] = [
+    ("Decimate", [
+        "Decimate",
+        "Decimate2X",
+        "Decimate4X",
+        "Decimate8X",
+        "Decimate16X",
+        "Reduce2X",
+        "Reduce4X",
+        "Reduce8X",
+    ]),
+    ("Density & Resample", [
+        "IncDencity2X",
+        "DecDencity2X",
+        "Resample",
+        "RESAMPLE4SCREEN_TOOL",
+        "ToUniformSpace",
+        "ToGlobalSpace",
+        "ToUniformSpaceAll",
+        "ShowDensityNearVolumes",
+    ]),
+    ("Boolean", [
+        "LiveUnion",
+        "LiveSubtraction",
+        "LiveIntersection",
+        "NormalSculptLayer",
+        "CollapseBoolTree",
+        "BooleanRules",
+        "SoftBooleansForVolumes",
+        "SubtractFrom",
+        "IntersectWith",
+        "CopySubtractFrom",
+        "RemoveIntersectionWith",
+    ]),
+    ("Merge & Clone", [
+        "MergeVisible",
+        "MergeSubtree",
+        "MergeSelected",
+        "MergeTo",
+        "MoveTo",
+        "PlainMergeVisible",
+        "PlainMergeSubtree",
+        "PlainMergeSelected",
+        "CloneVoxTree",
+        "CloneInstance",
+        "CloneSymm",
+        "InstanceToParentInstances",
+    ]),
+    ("Hide, Show & Ghost", [
+        "Toggle_ghosting",
+        "Isolate_ghosting",
+        "Toggle_vox_visibility",
+        "Invert_vox_visibility",
+        "HideButCurrent",
+        "UnhideAll",
+        "ShowAll",
+        "ShowSubtree",
+        "InvertHide",
+        "DeleteHidden",
+        "SeparateHidden",
+    ]),
+    ("Object Tools", [
+        "SmoothObject",
+        "CleanSurface",
+        "CloseHoles",
+        "CloseSurfaceHoles",
+        "Decompose",
+        "DecomposeFrozen",
+        "Shell",
+        "MakeVoxHull",
+        "CreateSurfaceShell",
+        "FlipNormals",
+        "ExtrudeVO",
+        "AddVoxTree",
+    ]),
+    ("Autopo & Retopo", [
+        "Quadrangulate",
+        "QuadrangulateAndMerge",
+        "QuadrangulateAndMergeDP",
+        "QuadrangulateAndMergePtex",
+        "OldStyleQuads",
+        "GetObjectFromRetopoRoom",
+        "DecimateToRetopo",
+        "DecimateAllToRetopo",
+        "CustomRetopers",
+    ]),
+]
+
+
+def sculpt_ops_groups() -> list[tuple[str, list[MenuItem]]]:
+    """(group label, rows) for the object commands 3DCoat itself defines.
+
+    The labels come from 3DCoat's own definitions, never from us, and an id that
+    is not there is left out: a curated list plus a lookup is what keeps this list
+    honest on a build whose commands differ from the one it was written on.
+    """
+    universe = _universe()
+    known = {entry.cid.lstrip("$").lower(): entry
+             for entry in catalog.read_menu_commands()}
+    groups: list[tuple[str, list[MenuItem]]] = []
+    for label, ids in SCULPT_OPS:
+        rows: list[MenuItem] = []
+        for cid in ids:
+            entry = known.get(cid.lstrip("$").lower())
+            if entry is None and not _known(universe, cid):
+                continue
+            rows.append(MenuItem(label=(entry.label if entry and entry.label else cid),
+                                 kind=COMMAND,
+                                 cid=(entry.cmd_string if entry is not None
+                                      else "$" + cid.lstrip("$"))))
+        if rows:
+            groups.append((label, rows))
+    return groups
+
+
+def sculpt_ops_list(mode: str = LIST) -> Menu:
+    """The ``Sculpt Ops`` list: 3DCoat's own object commands, one submenu per group.
+
+    These are the entries 3DCoat puts on the VoxTree right-click menu - decimate,
+    resample, the live booleans, merge, ghosting - grouped so a pie can reach them
+    without a trip to the VoxTree.
+    """
+    items: list[MenuItem] = []
+    for name, rows in sculpt_ops_groups():
+        items.append(submenu(f"{name}  ({len(rows)})", rows))
+    if not items:
+        items.append(header("3DCoat's own object commands were not found"))
+    return Menu(name="Sculpt Ops", items=items, mode=mode,
+                preset=PRESET_MARKERS["Sculpt Ops"])
+
+
+# --- Tools -------------------------------------------------------------------
 def tool_rows() -> list[tuple[str, list[MenuItem]]]:
     """(panel section, rows) exactly as 3DCoat groups its own tool panel."""
     groups: dict[str, list[MenuItem]] = {}
@@ -135,9 +422,10 @@ def tools_list(mode: str = LIST) -> Menu:
     if not items:
         items.append(header("no CustomTools presets found"))
     return Menu(name="Tools", items=items, mode=mode,
-                    preset=PRESET_MARKERS["Tools"])
+                preset=PRESET_MARKERS["Tools"])
 
 
+# --- Common ------------------------------------------------------------------
 # The main menus whose commands get reached for constantly. Using 3DCoat's own
 # grouping keeps "common" 3DCoat's opinion rather than ours.
 COMMON_MENUS = ("Edit", "View", "Freeze", "Symmetry", "Hide", "Layers")
@@ -171,29 +459,73 @@ def common_list(mode: str = LIST) -> Menu:
     if not items:
         items.append(header("no main-menu commands found"))
     return Menu(name="Common", items=items, mode=mode,
-                    preset=PRESET_MARKERS["Common"])
+                preset=PRESET_MARKERS["Common"])
 
 
-def install_presets(config: MenuConfig,
-                    names: tuple[str, ...] = ("Common", "Prims", "Tools")
-                    ) -> list[str]:
-    """Add missing preset lists, and refresh ones shipped by an older version.
+# --- installing the shipped lists ---------------------------------------------
+_BUILDERS = {
+    "Sculpt": sculpt_list,
+    "Modeling": modeling_list,
+    "Add": primitives_list,
+    "Tools": tools_list,
+    "Common": common_list,
+    "Shade": shade_list,
+    "Sculpt Ops": sculpt_ops_list,
+}
 
-    A preset list is recognised by its ``preset`` marker: a list you built by
-    hand - even one called ``Prims`` - has no marker and is never touched.
+
+def default_lists() -> list[Menu]:
+    """Every shipped list, built for this build of 3DCoat (first-run config)."""
+    return [_BUILDERS[name]() for name in DEFAULT_LISTS]
+
+
+def _preset_family(marker: str) -> str:
+    """``prims/2`` -> ``prims``: which preset a marker belongs to, version aside."""
+    return str(marker or "").split("/")[0].strip().lower()
+
+
+def _by_marker(config: MenuConfig, marker: str):
+    """A menu we shipped once, found by its marker rather than its name.
+
+    The name is not a reliable key: the user is free to rename a built-in menu, and
+    if we only looked for ``Add`` we would add a second one next to his
+    ``Add Prims``. Compared per *family* (``prims``), so every version of the same
+    preset - and every name he gave it - counts as the same list.
     """
-    built = {"Common": common_list, "Prims": primitives_list, "Tools": tools_list}
+    family = _preset_family(marker)
+    if not family:
+        return None
+    for menu in config.menus:
+        if _preset_family(menu.preset) == family:
+            return menu
+    return None
+
+
+def install_presets(config: MenuConfig, names: tuple[str, ...] = DEFAULT_LISTS) -> list[str]:
+    """Add preset lists that are **missing**. A menu that exists is never touched.
+
+    The rule this exists to hold (see AGENTS.md): the menus in the config are the
+    user's, including the ones we shipped with - the moment a list is in his file
+    it is his. So this is add-only, and "add" means *a whole list that is not
+    there*: no refreshing an older version of ours, no topping up rows of an
+    edited one, no renaming, no reordering, no marker rewrite. A list that has
+    become stale is the user's to delete or rebuild in the editor.
+
+    A hand-built list of the same name (no ``preset`` marker) always wins, and is
+    left alone too.
+    """
     added: list[str] = []
     for name in names:
-        make = built.get(name)
+        make = _BUILDERS.get(name)
         if make is None:
             continue
         fresh = make()
-        existing = config.find(name)
-        if existing is None:
-            config.menus.append(fresh)
-            added.append(name)
-        elif existing.preset and existing.preset != fresh.preset:
-            config.menus[config.menus.index(existing)] = fresh
-            added.append(f"{name} (refreshed)")
+        if config.find(name) is not None:
+            # His list of that name - ours was renamed, or he built his own.
+            continue
+        if _by_marker(config, fresh.preset) is not None:
+            # Ours from an earlier version, under a name of his choosing.
+            continue
+        config.menus.append(fresh)
+        added.append(name)
     return added

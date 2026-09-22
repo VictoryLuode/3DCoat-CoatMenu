@@ -83,6 +83,14 @@ with open(os.path.join(CMAKE, "sculptTools.py"), "w", encoding="utf-8") as fh:
         '    coat.tools_item("[extension]MagnifyLayers")  # Magnify SL\n'
         '    coat.tools_item("[extension]BendVolume")  # Array/Bend Volume\n'
     )
+# The VoxTree right-click menu - where the Sculpt Ops preset gets its rows, and
+# the place a build may differ from the one that preset was written on.
+with open(os.path.join(CMAKE, "voxTreeRmb.py"), "w", encoding="utf-8") as fh:
+    fh.write(
+        'import coat\n'
+        'coat.menu_item("Decimate")   # Decimate\n'
+        'coat.menu_item("LiveUnion")  # Live union\n'
+    )
 # The user's own tool presets: 3DCoat names each file after the tool it customises.
 os.makedirs(os.path.join(USERPREF, "CustomTools"), exist_ok=True)
 for tool in ("SCULP_SCLAY", "MagnifyLayers", "BendVolume", "SomePersonalTool"):
@@ -101,26 +109,6 @@ with open(os.path.join(PRESETS_DIR, "HS_E58886E5B182Split.xml"), "w",
 with open(os.path.join(PRESETS_DIR, "order.txt"), "w", encoding="utf-8") as fh:
     fh.write("HS_Extrude.xml\nHS_E58886E5B182Split.xml\n")
 
-# A stand-in for the LKS extension's radial menus, which CoatMenu imports.
-LKS_ROOT = os.path.join(USERPREF, "Scripts", "cExtensions", "LKS")
-LKS_MENUS = os.path.join(LKS_ROOT, "data", "library", "radial_menus")
-os.makedirs(os.path.join(LKS_ROOT, "actions"), exist_ok=True)
-os.makedirs(LKS_MENUS, exist_ok=True)
-with open(os.path.join(LKS_MENUS, "LKS_Radial_Booleans.json"), "w", encoding="utf-8") as fh:
-    fh.write('{"version": 3, "name": "LKS_Radial_Booleans", "items": ['
-             '{"label": "Apply", "type": "action", "action": "$LKS_Apply"},'
-             '{"label": "New", "type": "list", "children": ['
-             '{"label": "Union", "type": "action", "action": "$LKS_Union"}]},'
-             '{"label": "Ghost", "type": "action", "action": "actions/Ghost.py"},'
-             '{"label": "action", "type": "action"},'
-             '{"label": "Decimate", "type": "action", "action": "ops.Decimate.main"}]}\n')
-with open(os.path.join(LKS_MENUS, "Shift S.json"), "w", encoding="utf-8") as fh:
-    fh.write('{"version": 3, "name": "Shift S", "items": ['
-             '{"label": "Reset Axis", "type": "action", "action": "$Reset Axis"}]}\n')
-with open(os.path.join(LKS_MENUS, "Alt Q.json.bak"), "w", encoding="utf-8") as fh:
-    fh.write('{"name": "Alt Q", "items": []}\n')
-with open(os.path.join(LKS_ROOT, "actions", "Ghost.py"), "w", encoding="utf-8") as fh:
-    fh.write("# demo\n")
 LANG = os.path.join(INSTALL, "data", "Languages")
 os.makedirs(LANG, exist_ok=True)
 with open(os.path.join(LANG, "English.xml"), "w", encoding="utf-8") as fh:
@@ -200,7 +188,7 @@ check(find_trigger_vk(["CoatMenu_Show", "execute:C:\\t\\actions\\CoatMenu_Show.p
 print("== 3DCoat's own menu definitions (authoritative, cannot be corrupted) ==")
 menu = catalog.read_menu_commands()
 by_menu_id = {e.cid: e for e in menu}
-check(len(menu) == 5, f"menu_item ids extracted ({sorted(by_menu_id)})")
+check(len(menu) == 7, f"menu_item ids extracted ({sorted(by_menu_id)})")
 check(all(e.cid != "COMMENTED_OUT" for e in menu), "commented-out calls ignored")
 check(any(e.hint == "MainMenu/File" for e in menu), "group carries the source file")
 check(by_menu_id["CLEARSCENE"].label == "New",
@@ -273,6 +261,54 @@ check([i.label for i in groups[0][1]] == ["Move along the X-axis", "Undo"],
 common = presets.common_list()
 check([i.label for i in common.items] == ["Edit  (2)"], "and it becomes one submenu per menu")
 check(common.preset == "common/1", "with its own marker")
+
+print("== the Sculpt Ops list (3DCoat's own commands, filtered at build time) ==")
+ops_groups = presets.sculpt_ops_groups()
+check([name for name, _rows in ops_groups] == ["Decimate", "Density & Resample", "Boolean"],
+      f"only the groups this build defines survive ({[n for n, _r in ops_groups]})")
+check([row.label for _n, rows in ops_groups for row in rows] == ["Decimate", "Resample", "Live union"],
+      f"rows are named the way 3DCoat names them "
+      f"({[r.label for _n, rows in ops_groups for r in rows]})")
+check(all(row.cid.startswith("$") for _n, rows in ops_groups for row in rows),
+      "a row runs the command id, not a label")
+
+ops = presets.sculpt_ops_list()
+check([i.label for i in ops.items] == ["Decimate  (1)", "Density & Resample  (1)", "Boolean  (1)"],
+      f"each group becomes one submenu ({[i.label for i in ops.items]})")
+check(ops.preset == "sculptops/1", "with its own marker")
+check(ops.name == "Sculpt Ops", "and its own name")
+
+curated = [cid for _label, ids in presets.SCULPT_OPS for cid in ids]
+shown = {row.cid.lstrip("$") for _n, rows in ops_groups for row in rows}
+check(len(curated) - len(shown) > 60,
+      f"an id this build does not define is skipped, never shipped as a dead row "
+      f"({len(shown)} of {len(curated)} shown)")
+
+# A build whose id table we can read, but which knows none of these commands: say
+# so in the list rather than offer rows that cannot resolve.
+real_ids = catalog.known_command_ids
+real_reader = catalog.read_menu_commands
+catalog.read_menu_commands = lambda *a, **k: []
+catalog.known_command_ids = lambda: {"SOMETHING_ELSE"}
+try:
+    empty = presets.sculpt_ops_list()
+finally:
+    catalog.read_menu_commands = real_reader
+    catalog.known_command_ids = real_ids
+check(len(empty.items) == 1 and empty.items[0].kind == "header",
+      f"with nothing to show it says so ({empty.items[0].label})")
+
+# ...but with no id table at all there is nothing to check against, so the rows
+# stay: dropping everything would be a guess, and a wrong one on a build whose
+# English.xml merely moved.
+catalog.known_command_ids = lambda: set()
+try:
+    unverifiable = presets.sculpt_ops_list()
+finally:
+    catalog.known_command_ids = real_ids
+check(len(unverifiable.items) == len(presets.SCULPT_OPS),
+      f"without an id table the rows are kept, not dropped "
+      f"({len(unverifiable.items)} groups)")
 
 print()
 if failures:

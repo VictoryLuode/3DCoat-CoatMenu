@@ -1,5 +1,4 @@
 """
-CoatMenu - command catalog.
 
 Where the entries you can put in a menu come from:
 
@@ -26,8 +25,6 @@ import os
 import re
 from dataclasses import dataclass
 
-from .log import log  # noqa: F401  (kept for callers that log catalog failures)
-
 
 @dataclass
 class CommandEntry:
@@ -49,12 +46,10 @@ class CommandEntry:
 # ---------------------------------------------------------------------------
 
 
-def _documents() -> str:
-    try:
-        import coat  # type: ignore
-        return str(coat.io.documents())
-    except Exception:
-        return os.path.join(os.path.expanduser("~"), "Documents")
+def _data_root() -> str:
+    """3DCoat's user data folder (holds ``UserPrefs``) - see ``paths.data_root``."""
+    from coatmenu.core import paths
+    return paths.data_root()
 
 
 def install_root() -> str:
@@ -67,7 +62,7 @@ def install_root() -> str:
     except Exception:
         pass
     try:
-        marker = os.path.join(_documents(), "3DCoat", "executable.txt")
+        marker = os.path.join(_data_root(), "executable.txt")
         with open(marker, encoding="utf-8", errors="replace") as fh:
             exe = fh.read().strip().splitlines()[0].strip()
         if exe:
@@ -78,23 +73,19 @@ def install_root() -> str:
 
 
 def hotkeys_path() -> str:
-    return os.path.join(_documents(), "3DCoat", "UserPrefs", "Preferences", "Options_Hotkeys.xml")
+    return os.path.join(_data_root(), "UserPrefs", "Preferences", "Options_Hotkeys.xml")
 
 
 def custom_menu_root() -> str:
-    return os.path.join(_documents(), "3DCoat", "UserPrefs", "CustomMenu")
+    return os.path.join(_data_root(), "UserPrefs", "CustomMenu")
 
 
 def custom_tools_root() -> str:
-    return os.path.join(_documents(), "3DCoat", "UserPrefs", "CustomTools")
-
-
-def presets_root() -> str:
-    return os.path.join(_documents(), "3DCoat", "UserPrefs", "Presets")
+    return os.path.join(_data_root(), "UserPrefs", "CustomTools")
 
 
 def scripts_root() -> str:
-    return os.path.join(_documents(), "3DCoat", "UserPrefs", "Scripts")
+    return os.path.join(_data_root(), "UserPrefs", "Scripts")
 
 
 def std_scripts_root() -> str:
@@ -373,8 +364,7 @@ def read_script_commands(root: str | None = None, limit: int = 400) -> list[Comm
                 continue
             rel = os.path.relpath(os.path.join(dirpath, name), root).replace("\\", "/")
             if rel.startswith(("cExtensions/", "cModules/")):
-                # Another extension's internals are not the user's scripts - what a
-                # ported action looks like is decided by the ported tree itself.
+                # Another extension's internals are not the user's scripts.
                 continue
             out.append(CommandEntry(cid=os.path.join(dirpath, name), label=rel, source="script"))
             if len(out) >= limit:
@@ -459,13 +449,24 @@ def read_all_commands(translations: dict[str, str] | None = None) -> list[Comman
     if translations is None:
         _ALL_COMMANDS_CACHE = rows
     return rows
+def known_command_ids() -> set[str]:
+    """Every command id this build of 3DCoat defines (lower-cased, without ``$``).
 
+    The menu definitions alone are not enough to check a curated list against:
+    plenty of real commands (the primitive shapes, the view modes) never appear
+    in a ``menu_item()`` template. ``English.xml`` is the UI's own id table - one
+    entry per id, ~7700 of them - so it is the authoritative universe, and a
+    curated list can look an id up in it instead of shipping a row that does
+    nothing on a build that does not have it.
 
-def clear_caches() -> None:
-    """Drop the parsed-source caches (tests that rewrite the fake 3DCoat files)."""
-    global _ALL_COMMANDS_CACHE
-    _TRANSLATION_CACHE.clear()
-    _ALL_COMMANDS_CACHE = None
+    Empty string set when the program folder cannot be read at all: then there is
+    nothing to check against, and callers should keep their rows rather than drop
+    everything (see ``presets``).
+    """
+    ids = {str(cid).lstrip("$").lower() for cid in read_translations()}
+    ids |= {entry.cid.lstrip("$").lower() for entry in read_all_commands()}
+    ids.discard("")
+    return ids
 
 
 def describe_counts() -> str:

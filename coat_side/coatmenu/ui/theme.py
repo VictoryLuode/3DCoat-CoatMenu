@@ -11,7 +11,6 @@ CORNER_RADIUS = 3      # a very small rounding on the panel itself
 ROW_CORNER_RADIUS = 2  # the highlight bar is rounded to match
 BORDER_WIDTH = 1
 PADDING = 6
-SHADOW_BLUR = 24
 FADE_MS = 110
 
 # --- rows ---

@@ -2,6 +2,70 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
+## Unreleased
+
+### Removed
+
+- **Another extension's code is gone.** CoatMenu used to ship a 430-file,
+  ~39k-line copy of the sculpt actions that came with an older radial-menu
+  extension, under `ported/`, and that tree was most of the release archive. It is
+  deleted outright: no `ported/`, no `ported.*` imports, no action scripts calling
+  into it. An install cleans the old tree out of an existing copy, whole folder and
+  all (pruning alone would have left its icons and `.env` stubs behind).
+- The extension's tests, docs and comments no longer name that extension either.
+
+### Changed
+
+- **`Sculpt Ops` is ours now** and contains no script of anyone else's: 71 of
+  **3D-Coat's own object commands** (the ones on the VoxTree right-click menu,
+  where decimate / resample / the live booleans / merge / ghosting live) in seven
+  groups. Every id is looked up in 3D-Coat's own menu definitions when the list is
+  built, so a command this build does not define is left out instead of shipped as
+  a row that does nothing - and the names on the rows are 3D-Coat's own. Nothing
+  carried over from the old list that only a script could do (density matching,
+  keeping parts through a remesh, ID colours, scale-and-restore export).
+- `Add` (the renamed `Prims`) stays 3D-Coat's own command ids in the order 3D-Coat
+  needs them, and now drops the two shapes **3D-Coat 2025 does not define**
+  (`prm_TorusPrim`, `prm_ImagePrim`) instead of shipping them as rows that do
+  nothing. The Mesh Prims group is gone with them: it pointed at
+  `UserPrefs/Models/SculptModels/*.obj`, which no 3D-Coat install has - the five
+  rows could never have worked. The idea of picking primitives from a radial menu
+  came from the extensions that came before this one - the implementation is ours.
+- **The menus you get on a first run are the set the author ships**: `Sculpt`,
+  `Modeling`, `Add`, `Tools`, `Common`, `Shade` (a pie) and `Sculpt Ops`, in that
+  order, each built against the 3D-Coat that is running. A freshly deleted
+  `menus.json` comes back as that set; an existing file is untouched, as before.
+- **Every curated row is now checked against 3D-Coat's own id table**
+  (`data/Languages/<lang>.xml`). A list still builds when the table cannot be read,
+  but when it can, an id this build does not define never reaches the menu.
+
+### Fixed
+
+- **A path containing `&` no longer breaks the menu file.** `ExtraMenuItems/CoatMenu.xml`
+  was written without XML escaping, so an account or folder named `Ben & Jerry` or
+  `R&D` produced a file 3D-Coat refuses to parse - and the three `Scripts ▸ CoatMenu`
+  entries simply never appeared. Ids and script paths are escaped now, and a
+  regression test parses the file from a path with `&` in it.
+- **Two menus whose names are not ASCII no longer collide.** `slugify()` dropped
+  every non-ASCII character, so `雕刻` and `建模` both became `menu`: one launcher
+  file, one hotkey id, one entry in `Scripts ▸ CoatMenu`, and the second menu
+  overwrote the first. Names outside ASCII now get a short hash of the original
+  name appended (`menu_<hash>`), which keeps them unique and stable; a plain ASCII
+  name is untouched, so existing launchers, hotkey bindings and menu ids keep
+  working.
+- **The installer no longer depends on where Windows keeps `Documents`.**
+  `install.cmd` looked for 3D-Coat's Python in three hard-coded spots and in a
+  `python-<version>` folder whose name changes with every release; `install.py`
+  assumed `Documents\3DCoat` and never asked. Both now ask the registry where
+  `Documents` (and therefore 3D-Coat's data folder) is, accept any `python-*`
+  folder, and take `--documents DIR` when all else fails. A shortcut to the
+  Microsoft Store's stub `python.exe` can no longer be picked up by accident:
+  every candidate has to run before it is used.
+- The extension no longer assumes `Documents\3DCoat` exists: the data folder is
+  `coat.io.dataPath()` when 3D-Coat can say, and is *checked* for a `UserPrefs`
+  folder rather than assumed - a user who moved it (or runs a portable copy) gets
+  a warning instead of a silent install into a folder 3D-Coat never reads.
+
 ## v0.6.1 — 2026-09-20
 
 ### Removed

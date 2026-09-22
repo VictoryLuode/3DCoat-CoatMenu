@@ -28,11 +28,11 @@ def log_path() -> str:
             _LOG_PATH = override
             return _LOG_PATH
         try:
-            import coat  # type: ignore
-            documents = coat.io.documents()
+            from coatmenu.core import paths
+            data_root = paths.data_root()
         except Exception:
-            documents = os.path.join(os.path.expanduser("~"), "Documents")
-        _LOG_PATH = os.path.join(str(documents), "3DCoat", _LOG_NAME)
+            data_root = os.path.join(os.path.expanduser("~"), "Documents", "3DCoat")
+        _LOG_PATH = os.path.join(str(data_root), _LOG_NAME)
     return _LOG_PATH
 
 

@@ -13,7 +13,12 @@ from __future__ import annotations
 import os
 
 from coatmenu.core import paths
-from coatmenu.core.config import MenuConfig, starter_config
+from coatmenu.core.config import (
+    MenuConfig,
+    quarantine_unreadable,
+    config_readable,
+    starter_config,
+)
 from coatmenu.core.menus_registry import (
     MAIN_MENU_ID,
     legacy_hotkey_ids,
@@ -66,8 +71,15 @@ def ensure_config() -> MenuConfig:
     """
     global _config
     _migrate_config_name()
-    existed = os.path.exists(paths.config_path())
-    _config = MenuConfig.load(paths.config_path())
+    path = paths.config_path()
+    if not config_readable(path):
+        # Never trade his file for a starter: a config we cannot parse is moved
+        # aside, and the save below writes a fresh one at the canonical path. He
+        # gets a warning in the log (and in the doctor) instead of silent loss.
+        moved = quarantine_unreadable(path)
+        log(f"menus.json unreadable - kept at {moved or path}; starting from a starter")
+    existed = os.path.exists(path)
+    _config = MenuConfig.load(path)
     if not _config.menus:
         _config = starter_config()
     if not existed:
@@ -149,19 +161,3 @@ def register_menu_items(config: MenuConfig) -> int:
     # system) and actively harmful (3DCoat rewrites them with an empty <Code>).
     log(f"menu items: inserted={inserted}")
     return inserted
-
-
-def unregister_menu_items() -> None:
-    """Remove our menu items (used by the editor's 'remove' and by uninstall)."""
-    try:
-        import coat  # type: ignore
-    except Exception:
-        return
-    ids = [MAIN_MENU_ID] + [lst.hotkey_id for lst in get_config().menus]
-    ids += legacy_hotkey_ids(get_config())
-    for menu_id in ids:
-        try:
-            if coat.ui.checkIfMenuItemInserted(menu_id):
-                coat.ui.removeCommandFromMenu(menu_id)
-        except Exception:
-            pass

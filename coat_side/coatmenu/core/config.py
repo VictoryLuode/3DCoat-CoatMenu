@@ -27,15 +27,17 @@ Item forms (identical to MenuBelt): a bare string is a command id; a dict with
 ``id`` is a command with optional renamed label; ``script`` is a python file;
 ``name`` + ``items`` is a submenu; ``separator``/``header`` are decoration.
 
-Missing file -> a starter config built from 3DCoat's own CustomMenu entries, so
-the very first run already has entries that are guaranteed to work.
+Missing file -> a starter config holding the lists we ship, each one built against
+the 3DCoat that is running so a first run already has entries that work.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import time
 import unicodedata
+import zlib
 from dataclasses import dataclass, field
 
 from coatmenu.core.menu_model import (
@@ -55,9 +57,24 @@ MAX_ITEMS_PER_LIST = 200
 
 
 def slugify(name: str) -> str:
-    """ASCII slug used for hotkey ids and generated entry scripts."""
-    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode()
+    """ASCII slug used for hotkey ids and generated entry scripts.
+
+    A pure function of the name, so a list keeps its slug - and the hotkey bound
+    to it - from one session to the next.
+
+    A name that is not ASCII cannot be carried by the slug on its own. Every such
+    name used to come back as ``menu``, which meant two Chinese (or Japanese, or
+    Russian) lists shared one launcher file and one hotkey id, and the second one
+    was unreachable. Those get a short hash of the name appended instead, so two
+    different names only collide if the hashes do. ASCII names are untouched -
+    the same slugs as before, so existing bindings and script names do not move.
+    """
+    original = str(name or "")
+    text = unicodedata.normalize("NFKD", original).encode("ascii", "ignore").decode()
     text = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+    if any(ord(char) > 127 for char in original):
+        digest = f"{zlib.crc32(original.encode('utf-8')) % 0x10000:04x}"
+        return f"{text}_{digest}" if text else f"menu_{digest}"
     return text or "menu"
 
 
@@ -336,35 +353,78 @@ class MenuConfig:
 
 
 def starter_config(documents: str | None = None) -> MenuConfig:
-    """First-run config: real CustomMenu entries, so nothing is dead on arrival."""
-    from coatmenu.core import catalog
+    """First-run config: the lists we ship, built for this build of 3DCoat.
 
-    root = os.path.join(
-        documents or os.path.join(os.path.expanduser("~"), "Documents"),
-        "3DCoat",
-        "UserPrefs",
-        "CustomMenu",
-    )
-    entries = catalog.read_custom_menu_commands(root)
-    sculpt = [e for e in entries if e.room == "VoxelsCustom"][:6]
-    model = [e for e in entries if e.room == "ModelingCustom"][:6]
+    Each list is built against the 3DCoat that is running (``presets.default_lists``),
+    so a first run starts with rows that work rather than with an empty editor.
 
-    def rows(source) -> list[MenuItem]:
-        return [MenuItem(label=e.label, kind="command", cid=e.cid) for e in source]
+    When not one of them can find a command this build defines - no program folder
+    to read, or a 3DCoat whose ids we do not know - the config says so instead of
+    filling up with rows that would do nothing.
 
-    menus = [
-        Menu(name="Sculpt", items=rows(sculpt)),
-        Menu(name="Modeling", items=rows(model)),
-    ]
-    if not any(lst.items for lst in menus):
+    *documents* is accepted for backwards compatibility: the lists no longer come
+    from the user's ``CustomMenu`` folder.
+    """
+    from coatmenu.core import presets
+
+    menus = presets.default_lists()
+    if not any(item.kind == "command" for lst in menus for item in lst.items):
         menus = [
             Menu(
                 name="Starter",
-                items=[
-                    header_item("No CustomMenu entries found"),
-                    MenuItem(label="Resample", kind="command", cid="Resample"),
-                    MenuItem(label="Smooth Object", kind="command", cid="SmoothObject"),
-                ],
+                items=[header_item("3DCoat's own commands were not found - open "
+                                   "Scripts > CoatMenu > Diagnostics (doctor)")],
             )
         ]
     return MenuConfig(menus=menus)
+
+
+# ---------------------------------------------------------------------------
+# a config we cannot read
+# ---------------------------------------------------------------------------
+
+# Suffix for a config we could not parse and moved aside instead of replacing.
+# The installer uses the same one, so both paths leave the same mark.
+UNREADABLE_TAG = ".unreadable-"
+
+
+def config_readable(path: str) -> bool:
+    """True when the file is absent or parses as JSON (it does not mean "has menus")."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            json.load(fh)
+    except FileNotFoundError:
+        return True
+    except Exception:
+        return False
+    return True
+
+
+def quarantine_unreadable(path: str, stamp: str | None = None) -> str:
+    """Move a config we cannot parse aside; returns its new path ("" if none).
+
+    Writing a starter over his file would be data loss on a file that is usually
+    repairable by hand, so the panel does not take that route: the unreadable file
+    is *renamed*, and the next save writes a fresh config at the canonical path.
+    Renaming rather than copying keeps exactly one file in play and leaves the
+    original bytes untouched for him to recover (see AGENTS.md).
+    """
+    if not os.path.isfile(path) or config_readable(path):
+        return ""
+    target = f"{path}{UNREADABLE_TAG}{stamp or time.strftime('%Y%m%d-%H%M%S')}"
+    try:
+        os.replace(path, target)
+    except OSError:
+        return ""
+    return target
+
+
+def unreadable_copies(config_path: str) -> list[str]:
+    """Configs moved aside next to ``config_path`` (oldest first) - for the doctor."""
+    folder, name = os.path.split(config_path)
+    prefix = f"{name}{UNREADABLE_TAG}"
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    return sorted(os.path.join(folder, n) for n in names if n.startswith(prefix))

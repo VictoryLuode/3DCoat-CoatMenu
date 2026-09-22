@@ -13,6 +13,15 @@ program folder, never another add-on's files):
    accept relative ones there)
 3. appends ``CoatMenu`` to ``Scripts/cExtensions/startup.txt`` (backed up first)
 
+What it must never do (the menus in that file are the user's, not ours - see
+AGENTS.md): rename, reorder, edit or drop a menu he built. A list we shipped is
+never "refreshed" once it is in his file - only a *missing* list is added; a
+``menus.json`` that cannot be parsed is left exactly as it is, with a dated copy
+beside it, instead of being replaced by a starter. And it deletes nothing it did
+not write: pruning happens inside ``coatmenu/`` and ``actions/`` only, plus the
+retired top-level folders named in ``RETIRED_TOP_LEVEL`` (``ported/`` is one of
+them - an earlier version shipped the sculpt actions there).
+
 Usage::
 
     python install.py                 # install / update
@@ -31,14 +40,78 @@ import time
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE_DIR = os.path.join(PROJECT_ROOT, "coat_side")
 EXTENSION_NAME = "CoatMenu"
-MENU_ID = "CoatMenu_Show"
-MENU_LABEL = "Show CoatMenu"
+
+# Trees inside the extension folder that belong to the extension: everything under
+# them was put there by an install and may be pruned. Anything outside them (the
+# user's own scripts, his data/menus.json, 3DCoat's debug stubs) is not ours.
+OWNED_TREES = ("coatmenu", "actions")
+
+# Folders a *previous* version of the extension shipped at the top level and no
+# longer does. Named explicitly on purpose: an installer may only delete what it
+# wrote, never "anything it does not recognise". ``ported`` is the sculpt-action
+# tree that used to be a copy of another extension's code - an update removes the
+# whole folder, illustrations and .env stubs included, because pruning alone would
+# leave everything that is not a .py file behind.
+RETIRED_TOP_LEVEL = ("core", "ui", "ported")
 
 if SOURCE_DIR not in sys.path:
     sys.path.insert(0, SOURCE_DIR)
 
 from coatmenu.core import menus_registry, presets  # noqa: E402
-from coatmenu.core.config import MenuConfig, starter_config  # noqa: E402
+from coatmenu.core.config import MenuConfig, UNREADABLE_TAG, starter_config  # noqa: E402
+
+
+def _registry_documents() -> list[str]:
+    """The Documents folders Windows itself knows about (most reliable first).
+
+    ``User Shell Folders`` is the authoritative one and its value may still
+    contain ``%USERPROFILE%``-style variables, so it is expanded; ``Shell Folders``
+    holds the already-expanded form and is only a fallback.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except Exception:
+        return []
+
+    base = r"Software\Microsoft\Windows\CurrentVersion\Explorer"
+    out: list[str] = []
+    for sub, expand in ((r"User Shell Folders", True), (r"Shell Folders", False)):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base + "\\" + sub) as handle:
+                value, _kind = winreg.QueryValueEx(handle, "Personal")
+        except OSError:
+            continue
+        path = str(value or "")
+        if expand:
+            path = os.path.expandvars(path)
+        if path:
+            out.append(path)
+    return out
+
+
+def data_folder(documents: str) -> str:
+    """3DCoat's data folder inside *documents* (``3DCoat``, or a suffixed name).
+
+    Newer versions use ``3DCoat``; an older one may add a suffix, so the folder is
+    recognised by holding a ``UserPrefs`` folder rather than by its exact name.
+    Returns ``""`` when there is none.
+    """
+    exact = os.path.join(documents, "3DCoat")
+    if os.path.isdir(os.path.join(exact, "UserPrefs")):
+        return exact
+    try:
+        names = sorted(os.listdir(documents))
+    except OSError:
+        return ""
+    for name in names:
+        if not name.lower().startswith("3dcoat"):
+            continue
+        candidate = os.path.join(documents, name)
+        if os.path.isdir(os.path.join(candidate, "UserPrefs")):
+            return candidate
+    return ""
 
 
 def default_documents() -> str:
@@ -47,8 +120,10 @@ def default_documents() -> str:
     Looked up rather than assumed. 3DCoat lets the user pick its data folder on
     first run, and Windows itself often redirects Documents into OneDrive (3DCoat's
     own API docs use ``C:/Users\\<user>\\OneDrive\\Documents/3DCoat/...`` as the
-    example). Every candidate is checked for a ``3DCoat`` folder so a Documents
-    folder 3DCoat never touches is not mistaken for the real one.
+    example). The registry answers first - it is where a Documents folder that was
+    moved to another drive is recorded - then the usual places, and every candidate
+    is checked for 3DCoat's data folder so a Documents folder 3DCoat never touches
+    is not mistaken for the real one.
 
     ``COATMENU_DOCUMENTS`` wins over the guess; ``--documents`` beats everything.
     """
@@ -58,11 +133,20 @@ def default_documents() -> str:
 
     home = os.path.expanduser("~")
     profile = os.environ.get("USERPROFILE") or home
-    candidates = [
+    candidates = list(_registry_documents())
+    candidates += [
         os.path.join(home, "Documents"),
+        os.path.join(profile, "Documents"),
+    ]
+    try:
+        for name in sorted(os.listdir(profile)):
+            if name.lower().startswith("onedrive"):
+                candidates.append(os.path.join(profile, name, "Documents"))
+    except OSError:
+        pass
+    candidates += [
         os.path.join(home, "OneDrive", "Documents"),
         os.path.join(home, "OneDrive - Personal", "Documents"),
-        os.path.join(profile, "Documents"),
     ]
 
     seen: set[str] = set()
@@ -71,15 +155,17 @@ def default_documents() -> str:
         if candidate in seen:
             continue
         seen.add(candidate)
-        if os.path.isdir(os.path.join(candidate, "3DCoat")):
+        if data_folder(candidate):
             return candidate
     # Nothing looked familiar: hand back the plain Documents and let install() warn.
-    return candidates[0]
+    return os.path.normpath(candidates[0]) if candidates else os.path.join(home, "Documents")
 
 
 def paths(documents: str) -> dict[str, str]:
-    scripts = os.path.join(documents, "3DCoat", "UserPrefs", "Scripts")
+    data = data_folder(documents) or os.path.join(documents, "3DCoat")
+    scripts = os.path.join(data, "UserPrefs", "Scripts")
     return {
+        "data": data,
         "scripts": scripts,
         "cExtensions": os.path.join(scripts, "cExtensions"),
         "ext": os.path.join(scripts, "cExtensions", EXTENSION_NAME),
@@ -87,6 +173,17 @@ def paths(documents: str) -> dict[str, str]:
         "menu_xml": os.path.join(scripts, "ExtraMenuItems", f"{EXTENSION_NAME}.xml"),
         "startup": os.path.join(scripts, "cExtensions", "startup.txt"),
     }
+
+
+def _owned(rel_dir: str) -> bool:
+    """True for a path we may prune: inside one of the extension's own trees.
+
+    ``rel_dir`` is relative to the extension folder and uses forward slashes;
+    ``.`` is the extension root itself, which is never ours to clean.
+    """
+    if rel_dir in (".", ""):
+        return False
+    return rel_dir.split("/")[0] in OWNED_TREES
 
 
 def _iter_source_files() -> list[tuple[str, str]]:
@@ -106,14 +203,17 @@ def _iter_source_files() -> list[tuple[str, str]]:
 def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
     """Delete modules that a previous version left behind.
 
-    Only python files directly part of the extension are considered: ``data/``
-    holds the user's config, ``actions/menus/`` and ``actions/shortcuts/`` hold
-    generated launchers (both managed elsewhere and never pruned here).
+    Only inside the trees the extension owns (``coatmenu/`` and ``actions/``): a
+    ``.py`` somewhere else in the extension folder was not put
+    there by an install, so it is the user's and stays - as does ``data/`` (his
+    config) and ``actions/menus/`` (generated launchers, managed elsewhere).
     """
     removed: list[str] = []
     for dirpath, dirnames, filenames in os.walk(ext_dir):
         dirnames[:] = [d for d in dirnames if d not in ("__pycache__", "data")]
         rel_dir = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
+        if not _owned(rel_dir):
+            continue
         for name in filenames:
             if not name.endswith(".py"):
                 continue
@@ -129,14 +229,17 @@ def _prune_stale(ext_dir: str, shipped: set[str]) -> list[str]:
 
 
 def _remove_stale_dirs(ext_dir: str) -> list[str]:
-    """Delete folders that are not part of the current layout.
+    """Delete folders a *previous* version of the extension shipped and no longer does.
 
     An earlier version shipped ``core/`` and ``ui/`` at the top level - and
-    3DCoat had already generated its own ``.env``/``.vscode`` debug stubs inside
-    them, so "remove if empty" would never get rid of them.
+    ``ported/``, which held its sculpt actions - and 3DCoat had already generated
+    its own ``.env``/``.vscode`` debug stubs inside them, so "remove if empty"
+    would never get rid of them. Only those known names go: an unknown folder in
+    here may well be something of the user's, and an installer has no business
+    deleting what it did not write.
     """
     removed: list[str] = []
-    keep_top = {"data", "actions", "coatmenu", "ported"}
+    keep_top = {"data", "actions", "coatmenu"}
 
     for name in sorted(os.listdir(ext_dir)):
         path = os.path.join(ext_dir, name)
@@ -145,13 +248,13 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
         if name == "__pycache__":
             shutil.rmtree(path, ignore_errors=True)
             removed.append("__pycache__/")
-        elif name in keep_top or name.startswith("."):
-            # keep the layout folders, and leave 3DCoat's own dotfolders
-            # (.vscode debug stubs) alone
-            continue
-        else:
+        elif name in RETIRED_TOP_LEVEL:
             shutil.rmtree(path, ignore_errors=True)
             removed.append(f"{name}/")
+        # Everything else (our layout folders, 3DCoat's dotfolders, anything the
+        # user added) is left alone. `keep_top` documents the layout for readers.
+        elif name in keep_top or name.startswith("."):
+            continue
 
     package = os.path.join(ext_dir, "coatmenu")
     if os.path.isdir(package):
@@ -174,13 +277,16 @@ def _remove_stale_dirs(ext_dir: str) -> list[str]:
             shutil.rmtree(path, ignore_errors=True)
             removed.append(f"actions/{old}/")
 
-    # ...and finally any folder left empty anywhere below the package.
+    # ...and finally any folder left empty anywhere below our own trees.
     for dirpath, dirnames, filenames in os.walk(ext_dir, topdown=False):
         if dirnames or filenames:
             continue
         rel = os.path.relpath(dirpath, ext_dir).replace("\\", "/")
         if rel in (".", "data", "actions", "actions/menus", "actions/shortcuts",
                    "coatmenu", "coatmenu/core", "coatmenu/ui"):
+            continue
+        if not _owned(rel):
+            # Not ours: an empty folder of the user's is still his.
             continue
         try:
             os.rmdir(dirpath)
@@ -198,6 +304,24 @@ def _uses_old_key(path: str) -> bool:
     except Exception:
         return False
     return isinstance(data, dict) and "menus" not in data
+
+
+def _unreadable(path: str) -> str:
+    """The path itself when it exists but cannot be parsed as JSON, else "".
+
+    A config we cannot read is the one case where writing "a fresh starter" would
+    destroy menus the user built by hand - so the installer refuses to write it
+    instead. The file is usually recoverable (a stray edit, a half-synced copy);
+    replacing it silently is not.
+    """
+    if not os.path.isfile(path):
+        return ""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            json.load(fh)
+    except Exception:
+        return path
+    return ""
 
 
 def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
@@ -220,14 +344,15 @@ def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
 
 def install(documents: str) -> int:
     p = paths(documents)
-    if not os.path.isdir(os.path.join(documents, "3DCoat")):
+    if not data_folder(documents):
         # Better a loud warning than a silent install into a folder 3DCoat never
         # reads - its data folder can live anywhere (chosen on first run, or
-        # Documents redirected into OneDrive).
-        print(f"CoatMenu: no 3DCoat folder under {documents}")
-        print("  If 3DCoat keeps its data elsewhere, pass it explicitly:")
+        # Documents redirected into OneDrive), and a portable install keeps
+        # UserPrefs inside the program folder.
+        print(f"CoatMenu: no 3DCoat data folder under {documents}")
+        print("  Let 3DCoat start once, then pass its data folder explicitly -")
+        print("  the folder that holds UserPrefs (see its executable.txt):")
         print('    python install.py --documents "D:\\path\\to\\Documents"')
-        print("  (3DCoat's own path is in that folder's executable.txt)")
     for key in ("cExtensions", "extra_menu_items"):
         os.makedirs(p[key], exist_ok=True)
 
@@ -244,19 +369,23 @@ def install(documents: str) -> int:
     stale += _remove_stale_dirs(p["ext"])
 
     # 2. launcher scripts + menu XML from the user's config ---------------
-    config = _load_or_create_config(p["ext"], documents)
     config_path = os.path.join(p["ext"], "data", "menus.json")
     legacy_path = os.path.join(p["ext"], "data", "lists.json")
-    # Built-in presets (the LKS Add-Prims port) land once; an existing list of
-    # the same name is never touched, and anything we do rewrite is backed up.
-    added_presets = presets.install_presets(config)
-    rewrite = added_presets or not os.path.exists(config_path) or _uses_old_key(config_path)
+    broken = _unreadable(legacy_path) or _unreadable(config_path)
+    config = _load_or_create_config(p["ext"], documents)
+    # Built-in presets land once - a *missing* list is added, never an existing
+    # one touched, and never into a config we cannot read (that one is left
+    # exactly alone; see `broken`).
+    added_presets = [] if broken else presets.install_presets(config)
+    rewrite = (not broken and
+               (added_presets or not os.path.exists(config_path) or _uses_old_key(config_path)))
     for candidate in (config_path, legacy_path):
         if rewrite and os.path.exists(candidate):
             _backup(candidate, "coatmenu")
     if rewrite:
-        # Written whenever the file is new, a preset changed, or the file still
-        # carries the pre-terminology key - so it ends up in the current shape.
+        # Written when the file is new, a missing preset was added, or the file
+        # still carries the pre-terminology key. Never over an unreadable config,
+        # and never to "tidy up" a readable one.
         config.save(config_path)
     info = menus_registry.sync(
         config,
@@ -272,6 +401,17 @@ def install(documents: str) -> int:
 
     print(f"CoatMenu installed -> {p['ext']}")
     print(f"  files copied   : {copied}")
+    if broken:
+        quarantine = f"{broken}{UNREADABLE_TAG}{time.strftime('%Y%m%d-%H%M%S')}"
+        try:
+            shutil.copy2(broken, quarantine)
+        except OSError:
+            quarantine = ""
+        print(f"  ! unreadable   : {broken}")
+        print("                   left as it is - nothing in it was rewritten or removed")
+        if quarantine:
+            print(f"                   a copy is at {quarantine}")
+        print("                   fix or move the file, then run install again")
     if stale:
         print(f"  stale removed  : {', '.join(stale)}")
     if leftovers:

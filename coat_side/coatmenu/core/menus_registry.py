@@ -16,8 +16,9 @@ inside 3DCoat and from the standalone installer.
 from __future__ import annotations
 
 import os
+from xml.sax.saxutils import escape as xml_escape
 
-from coatmenu.core.config import MenuConfig
+from coatmenu.core.config import Menu, MenuConfig
 
 MAIN_MENU_ID = "CoatMenu_Show"
 MAIN_MENU_LABEL = "Show CoatMenu"
@@ -125,6 +126,26 @@ def entry_script_path(entry_scripts_dir: str, slug: str) -> str:
     return os.path.join(entry_scripts_dir, f"{LAUNCHER_PREFIX}{slug}.py")
 
 
+def menu_slugs(config: MenuConfig) -> list[tuple[str, Menu]]:
+    """``(slug, menu)`` for every menu, with the slugs made unique.
+
+    Two menus can slugify to the same string: a name that is not ASCII used to
+    collapse to ``menu`` for all of them (see ``config.slugify``), and punctuation
+    can do it too (``Cut & Fill`` next to ``Cut__Fill``). Sharing a slug means
+    sharing a launcher file *and* a hotkey id, so one file overwrote the other and
+    the second menu was unreachable. A repeat gets a numeric suffix - in config
+    order, so the slugs stay put as long as the menus keep their order.
+    """
+    used: dict[str, int] = {}
+    out: list[tuple[str, Menu]] = []
+    for menu in config.menus:
+        base = menu.slug
+        seen = used.get(base, 0)
+        used[base] = seen + 1
+        out.append((base if not seen else f"{base}-{seen + 1}", menu))
+    return out
+
+
 def write_entry_scripts(config: MenuConfig, entry_scripts_dir: str) -> tuple[list[str], list[str]]:
     """(re)write one launcher per menu; delete launchers for menus that are gone.
 
@@ -134,11 +155,12 @@ def write_entry_scripts(config: MenuConfig, entry_scripts_dir: str) -> tuple[lis
     Returns ``(written, removed)`` absolute paths.
     """
     os.makedirs(entry_scripts_dir, exist_ok=True)
-    wanted = {lst.slug: lst for lst in config.menus}
+    pairs = menu_slugs(config)
+    wanted = {slug for slug, _ in pairs}
     written: list[str] = []
     removed: list[str] = []
 
-    for slug, lst in wanted.items():
+    for slug, lst in pairs:
         path = entry_script_path(entry_scripts_dir, slug)
         content = _ENTRY_SCRIPT.format(name=lst.name, slug=slug)
         if _read(path) != content:
@@ -190,9 +212,9 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
     ]
     if include == "fixed":
         return rows
-    for lst in config.menus:
-        rows.append((lst.hotkey_id, entry_label(lst.name),
-                     entry_script_path(entry_scripts_dir, lst.slug)))
+    for slug, lst in menu_slugs(config):
+        rows.append((f"CoatMenu_{slug}", entry_label(lst.name),
+                     entry_script_path(entry_scripts_dir, slug)))
     return rows
 
 
@@ -204,7 +226,7 @@ def write_menu_xml(config: MenuConfig, extension_root: str, entry_scripts_dir: s
     both places would list every menu twice.
     """
     entries = "".join(
-        _MENU_ENTRY.format(menu_id=menu_id, script=_posix(script))
+        _MENU_ENTRY.format(menu_id=xml_escape(menu_id), script=xml_escape(_posix(script)))
         for menu_id, _label, script in menu_entries(config, extension_root,
                                                     entry_scripts_dir, include="fixed")
     )

@@ -35,12 +35,12 @@ def _schedule_self_removal() -> None:
 
 def _log_raw(message: str) -> None:
     try:
-        import coat  # type: ignore
-        documents = str(coat.io.documents())
+        from coatmenu.core import paths
+        data_root = paths.data_root()
     except Exception:
-        documents = os.path.join(os.path.expanduser("~"), "Documents")
+        data_root = os.path.join(os.path.expanduser("~"), "Documents", "3DCoat")
     try:
-        path = os.path.join(documents, "3DCoat", "CoatMenu.log")
+        path = os.path.join(data_root, "CoatMenu.log")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"[doctor] {message}\n")

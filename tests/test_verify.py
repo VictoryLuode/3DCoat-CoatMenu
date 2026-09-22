@@ -84,17 +84,18 @@ for base, dirs, files in os.walk(SRC):
 check(not failures, f"{compiled} files compile")
 
 print()
-print("== the built-in menus still build ==")
+print("== every shipped menu still builds, on the real 3DCoat ==")
 from coatmenu.core import presets as P  # noqa: E402
 
-for fn in ("common_list", "primitives_list", "tools_list"):
-    try:
-        menu = getattr(P, fn)()
-        check(bool(menu.items), f"{fn}() -> {len(menu.items)} group(s)")
-    except Exception as exc:
-        check(False, f"{fn}() raised {exc}")
+shipped = P.default_lists()
+check([menu.name for menu in shipped] == list(P.DEFAULT_LISTS),
+      f"the shipped set is the one we mean ({[m.name for m in shipped]})")
+for menu in shipped:
+    check(bool(menu.items), f"{menu.name} -> {len(menu.items)} row(s)")
 check(not hasattr(P, "presets_list"), "presets_list is gone")
 check(not hasattr(P, "preset_rows"), "preset_rows is gone")
+check(not os.path.isdir(os.path.join(SRC, "ported")),
+      "the ported tree is gone from the extension")
 
 print()
 print("== the catalog no longer reads tool presets ==")
