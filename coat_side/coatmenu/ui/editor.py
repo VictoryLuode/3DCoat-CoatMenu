@@ -40,8 +40,8 @@ from PySide6.QtWidgets import (
 )
 
 from coatmenu.core import bindings as bindings_mod
-from coatmenu.core import catalog, menus
-from coatmenu.core.config import MenuConfig, Menu, item_to_json
+from coatmenu.core import catalog, menus, presets
+from coatmenu.core.config import MenuConfig, Menu, item_to_json, preset_family
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import (
     COMMAND,
@@ -282,8 +282,15 @@ class CoatMenuEditor(QWidget):
         self._new_name.returnPressed.connect(self.add_menu)
         row.addWidget(self._new_name)
 
+        # One button for "make a new menu": a blank one, or a shipped list back.
+        # Two entry points side by side would just be more buttons on this row.
+        self._new_button = QPushButton("+ New")
+        self._new_menu = QMenu(self._new_button)
+        self._new_button.setMenu(self._new_menu)
+        self._new_button.setToolTip("A new empty menu, or a built-in list back")
+        row.addWidget(self._new_button)
+
         for label, slot in (
-            ("+ New", self.add_menu),
             ("Rename", self.rename_menu),
             ("Delete", self.remove_menu),
             ("\u25b2", lambda: self.move_menu(-1)),
@@ -708,6 +715,7 @@ class CoatMenuEditor(QWidget):
         self._menu_combo.setToolTip(self._bindings_tooltip())
         self.refresh_tree()
         self._sync_mode_combo()
+        self._rebuild_new_menu()
         self.set_status("")
         if self._bindings.conflicts:
             self.set_status("Hotkey clash: " + "; ".join(self._bindings.conflicts))
@@ -753,6 +761,54 @@ class CoatMenuEditor(QWidget):
         self.reload_menus()
         self._mark_dirty()
         self.set_status(f"Added menu '{lst.name}'")
+
+    def preset_in_use(self, name: str) -> bool:
+        """Whether a shipped list is already in the config (by name or by marker)."""
+        if self._config.find(name) is not None:
+            return True
+        family = preset_family(presets.PRESET_MARKERS.get(name, ""))
+        return any(preset_family(m.preset) == family for m in self._config.menus if m.preset)
+
+    def add_builtin_menu(self, name: str) -> None:
+        """Put one of the shipped lists back, built against the running 3D-Coat.
+
+        The way back after Delete: deleting a built-in list is remembered so an
+        install does not add it again, and this is what clears that memory.
+        """
+        if self.preset_in_use(name):
+            self.set_status(f"'{name}' is already in your menus")
+            return
+        fresh = presets.build(name)
+        if fresh is None:
+            self.set_status(f"'{name}' is not a built-in list")
+            return
+        self._config.menus.append(fresh)
+        # Both keys, so a list remembered by name comes back as readily as one
+        # remembered by its preset family.
+        for key in (preset_family(fresh.preset), preset_family(fresh.name)):
+            self._config.forget_removed(key)
+        self._index = self._config.menus.index(fresh)
+        self.reload_menus()
+        self._mark_dirty()
+        self.set_status(f"Added built-in list '{fresh.name}' "
+                        f"({len(fresh.items)} row(s)) \u2014 Save & apply to use it")
+
+    def _rebuild_new_menu(self) -> None:
+        """Refresh the '+ New' menu: a blank menu, then every shipped list."""
+        menu = self._new_menu
+        menu.clear()
+        blank = menu.addAction("New empty menu")
+        blank.triggered.connect(lambda _checked=False: self.add_menu())
+        menu.addSeparator()
+        heading = menu.addAction("Built-in lists")
+        heading.setEnabled(False)
+        for name in presets.DEFAULT_LISTS:
+            in_use = self.preset_in_use(name)
+            action = menu.addAction(f"    {name}" + ("    (in your menus)" if in_use else ""))
+            action.setEnabled(not in_use)
+            action.triggered.connect(
+                lambda _checked=False, preset_name=name: self.add_builtin_menu(preset_name)
+            )
 
     def rename_menu(self) -> None:
         target = self.current_menu

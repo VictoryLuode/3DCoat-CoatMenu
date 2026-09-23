@@ -119,6 +119,11 @@ def report(config=None) -> str:
         f"  command source: {catalog.describe_counts()}",
         f"  menus         : {len(cfg.menus)}",
     ]
+    if cfg.removed_presets:
+        # Built-in lists he deleted on purpose: an install will not add these back,
+        # and "+ New ▸ Built-in lists" in the editor is how they come back.
+        out.append(f"  deleted built-ins: {', '.join(cfg.removed_presets)} "
+                   f"(not re-added by an install)")
     for lst in cfg.menus:
         out.append(
             f"    - {lst.name}  mode={lst.mode}  rows={len(lst.items)}"

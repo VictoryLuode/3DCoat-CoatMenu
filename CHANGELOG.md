@@ -78,6 +78,11 @@ All notable changes to CoatMenu. Versions are the git tags.
   next update - his deletion, undone by an install. The config remembers it (a
   `removed` list, keyed by preset family, or by name for a list that has no marker),
   and an install leaves those alone.
+- **The editor can put a built-in list back.** `+ New` is one button with a menu:
+  an empty menu, or any shipped list - built fresh against the 3D-Coat that is
+  running, and no longer the only way to get back something Delete removed. A list
+  already in the config is shown as such and cannot be added twice. The doctor
+  report names the deleted built-ins.
 
 ## v0.6.1 — 2026-09-20
 

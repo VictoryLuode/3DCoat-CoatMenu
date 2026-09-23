@@ -479,9 +479,30 @@ def default_lists() -> list[Menu]:
     return [_BUILDERS[name]() for name in DEFAULT_LISTS]
 
 
+def build(name: str) -> Menu | None:
+    """One shipped list, built for this build of 3DCoat.
+
+    ``None`` when the name is not one of ours. Used by the editor to put a list
+    back after he deleted it (rows built against the 3DCoat that is running now).
+    """
+    make = _BUILDERS.get(str(name or "").strip())
+    return make() if make is not None else None
+
+
 def _preset_family(marker: str) -> str:
     """``prims/2`` -> ``prims``: which preset a marker belongs to, version aside."""
     return preset_family(marker)
+
+
+def _was_deleted(config: MenuConfig, fresh: Menu) -> bool:
+    """Whether he deleted this shipped list on purpose.
+
+    Two keys, because a list he built himself carries no marker: the preset family
+    when there is one, otherwise the name (``MenuConfig.remove_menu`` records
+    whichever it has).
+    """
+    return (preset_family(fresh.preset) in config.removed_presets
+            or preset_family(fresh.name) in config.removed_presets)
 
 
 def _by_marker(config: MenuConfig, marker: str):
@@ -520,8 +541,7 @@ def install_presets(config: MenuConfig, names: tuple[str, ...] = DEFAULT_LISTS) 
         if make is None:
             continue
         fresh = make()
-        if (preset_family(fresh.preset) in config.removed_presets
-                or fresh.name.strip().lower() in config.removed_presets):
+        if _was_deleted(config, fresh):
             # He deleted this one on purpose - the editor records that now. "Not
             # found" is otherwise indistinguishable from "he never had it", and
             # adding it back means his deletion gets undone by an update.

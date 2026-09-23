@@ -109,6 +109,8 @@ extension builds on this machine)*
   double-click to rename, multi-select, **Add all** (a whole section in one click),
   **undo/redo** (`Ctrl+Z`), import/export, save & apply, and a right-click row menu
   (duplicate, copy/move to another menu, insert below, promote, rename, delete).
+  Menus themselves: `+ New` makes an empty one or puts a **built-in list** back
+  (with `▲`/`▼` to order them, `Rename`, `Delete`).
 * **Keyboard and wheel** — a long list caps its height and scrolls, so the last
   rows are always reachable.
 * **Diagnostics built in** — the editor shows each menu's hotkey next to its name
@@ -123,7 +125,9 @@ extension builds on this machine)*
   shipped counts as yours the moment it is in there), a `menus.json` that cannot
   be parsed is left alone with a dated copy beside it instead of being replaced by a
   starter, and **a built-in list you delete stays deleted**: the config remembers
-  the deletion, so the next update does not treat it as missing and add it back.
+  the deletion, so the next update does not treat it as missing and add it back —
+  and `+ New ▸ Built-in lists` in the editor puts one back when you want it,
+  freshly built against the 3D-Coat that is running.
   Deleting things is limited to what an install wrote: `coatmenu/`,
   `actions/`, plus the retired top-level folders (`core/`, `ui/`, and `ported/` from
   the version that shipped another extension's sculpt actions there). The entries
