@@ -556,23 +556,21 @@ class MenuPopup(QWidget):
             outward = 26
             if anchor.x() >= self.width() / 2.0:
                 x = self.x() + anchor.x() + outward
-                x = min(x, area.right() - child.width())
             else:
                 x = self.x() + anchor.x() - outward - child.width()
-                x = max(x, area.left())
             y = self.y() + anchor.y() - child.height() / 2.0
-            y = max(area.top(), min(y, area.bottom() - child.height()))
-            return QPoint(int(x), int(y))
-
-        row_y = self._rows[index][0]
-        x = self.x() + self.width() - theme.SUBMENU_OVERLAP
-        if x + child.width() > area.right():
-            x = self.x() - child.width() + theme.SUBMENU_OVERLAP
-        # Align the child's first row with the parent row it belongs to, so the
-        # two panels read as one menu (PADDING is the panel's inner margin).
-        y = self.y() + row_y - theme.PADDING
-        if y + child.height() > area.bottom():
-            y = max(area.top(), area.bottom() - child.height())
+        else:
+            row_y = self._rows[index][0]
+            x = self.x() + self.width() - theme.SUBMENU_OVERLAP
+            if x + child.width() > area.right():
+                x = self.x() - child.width() + theme.SUBMENU_OVERLAP
+            # Align the child's first row with the parent row it belongs to, so the
+            # two panels read as one menu (PADDING is the panel's inner margin).
+            y = self.y() + row_y - theme.PADDING
+        # A wide child under a parent near an edge would otherwise run off the
+        # screen - where the rows are unreachable, however loudly it is drawn.
+        x = min(max(x, area.left()), max(area.left(), area.right() - child.width() + 1))
+        y = min(max(y, area.top()), max(area.top(), area.bottom() - child.height() + 1))
         return QPoint(int(x), int(y))
 
     def _close_child(self) -> None:
@@ -1010,10 +1008,14 @@ class MenuPopup(QWidget):
         return True
 
     def _escape(self) -> None:
-        """Escape steps back out one level: the child panel first, then the menu."""
-        child = self._child
-        if child is not None and child.isVisible():
-            self._close_child()
+        """Escape steps back out one level: the innermost panel first.
+
+        Only the last panel goes, so a three-deep chain takes three presses - and
+        its parent stays put, which is what "one level" means here.
+        """
+        panels = self.child_panels()
+        if len(panels) > 1:
+            panels[-2]._close_child()
             return
         self.dismiss()
 
@@ -1072,7 +1074,9 @@ class MenuPopup(QWidget):
             self._open_child(index)
             return
         if item.clickable:
-            self.dismiss()
+            # The whole menu goes, not just the panel the item sits in: leaving the
+            # parent panels up after running something would be a stuck menu.
+            self._root().dismiss()
             run_item(item)
 
     def _is_actionable(self, index: int) -> bool:

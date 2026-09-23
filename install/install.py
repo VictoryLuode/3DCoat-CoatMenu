@@ -324,8 +324,16 @@ def _unreadable(path: str) -> str:
     return ""
 
 
-def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
-    """Config from the installed copy when it exists, else a fresh starter."""
+def _menus_backup_path(documents: str) -> str:
+    """Where an uninstall parks the user's lists, beside the 3DCoat folder."""
+    return os.path.join(documents, "3DCoat", f"{EXTENSION_NAME}-menus-backup.json")
+
+
+def _load_or_create_config(ext_dir: str, documents: str) -> tuple[MenuConfig, str | None]:
+    """Config from the installed copy, else the uninstall backup, else a starter.
+
+    Returns the config and, when it came from a backup, that backup's path.
+    """
     path = os.path.join(ext_dir, "data", "menus.json")
     legacy = os.path.join(ext_dir, "data", "lists.json")
     if not os.path.exists(path) and os.path.exists(legacy):
@@ -338,8 +346,25 @@ def _load_or_create_config(ext_dir: str, documents: str) -> MenuConfig:
     if os.path.exists(path):
         config = MenuConfig.load(path)
         if config.menus:
-            return config
-    return starter_config(documents)
+            return config, None
+    # An uninstall keeps the user's lists in a backup; installing again puts them
+    # back instead of quietly starting over from the built-in set. Never over a
+    # config we just read - that case returned above.
+    backup = _menus_backup_path(documents)
+    if os.path.exists(backup):
+        try:
+            restored = MenuConfig.load(backup)
+        except Exception:
+            restored = None
+        if restored is not None and restored.menus:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                shutil.copy2(backup, path)
+            except OSError:
+                log(f"could not restore the menu backup {backup}")
+            else:
+                return restored, backup
+    return starter_config(documents), None
 
 
 def install(documents: str) -> int:
@@ -372,7 +397,7 @@ def install(documents: str) -> int:
     config_path = os.path.join(p["ext"], "data", "menus.json")
     legacy_path = os.path.join(p["ext"], "data", "lists.json")
     broken = _unreadable(legacy_path) or _unreadable(config_path)
-    config = _load_or_create_config(p["ext"], documents)
+    config, restored_from = _load_or_create_config(p["ext"], documents)
     # Built-in presets land once - a *missing* list is added, never an existing
     # one touched, and never into a config we cannot read (that one is left
     # exactly alone; see `broken`).
@@ -401,6 +426,8 @@ def install(documents: str) -> int:
 
     print(f"CoatMenu installed -> {p['ext']}")
     print(f"  files copied   : {copied}")
+    if restored_from:
+        print(f"  your lists     : restored from {restored_from}")
     if broken:
         quarantine = f"{broken}{UNREADABLE_TAG}{time.strftime('%Y%m%d-%H%M%S')}"
         try:
@@ -535,7 +562,7 @@ def uninstall(documents: str) -> int:
     # Keep the user's menus - an uninstall should not throw away their work.
     config_path = os.path.join(p["ext"], "data", "menus.json")
     if os.path.exists(config_path):
-        backup = os.path.join(documents, "3DCoat", f"{EXTENSION_NAME}-menus-backup.json")
+        backup = _menus_backup_path(documents)
         try:
             os.makedirs(os.path.dirname(backup), exist_ok=True)
             shutil.copy2(config_path, backup)

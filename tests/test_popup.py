@@ -675,6 +675,163 @@ app.processEvents()
 check(manager.popup is not None, "and an empty menu still opens")
 popup.hide_menu()
 
+print("== a submenu chain: one child at a time, beside its own parent ==")
+# Offscreen there is no cursor, so the poll timer closes a child as soon as it ticks
+# (it asks whether the cursor is still over the panel). Freeze the timers for the
+# chain while checking geometry; the timer behaviour itself is checked below.
+def freeze(panel) -> None:
+    for node in panel.child_panels():
+        node._poll.stop()
+        node._grace.stop()
+
+
+def branch_index(panel, label: str) -> int:
+    for index, item in enumerate(panel._items):
+        if item.is_branch and item.label == label:
+            return index
+    raise AssertionError(f"no branch {label!r} in {[i.label for i in panel._items]}")
+
+
+def chained() -> list[MenuItem]:
+    return [
+        header("Top"),
+        MenuItem(label="Plain", kind="command", cid="Resample"),
+        submenu("Level 1", [
+            MenuItem(label="one", kind="command", cid="Resample"),
+            submenu("Level 2", [MenuItem(label="two", kind="command", cid="Bevel")]),
+            submenu("Level 2 wide",
+                    [MenuItem(label="w" * 40, kind="command", cid="Bevel"),
+                     MenuItem(label="wide two", kind="command", cid="Bevel")]),
+        ]),
+        submenu("Other group", [MenuItem(label="elsewhere", kind="command", cid="Bevel")]),
+    ]
+
+
+def open_chain_root(x: int, y: int):
+    manager.show_menu(chained(), anchor=QPoint(x, y), title="Root")
+    app.processEvents()
+    panel = manager.popup
+    panel.move(x + 20, y + 20)
+    freeze(panel)
+    return panel
+
+
+screen = QGuiApplication.primaryScreen().availableGeometry()
+root = open_chain_root(screen.left() + 20, screen.top() + 20)
+level1 = branch_index(root, "Level 1")
+root._open_child(level1)
+app.processEvents()
+freeze(root)
+child = root._child
+check(child is not None and child.isVisible(), "a branch opens a child")
+check(len(root.child_panels()) == 2, f"one child at a time ({len(root.child_panels())})")
+child_box = child.geometry()
+check(child_box.left() >= screen.left() and child_box.top() >= screen.top(),
+      f"the child is on screen ({child_box.left()},{child_box.top()})")
+check(child.x() >= root.x() + root.width() - theme.SUBMENU_OVERLAP - 1
+      or child.x() + child.width() <= root.x() + theme.SUBMENU_OVERLAP + 1,
+      f"and beside the parent, not over it ({child.x()} vs {root.x()})")
+check(abs(child.y() - (root.y() + root._rows[level1][0] - theme.PADDING)) <= 1
+      or child.y() == max(screen.top(), screen.bottom() - child.height()),
+      f"lined up with the parent row ({child.y()})")
+
+first_child = child
+root._open_child(branch_index(root, "Other group"))
+app.processEvents()
+freeze(root)
+check(root.child_panels()[1] is not first_child, "hovering another branch re-targets it")
+check(not first_child.isVisible(), "and the first child is gone")
+
+root._open_child(level1)
+app.processEvents()
+freeze(root)
+child = root._child
+child._open_child(branch_index(child, "Level 2"))
+app.processEvents()
+freeze(root)
+grand = child._child
+check(grand is not None and len(root.child_panels()) == 3,
+      f"a child has children ({len(root.child_panels())} deep)")
+check(grand.x() >= child.x() + child.width() - theme.SUBMENU_OVERLAP - 1
+      or grand.x() + grand.width() <= child.x() + theme.SUBMENU_OVERLAP + 1,
+      f"beside its own parent, not the root ({grand.x()} vs {child.x()})")
+
+print("== Escape backs out one level per press ==")
+root._escape()
+app.processEvents()
+check(len(root.child_panels()) == 2 and not grand.isVisible(),
+      f"Escape closes only the innermost panel ({len(root.child_panels())})")
+check(child.isVisible(), "its parent stays")
+root._escape()
+app.processEvents()
+check(len(root.child_panels()) == 1 and root.isVisible(),
+      f"then that one ({len(root.child_panels())})")
+root._escape()
+app.processEvents()
+check(not root.isVisible(), "then the menu itself")
+
+print("== a wide child under a parent at the edge stays on screen ==")
+# The child opens to the right of its parent and flips left when it does not fit -
+# which, under a parent already at the left edge, used to put it off the screen.
+root = open_chain_root(screen.left(), screen.top() + 20)
+node = root
+for label in ("Level 1", "Level 2 wide"):
+    node._open_child(branch_index(node, label))
+    app.processEvents()
+    freeze(root)
+    node = node._child
+    check(node is not None, f"{label} opened")
+wide = node.geometry()
+check(wide.left() >= screen.left() and wide.right() <= screen.right(),
+      f"it stays inside the screen horizontally ({wide.left()}..{wide.right()})")
+check(wide.top() >= screen.top() and wide.bottom() <= screen.bottom(),
+      f"and vertically ({wide.top()}..{wide.bottom()})")
+
+print("== a child longer than the screen scrolls ==")
+long_child = submenu("Long", [MenuItem(label=f"row {i:02d}", kind="command", cid="Bevel")
+                              for i in range(60)])
+manager.show_menu([long_child], anchor=QPoint(screen.left() + 30, screen.top() + 30), title="")
+app.processEvents()
+root = manager.popup
+freeze(root)
+root._open_child(root._first_interactive())
+app.processEvents()
+freeze(root)
+child = root._child
+check(child is not None and child.height() <= child._viewport_limit(),
+      f"it respects the viewport cap ({getattr(child, 'height', lambda: '?')()})")
+check(child.y() >= screen.top() and child.y() + child.height() <= screen.bottom() + 1,
+      f"and is inside the screen ({child.y()} + {child.height()})")
+check(child._scroll_max > 0, f"so it scrolls instead ({child._scroll_max})")
+
+print("== the grace window is what holds a child open ==")
+root = open_chain_root(screen.left() + 30, screen.top() + 30)
+root._open_child(branch_index(root, "Level 1"))
+app.processEvents()
+freeze(root)
+child = root._child
+check(not root._grace.isActive(), "no grace while the child is open and unhovered")
+root.leaveEvent(None)
+check(root._grace.isActive(), "leaving the panel starts the grace window")
+root.enterEvent(None)
+check(not root._grace.isActive(), "coming back cancels it")
+child._cancel_grace()
+check(not child._grace.isActive(), "a child cancels its own on enter")
+
+print("== picking a row inside a child runs it and closes the lot ==")
+root = open_chain_root(screen.left() + 30, screen.top() + 30)
+root._open_child(branch_index(root, "Level 1"))
+app.processEvents()
+freeze(root)
+child = root._child
+FAKE.calls.clear()
+child._hover = [index for index, item in enumerate(child._items) if item.label == "one"][0]
+child._activate_hover()
+check(FAKE.commands_run() == ["$Resample"],
+      f"the nested entry ran its command ({FAKE.commands_run()})")
+check(not root.isVisible(), "and the whole menu closed, not just that panel")
+popup.hide_menu()
+
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))
     sys.exit(1)

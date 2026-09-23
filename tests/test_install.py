@@ -181,6 +181,80 @@ with open(STARTUP, encoding="utf-8") as fh:
     lines = fh.read().splitlines()
 check(lines == ["debugger", "QT", "LKS"], f"other extensions untouched: {lines}")
 
+print("== uninstall touches nothing but its own files ==")
+# A second, controlled tree: another extension's item file and folder next to ours,
+# and the user's own edited lists - the whole round trip in one place.
+DOCS2 = tempfile.mkdtemp(prefix="coatmenu-roundtrip-")
+SCRIPTS2 = os.path.join(DOCS2, "3DCoat", "UserPrefs", "Scripts")
+STARTUP2 = os.path.join(SCRIPTS2, "cExtensions", "startup.txt")
+ITEMS2 = os.path.join(SCRIPTS2, "ExtraMenuItems")
+os.makedirs(os.path.join(SCRIPTS2, "cExtensions", "OtherExtension"), exist_ok=True)
+os.makedirs(ITEMS2, exist_ok=True)
+with open(STARTUP2, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("debugger\nQT\nLKS\n")
+FOREIGN_XML = os.path.join(ITEMS2, "SomeOtherTool.xml")
+with open(FOREIGN_XML, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("<Root><MenuItem>Other</MenuItem></Root>\n")
+FOREIGN_PY = os.path.join(SCRIPTS2, "cExtensions", "OtherExtension", "keep.py")
+with open(FOREIGN_PY, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("print('mine')\n")
+
+
+def run2(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, INSTALL, "--documents", DOCS2, *args],
+                          capture_output=True, text=True)
+
+
+ext2 = os.path.join(SCRIPTS2, "cExtensions", "CoatMenu")
+config2 = os.path.join(ext2, "data", "menus.json")
+result = run2()
+check(result.returncode == 0, f"install into a fresh tree exits 0 ({result.stderr.strip()})")
+
+# The user edits their lists: one menu kept under a new name, the others dropped.
+with open(config2, encoding="utf-8") as fh:
+    starter = json.load(fh)
+kept_name = starter["menus"][0]["name"] + " (mine)"
+edited = {"version": starter.get("version", 1),
+          "menus": [{"name": kept_name, "items": starter["menus"][0]["items"]}]}
+with open(config2, "w", encoding="utf-8", newline="\n") as fh:
+    json.dump(edited, fh, indent=2)
+edited_text = open(config2, encoding="utf-8").read()
+
+# 3DCoat persists one item file per menu it registered for us.
+own_item = os.path.join(ITEMS2, "CoatMenu_RoundTrip.xml")
+own_script = os.path.join(ext2, "actions", "menus", "CoatMenu_RoundTrip.py").replace("\\", "/")
+with open(own_item, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write(f"<Root><MenuItem>CoatMenu_RoundTrip</MenuItem>"
+             f"<Command>script:{own_script}</Command></Root>\n")
+
+result = run2("--uninstall")
+check(result.returncode == 0, f"uninstall exits 0 ({result.stderr.strip()})")
+check(not os.path.isdir(ext2), "the extension folder is removed")
+check(not os.path.isfile(os.path.join(ITEMS2, "CoatMenu.xml")), "our menu xml is removed")
+check(not os.path.isfile(own_item), "and the item file 3DCoat wrote for one of our menus")
+check(open(FOREIGN_XML, encoding="utf-8").read() == "<Root><MenuItem>Other</MenuItem></Root>\n",
+      "another extension's item file is untouched")
+check(os.path.isfile(FOREIGN_PY), "and another extension's folder")
+with open(STARTUP2, encoding="utf-8") as fh:
+    check(fh.read().splitlines() == ["debugger", "QT", "LKS"],
+          "startup.txt keeps their lines and drops ours")
+backup2 = os.path.join(DOCS2, "3DCoat", "CoatMenu-menus-backup.json")
+check(os.path.isfile(backup2) and open(backup2, encoding="utf-8").read() == edited_text,
+      "and the user's edited lists were kept in a backup")
+
+print("== installing again brings those lists back ==")
+result = run2()
+check(result.returncode == 0, f"reinstall exits 0 ({result.stderr.strip()})")
+with open(config2, encoding="utf-8") as fh:
+    back = json.load(fh)
+names = [menu["name"] for menu in back["menus"]]
+check(kept_name in names, f"the user's own menu is back ({names})")
+check("restored" in result.stdout, f"and the installer says where from ({result.stdout.strip()})")
+check(os.path.isfile(os.path.join(ITEMS2, "CoatMenu.xml")), "with the menu files rebuilt")
+check(len(names) > 1,
+      f"and the built-in lists that were missing are added back, never touched ({names})")
+check(os.path.isfile(backup2), "the backup is left beside it as a safety copy")
+
 print()
 if failures:
     print(f"INSTALL FAILED ({len(failures)}): " + "; ".join(failures))

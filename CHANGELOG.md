@@ -38,6 +38,21 @@ All notable changes to CoatMenu. Versions are the git tags.
 - **`*` in the editor title means "differs from the file".** Undoing back to the
   loaded config kept the marker (and made the panel treat the config as edited), so
   the un-saved state now compares against the loaded baseline, which a save resets.
+- **A submenu under a parent at the screen edge opened off the screen.** A child
+  panel flips to the left of its parent when it does not fit on the right, and the
+  flipped position was never clamped - a wide submenu under a parent at the left
+  edge landed entirely outside the screen, where its rows cannot be reached. Both
+  axes are clamped now.
+- **Escape steps back out one level per press.** It closed the whole chain below
+  the root at once, the opposite of what that method's own docstring promised.
+- **Picking an entry inside a submenu closes the whole menu.** Running a nested
+  entry dismissed only the panel the entry sat in, leaving the parent panels up with
+  nothing left to pick. A mouse click did close everything; Enter and the number
+  keys did not.
+- **Installing again brings back the lists an uninstall saved.** An uninstall parks
+  the user's `menus.json` next to the data folder ("your lists were backed up to
+  ..."), but a later install ignored it and started over from the built-in set. It
+  is restored when no config exists - never over one that does.
 
 ### Removed
 
