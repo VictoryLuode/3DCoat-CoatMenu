@@ -26,6 +26,18 @@ All notable changes to CoatMenu. Versions are the git tags.
   built from its name and 3D-Coat keys its bindings by that id, so a rename leaves
   the old binding pointing at nothing. We never write 3D-Coat's hotkey file, so the
   editor names the key that will stop firing instead of losing it quietly.
+- **The overlay uses the screen it opens on, not the primary one.** A cursor can sit
+  where no screen is (the gap in an L-shaped desktop, a display that just went away)
+  and the panel was placed at that raw anchor - off-screen, an invisible menu. It is
+  now clamped onto the screen picked for the anchor, and the height cap follows that
+  screen too: a second monitor is usually a different height, and a long list sized
+  for the primary one hung off the bottom of the shorter one.
+- **The editor sizes, centres and clamps itself on the screen the pointer is on** -
+  the same primary-screen assumption, for the panel, its preview and the 1240px
+  size fit.
+- **`*` in the editor title means "differs from the file".** Undoing back to the
+  loaded config kept the marker (and made the panel treat the config as edited), so
+  the un-saved state now compares against the loaded baseline, which a save resets.
 
 ### Removed
 

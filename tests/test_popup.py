@@ -553,7 +553,128 @@ check(clash_popup is not None
       "with the second menu's own rows")
 popup.hide_menu()
 
-print()
+print("== a menu that hangs off the screen is pulled back on ==")
+# A cursor can sit where no screen is - the gap in an L-shaped desktop, or a display
+# that has just gone away. The panel has to land on the screen we picked anyway, or
+# the menu is simply invisible.
+from PySide6.QtCore import QRect  # noqa: E402
+from PySide6.QtGui import QGuiApplication  # noqa: E402
+
+area = QGuiApplication.primaryScreen().availableGeometry()
+manager.show_menu(build_items(), anchor=QPoint(area.center().x(), area.center().y()),
+                  title="CoatMenu")
+app.processEvents()
+widget = manager.popup
+widget.setFixedSize(180, 180)
+
+
+def placed(anchor: QPoint) -> QPoint:
+    return widget._clamped_position(anchor)
+
+
+dead_zone = placed(QPoint(area.left() - 1500, area.top() + 40))
+check(area.contains(dead_zone) and area.contains(dead_zone + QPoint(179, 179)),
+      f"an anchor on no screen still lands on one ({dead_zone.x()},{dead_zone.y()})")
+bottom = placed(QPoint(area.center().x(), area.bottom() - 5))
+check(bottom.y() < area.bottom() - 5,
+      f"at the bottom edge the panel flips above the cursor ({bottom.y()})")
+right = placed(QPoint(area.right() - 5, area.center().y()))
+check(right.x() < area.right() - 5,
+      f"at the right edge it flips to the left of the cursor ({right.x()})")
+middle = placed(QPoint(area.center().x(), area.center().y()))
+check(middle == QPoint(area.center().x(), area.center().y()),
+      "in the middle it hangs from the cursor, the way a context menu does")
+tall = QPoint(area.center().x(), area.bottom() - 20)
+widget.setFixedSize(180, area.height() + 400)
+check(placed(tall).y() == area.top(),
+      f"a panel taller than the screen is pinned to the top ({placed(tall).y()})")
+
+print("== a list longer than the screen scrolls ==")
+long_items = [MenuItem(label=f"row {i:02d}", kind="command", cid=f"CMD{i:02d}")
+              for i in range(60)]
+manager.show_menu(long_items, anchor=QPoint(area.left() + 20, area.top() + 20), title="L")
+app.processEvents()
+widget = manager.popup
+limit = widget._viewport_limit()
+check(widget.height() <= limit, f"height {widget.height()} respects the cap {limit}")
+check(widget._scroll_max == widget._content_height - widget.height() > 0,
+      f"and there is something to scroll ({widget._scroll_max} of {widget._content_height})")
+check(widget._row_at(QPoint(6, theme.PADDING + 1)) >= 0,
+      "a click inside the first row hits it")
+check(widget._row_at(QPoint(6, 1)) == -1,
+      "the padding above the first row hits nothing")
+widget._scroll = widget._scroll_max
+_y, _item, _h = widget._rows[-1]
+check(widget._row_at(QPoint(6, _y + _h - widget._scroll - 1)) == len(widget._rows) - 1,
+      "and hit testing follows the scroll to the last row")
+check(widget._row_at(QPoint(6, widget.height() - 1)) == -1,
+      "the padding after the last row hits nothing, so that click closes the menu")
+
+print("== the highlight never parks on a header or separator ==")
+# Arrow keys walk the rows; a header or a separator is not a target, so the
+# highlight has to step over them - landing on one would look like a stuck menu.
+mixed = ([header("Group")]
+         + [MenuItem(label=f"a {i}", kind="command", cid=f"A{i}") for i in range(3)]
+         + [separator()]
+         + [MenuItem(label=f"b {i}", kind="command", cid=f"B{i}") for i in range(3)])
+manager.show_menu(mixed, anchor=QPoint(60, 60), title="")
+app.processEvents()
+widget = manager.popup
+visited = []
+stuck = []
+for _step in range(len(widget._rows) * 2 + 2):
+    widget._move_hover(1)
+    _y, item, _h = widget._rows[widget._hover]
+    visited.append(item.label)
+    if not (item.clickable or item.is_branch):
+        stuck.append(item.label)
+check(not stuck, f"it never lands on a header or separator ({sorted(set(stuck))})")
+check(sorted(set(visited)) == ["a 0", "a 1", "a 2", "b 0", "b 1", "b 2"],
+      f"and it cycles through every clickable row ({sorted(set(visited))})")
+popup.hide_menu()
+
+print("== the height cap follows the screen the menu opens on ==")
+# A second monitor is usually a different height: a list laid out for the primary
+# screen and shown on a shorter one would leave its last rows off the bottom.
+class FakeScreen:
+    def __init__(self, height: int) -> None:
+        self._rect = QRect(0, 0, 1920, height)
+
+    def availableGeometry(self) -> QRect:
+        return self._rect
+
+
+short = FakeScreen(600)
+check(widget._viewport_limit(short) == min(theme.MAX_MENU_HEIGHT, int(600 * 0.85)),
+      f"a short screen caps it ({widget._viewport_limit(short)})")
+check(widget._viewport_limit(FakeScreen(2160)) > widget._viewport_limit(short),
+      "a tall one allows more")
+check(widget._viewport_limit() == widget._viewport_limit(QGuiApplication.primaryScreen()),
+      "with no argument it is the screen this panel opens on")
+grown = widget.height()
+widget._screen_for = lambda anchor=None: short
+widget._fit_height()
+check(widget.height() <= widget._viewport_limit(short),
+      f"opening on the shorter screen shrinks it ({grown} -> {widget.height()})")
+check(widget._scroll_max == widget._content_height - widget.height(),
+      f"and the scroll range follows ({widget._scroll_max})")
+popup.hide_menu()
+
+print("== a menu with nothing to click is inert, not broken ==")
+manager.show_menu([header("Nothing here"), separator()], anchor=QPoint(60, 60), title="")
+app.processEvents()
+widget = manager.popup
+check(widget._first_interactive() == -1, "nothing is pre-selected")
+FAKE.calls.clear()
+widget._move_hover(1)
+widget._activate_hover()
+check(FAKE.calls == [], f"moving and activating do nothing ({FAKE.calls})")
+popup.hide_menu()
+manager.show_menu([], anchor=QPoint(60, 60))
+app.processEvents()
+check(manager.popup is not None, "and an empty menu still opens")
+popup.hide_menu()
+
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))
     sys.exit(1)

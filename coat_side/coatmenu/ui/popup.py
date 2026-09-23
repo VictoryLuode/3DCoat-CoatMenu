@@ -117,6 +117,7 @@ class MenuPopup(QWidget):
         self._hover_button: int = 0
         self._trigger_vk: int = 0
         self._transient: bool = True
+        self._anchor: "QPoint | None" = None
         self._parent = parent_popup
         self._child: "MenuPopup | None" = None
         self._child_index: int = -1
@@ -237,14 +238,42 @@ class MenuPopup(QWidget):
         self._scroll_max = max(0, self._content_height - self.height())
         self._scroll = max(0, min(self._scroll, self._scroll_max))
 
-    def _viewport_limit(self) -> int:
-        """Tallest the panel may get - whichever is smaller, our cap or the screen."""
+    def _screen_for(self, anchor: "QPoint | None" = None):
+        """The screen a panel anchored at *anchor* belongs on (primary if unknown)."""
         try:
-            screen = QGuiApplication.primaryScreen()
+            if anchor is not None:
+                screen = QGuiApplication.screenAt(anchor)
+                if screen is not None:
+                    return screen
+            return QGuiApplication.primaryScreen()
+        except Exception:
+            return None
+
+    def _viewport_limit(self, screen=None) -> int:
+        """Tallest the panel may get - whichever is smaller, our cap or the screen.
+
+        The screen is the one the panel opens *on*, not the primary: a second
+        monitor is often a different height, and a list sized for the wrong one
+        either runs off the bottom or scrolls for no reason.
+        """
+        if screen is None:
+            screen = self._screen_for(getattr(self, "_anchor", None))
+        try:
             area = screen.availableGeometry()
             return max(160, min(theme.MAX_MENU_HEIGHT, int(area.height() * 0.85)))
         except Exception:
             return theme.MAX_MENU_HEIGHT
+
+    def _fit_height(self) -> None:
+        """Re-apply the height cap once the screen this panel opens on is known."""
+        if self._mode == PIE or not self._rows:
+            return
+        limit = self._viewport_limit()
+        if self.height() == limit or self._content_height <= limit:
+            return
+        self.setFixedSize(self.width(), limit)
+        self._scroll_max = max(0, self._content_height - limit)
+        self._scroll = max(0, min(self._scroll, self._scroll_max))
 
     def _first_interactive(self) -> int:
         """First row the user can act on (a command *or* a submenu).
@@ -901,6 +930,10 @@ class MenuPopup(QWidget):
         """Show at *anchor* (screen coords), clamped to the screen."""
         self.set_trigger_vk(trigger_vk)
         self._close_child()
+        # The rows were laid out before we knew which screen this opens on, and a
+        # second monitor is often a different height - cap the panel for *this* one.
+        self._anchor = anchor
+        self._fit_height()
         pos = self._clamped_position(anchor)
         self.move(pos)
         self.setWindowOpacity(0.0 if theme.FADE_IN else 1.0)
@@ -938,9 +971,14 @@ class MenuPopup(QWidget):
 
         x, y = anchor.x(), anchor.y()
         if x + self.width() > area.right():
-            x = max(area.left(), anchor.x() - self.width())
+            x = anchor.x() - self.width()
         if y + self.height() > area.bottom():
-            y = max(area.top(), anchor.y() - self.height())
+            y = anchor.y() - self.height()
+        # A cursor can sit where no screen is: the gap in an L-shaped desktop, or a
+        # display that has just gone away. The panel still has to land on the screen
+        # we picked, so clamp to it instead of trusting the anchor.
+        x = min(max(x, area.left()), max(area.left(), area.right() - self.width() + 1))
+        y = min(max(y, area.top()), max(area.top(), area.bottom() - self.height() + 1))
         return QPoint(int(x), int(y))
 
     def _fade_tick(self) -> None:

@@ -600,6 +600,73 @@ ed7.rename_menu()
 check("no longer" not in ed7._status.text(),
       f"a menu with no key gets no note ({ed7._status.text()})")
 
+print("== undo steps back to exactly what was loaded ==")
+# The history is banked per edit, so the bottom of the stack is the loaded state.
+# Undo must land on it exactly - and that state is not an un-saved change.
+undo_cfg = MenuConfig(menus=[Menu(name="QuickTool"), Menu(name="Shade")])
+loaded_state = json.dumps(undo_cfg.to_json(), sort_keys=True)
+ed8 = CoatMenuEditor(undo_cfg)
+ed8.reload_menus()
+ed8._index = 0
+ed8.remove_menu()
+check([m.name for m in ed8._config.menus] == ["Shade"], "an edit lands")
+ed8.undo()
+check([m.name for m in ed8._config.menus] == ["QuickTool", "Shade"],
+      f"undo takes it back ({[m.name for m in ed8._config.menus]})")
+check(json.dumps(ed8._config.to_json(), sort_keys=True) == loaded_state,
+      "and the config is byte for byte what was loaded")
+check(not ed8._dirty, f"so nothing is un-saved ({ed8._dirty})")
+ed8.redo()
+check([m.name for m in ed8._config.menus] == ["Shade"],
+      f"redo applies it again ({[m.name for m in ed8._config.menus]})")
+ed8.undo()
+ed8._new_name.setText("Shade Renamed")
+ed8.rename_menu()
+check(ed8._redo == [], "a new edit drops the redo history")
+
+print("== the undo history is capped, and it ends politely ==")
+ed9 = CoatMenuEditor(MenuConfig(menus=[Menu(name="A"), Menu(name="B")]))
+ed9.reload_menus()
+for index in range(ed9.MAX_UNDO + 12):
+    ed9._new_name.setText(f"B {index}")
+    ed9.rename_menu()
+check(len(ed9._undo) == ed9.MAX_UNDO, f"capped at {ed9.MAX_UNDO} ({len(ed9._undo)})")
+check("\"B 12\"" in ed9._undo[0] or "B 12" in ed9._undo[0],
+      f"the oldest states are the ones dropped ({ed9._undo[0][:60]}...)")
+for _step in range(ed9.MAX_UNDO + 4):
+    ed9.undo()
+check(len(ed9._config.menus) == 2 and len(ed9._undo) >= 1,
+      f"undoing past the start is harmless ({len(ed9._undo)} state(s) left)")
+check("Nothing to undo" in ed9._status.text(),
+      f"and it says so ({ed9._status.text()!r})")
+ed9._index = 0
+ed9.remove_menu()
+ed9._index = 0
+ed9.remove_menu()
+check([m.name for m in ed9._config.menus] == ["B"],
+      f"the last menu cannot be deleted ({[m.name for m in ed9._config.menus]})")
+check("at least one menu" in ed9._status.text(),
+      f"and the editor says why ({ed9._status.text()!r})")
+
+print("== the editor opens on the screen the pointer is on ==")
+# The primary screen is not always the one 3DCoat runs on: a second monitor would
+# get the panel centred (and sized) for the wrong one.
+from coatmenu.ui.editor import _pointer_area  # noqa: E402
+
+area = _pointer_area()
+check(area is not None, "we can find that screen")
+ed10 = CoatMenuEditor(MenuConfig(menus=[Menu(name="A")]))
+ed10.resize(300, 200)
+ed10.center_on_screen()
+centred = QPoint(int(area.left() + (area.width() - ed10.width()) / 2),
+                 int(area.top() + (area.height() - ed10.height()) / 2))
+check(abs(ed10.x() - centred.x()) <= 2 and abs(ed10.y() - centred.y()) <= 2,
+      f"the editor is centred on it ({ed10.x()},{ed10.y()} vs {centred.x()},{centred.y()})")
+ed10.move(area.right() + 400, area.bottom() + 400)
+ed10._clamp_to_screen()
+check(area.contains(ed10.pos()) and area.contains(ed10.pos() + QPoint(299, 199)),
+      f"and clamped onto it when dragged off ({ed10.x()},{ed10.y()})")
+
 print()
 if failures:
     print(f"EDITOR FAILED ({len(failures)}): " + "; ".join(failures))

@@ -86,14 +86,28 @@ def _menu_name_from(label: str) -> str:
 EDITOR_SIZE = QSize(1240, 840)
 
 
+def _pointer_area():
+    """Available area of the screen the pointer is on (None when we cannot tell).
+
+    The primary screen is not always the one 3DCoat runs on: with a second monitor
+    the panel would be sized, centred and clamped for the wrong screen.
+    """
+    try:
+        from PySide6.QtGui import QCursor
+
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        return screen.availableGeometry()
+    except Exception:
+        return None
+
+
 def _fit_to_screen(wanted: QSize) -> QSize:
     """*wanted* shrunk to fit the available screen area, if it does not."""
-    try:
-        area = QGuiApplication.primaryScreen().availableGeometry()
-        return QSize(min(wanted.width(), int(area.width() * 0.95)),
-                     min(wanted.height(), int(area.height() * 0.95)))
-    except Exception:
+    area = _pointer_area()
+    if area is None:
         return wanted
+    return QSize(min(wanted.width(), int(area.width() * 0.95)),
+                 min(wanted.height(), int(area.height() * 0.95)))
 
 
 def _css() -> str:
@@ -187,6 +201,7 @@ class CoatMenuEditor(QWidget):
         self._title_label: QLabel | None = None
         self._undo: list[str] = []
         self._redo: list[str] = []
+        self._baseline: str | None = self._state()  # what the file on disk holds
         self._push_state()  # the starting point Ctrl+Z comes back to
 
         self.setObjectName("coatmenuEditor")
@@ -515,9 +530,8 @@ class CoatMenuEditor(QWidget):
         anchor it to - and 3DCoat hides the pointer in brush mode anyway. The
         middle of the screen is the one place that is always easy to find.
         """
-        try:
-            area = QGuiApplication.primaryScreen().availableGeometry()
-        except Exception:
+        area = _pointer_area()
+        if area is None:
             return
         x = int(area.left() + (area.width() - self.width()) / 2)
         y = int(area.top() + (area.height() - self.height()) / 2)
@@ -526,9 +540,8 @@ class CoatMenuEditor(QWidget):
 
     def _clamp_to_screen(self) -> None:
         """Keep the panel on screen - at 1240px it can hang off the right edge."""
-        try:
-            area = QGuiApplication.primaryScreen().availableGeometry()
-        except Exception:
+        area = _pointer_area()
+        if area is None:
             return
         x = min(max(self.x(), area.left()), max(area.left(), area.right() - self.width()))
         y = min(max(self.y(), area.top()), max(area.top(), area.bottom() - self.height()))
@@ -571,6 +584,13 @@ class CoatMenuEditor(QWidget):
     # undo / redo
     # ------------------------------------------------------------------
 
+    def _state(self) -> str | None:
+        """The config as a comparable string (None when it cannot be serialised)."""
+        try:
+            return json.dumps(self._config.to_json(), sort_keys=True)
+        except Exception:
+            return None
+
     def _push_state(self) -> None:
         """Remember the state *after* an edit.
 
@@ -578,9 +598,8 @@ class CoatMenuEditor(QWidget):
         no per-action bookkeeping to forget. Undo then means "drop the newest state
         and go back to the one before it".
         """
-        try:
-            state = json.dumps(self._config.to_json(), sort_keys=True)
-        except Exception:
+        state = self._state()
+        if state is None:
             return
         if self._undo and self._undo[-1] == state:
             return
@@ -592,7 +611,9 @@ class CoatMenuEditor(QWidget):
         self._config = MenuConfig.from_json(json.loads(state))
         self._index = min(self._index, max(0, len(self._config.menus) - 1))
         self.reload_menus()
-        self._dirty = True
+        # * means "differs from what is on disk" - undoing every edit brings you
+        # back to the loaded state, which is not an un-saved change.
+        self._dirty = state != self._baseline
         self._refresh_title()
 
     def undo(self) -> None:
@@ -658,13 +679,11 @@ class CoatMenuEditor(QWidget):
         """
         x = self.x() + self.width() + 18
         y = self.y() + 70
-        try:
-            area = QGuiApplication.primaryScreen().availableGeometry()
+        area = _pointer_area()
+        if area is not None:
             if x + 260 > area.right():
                 x = max(area.left(), self.x() - 260)
             y = min(y, max(area.top(), area.bottom() - 240))
-        except Exception:
-            pass
         return QPoint(int(x), int(y))
 
     def close_preview(self) -> None:
@@ -1340,6 +1359,7 @@ class CoatMenuEditor(QWidget):
             info = menus.save_config(config)
             self._config = config
             self._dirty = False
+            self._baseline = self._state()
             self._refresh_title()
             self.reload_menus()
             if self._preview is not None:
