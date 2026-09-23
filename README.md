@@ -19,17 +19,13 @@ take.
 A menu opened as a list, and the same kind of menu as a radial pie — the wheel is
 centred on the cursor, so every slot is the same distance away:
 
-![CoatMenu list](docs/preview-list.png)
-![CoatMenu pie](docs/preview-pie.png)
+![A CoatMenu list and a CoatMenu pie](docs/demo-list-pie.jpg)
 
-A pie with a submenu (rest on a slot for a moment and the child panel unfolds),
-and 3D-Coat's own primitives flattened onto the menu — built-in shapes right
-there, the FFD shapes folded into a submenu:
-
+![A CoatMenu list opened at the cursor](docs/demo-quicktool.jpg)
 
 The editor — every menu is a row on the left, the command catalog on the right:
-<img width="3714" height="2126" alt="3DCoatGL64_vzPlod3tjD" src="https://github.com/user-attachments/assets/05f8e230-a95b-4fbf-986a-4f873c058b37" />
 
+![The CoatMenu editor](docs/demo-editor.jpg)
 
 ## Highlights
 
