@@ -196,6 +196,11 @@ def _iter_source_files() -> list[tuple[str, str]]:
                 continue
             src = os.path.join(dirpath, name)
             rel = os.path.relpath(src, SOURCE_DIR)
+            # `actions/menus/` holds launchers generated from *this* user's config
+            # (by menus_registry.sync, at install and at run time). Shipping one
+            # would carry a menu entry nobody has - they are not source.
+            if rel.replace("\\", "/").startswith("actions/menus/"):
+                continue
             out.append((src, rel))
     return out
 

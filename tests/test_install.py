@@ -255,6 +255,19 @@ check(len(names) > 1,
       f"and the built-in lists that were missing are added back, never touched ({names})")
 check(os.path.isfile(backup2), "the backup is left beside it as a safety copy")
 
+print("== generated launchers are not shipped ==")
+# `actions/menus/` is written from the user's own config (at install and at run
+# time). The folder is also where a stray file can land, and shipping one would
+# carry a menu entry nobody has.
+sys.path.insert(0, os.path.join(ROOT, "install"))
+import install as installer  # noqa: E402
+
+shipped = [rel.replace("\\", "/") for _src, rel in installer._iter_source_files()]
+check(shipped and all(not rel.startswith("actions/menus/") for rel in shipped),
+      f"no launcher files in the shipped set ({[r for r in shipped if r.startswith('actions')][:4]})")
+check(any(rel == "CoatMenu.py" for rel in shipped), "and the entry point still is")
+check(all(not rel.endswith(".pyc") for rel in shipped), "nor any compiled leftovers")
+
 print()
 if failures:
     print(f"INSTALL FAILED ({len(failures)}): " + "; ".join(failures))
