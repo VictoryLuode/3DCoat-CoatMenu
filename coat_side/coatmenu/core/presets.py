@@ -207,6 +207,7 @@ SHADE_MENU_ROWS: list = [
     {"name": "Overlay", "expand": "inline", "position": "bottom-left", "items": [
         {"id": "$SHOW_AXIS", "label": "Axis"},
         {"id": "$VIEW_WIREFRAME", "label": "WireFrame"},
+        {"id": "$RenderSculptSelection", "label": "Selection"},
     ]},
 ]
 

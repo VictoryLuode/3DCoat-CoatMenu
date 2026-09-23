@@ -137,8 +137,8 @@ def unknown_steps(row: dict) -> list[str]:
     the bare ``param``), which is how primitive rows are validated.
     """
     universe = presets._universe()
-    if not universe:
-        return []
+    if not universe or "id" not in row:
+        return []                                    # a header or separator
     out = []
     for step in (row.get("cmds") or [row["id"]]):
         tail = str(step).lstrip("$").split("::")[-1]
