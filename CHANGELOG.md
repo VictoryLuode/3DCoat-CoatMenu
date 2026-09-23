@@ -26,6 +26,17 @@ All notable changes to CoatMenu. Versions are the git tags.
   reports: the live copy is not automatically right (its Shade pie had three view
   ids spelled without the underscores 3DCoat uses), so syncing stays a decision.
 
+### Changed
+
+- **The shipped set is the menus the extension actually runs.** Both were re-synced
+  from the installed copy before this release (`tests/sync_defaults.py`): `QuickTool`
+  follows the live list (`Array/Bend Volume`, `Attach Tube or Models Array` and
+  `Vox Hide` are gone, `Smooth All` is in), and in the `Shade` pie `CastShadows` sits
+  on the wheel itself instead of inside `Shade Mode`. The six rows the live copy
+  holds from another extension (`[extension]Sculpt_Array` and friends) stay out -
+  this build does not define those ids, and a shipped row must never do nothing.
+  Only a first run, or a list that is missing, sees any of this.
+
 ### Fixed
 
 - **Nothing generated ships any more, and the tests no longer dirty the checkout.**

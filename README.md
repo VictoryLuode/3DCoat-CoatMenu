@@ -2,9 +2,10 @@
 
 > Custom pop-up action menus for **3D-Coat** — at the cursor, from a hotkey.
 
-CoatMenu is the 3D-Coat sibling of [Krita **MenuBelt**](https://github.com/VictoryLuode/Krita-Menubelt):
-you build your own menus out of 3D-Coat commands, tools and scripts, then
-reach them from a frameless overlay that appears where your cursor is.
+CoatMenu is inspired by [Krita **MenuBelt**](https://github.com/VictoryLuode/Krita-Menubelt),
+the menu plug-in I built for Krita earlier: you build your own menus out of 3D-Coat
+commands, tools and scripts, then reach them from a frameless overlay that appears
+where your cursor is.
 
 Press the hotkey once: the menu appears and **stays** after you let the key go.
 Click an entry to run it — in a pie you can also press its digit — or click

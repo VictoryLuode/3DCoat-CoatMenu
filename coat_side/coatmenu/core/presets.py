@@ -165,16 +165,19 @@ def _list_from_rows(name: str, rows: list, mode: str = LIST) -> Menu:
 # ``VIEWSPECULARCOLORONLY`` and ``VIEWWIREFRAME`` - no underscores - are not in
 # 3DCoat's id table at all, so a row using them does nothing.)
 QUICKTOOL_MENU_ROWS: list = [
+    # Synced with the menus the extension actually runs (tests/sync_defaults.py). The
+    # live copy also holds six rows from another extension (`[extension]Sculpt_Array`
+    # and friends) - this build cannot define those ids, and a shipped row must never
+    # do nothing, so they stay out.
     {"header": "Object"},
-    {"id": "BendVolume", "label": "Array/Bend Volume"},
-    {"id": "TubeOrModels", "label": "Attach Tube or Models Array"},
     "Resample",
+    {"id": "SmoothObject", "label": "Smooth All"},
+    {"separator": True},
     "RegularGizmo::ToCenterMass",
     {"id": "ToUniformSpaceAll", "label": "Make All Uniform"},
     {"name": "Voxel Operator", "items": [
         {"id": "SeparateHidden", "label": "Separate Hidden Volumes"},
         {"id": "Invert_vox_visibility", "label": "Invert Volumes Visibility"},
-        {"id": "SCULP_HIDE", "label": "Vox Hide"},
     ]},
     {"separator": True},
     {"header": "Scena"},
@@ -192,7 +195,6 @@ MODELING_MENU_ROWS: list = [
 
 SHADE_MENU_ROWS: list = [
     {"name": "Shade Mode", "expand": "inline", "position": "right", "items": [
-        {"id": "$CastShadows", "label": "CastShadows"},
         {"id": "$VIEW_SHADED", "label": "Shade"},
         {"id": "$VIEW_RELIEF_ONLY", "label": "Solid"},
         {"id": "$VIEW_NON_SHADED", "label": "Flat Color"},
@@ -200,6 +202,8 @@ SHADE_MENU_ROWS: list = [
         {"id": "$VIEW_SPECULAR_COLOR_ONLY", "label": "Specular Color"},
         {"id": "$VIEW_METALNESS_ONLY", "label": "Metalness"},
     ]},
+    # CastShadows sits on the wheel itself in the live menu, not in Shade Mode.
+    {"id": "$CastShadows", "label": "CastShadows", "position": "left"},
     {"name": "Shade Setting", "expand": "inline", "position": "top-left", "items": [
         {"id": "$BackfaceCulling", "label": "BackfaceCulling"},
         {"id": "$GreyscaleLight", "label": "HDR Grey Mode"},
