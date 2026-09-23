@@ -78,21 +78,22 @@ extension builds on this machine)*
 * **Submenus**, nested, unfold on hover (with a grace timer so diagonal mouse
   moves don't close them); in a pie a short dwell opens them. **Promote** turns a
   submenu into a menu of its own.
-* **`Sculpt Ops`, bundled** — 71 of 3D-Coat's own object commands (the ones on the
-  VoxTree right-click menu) in seven groups: Decimate, Density & Resample, Boolean,
-  Merge & Clone, Hide/Show/Ghost, Object Tools, Autopo & Retopo. The names are
-  3D-Coat's own, and every id is looked up before it becomes a row (see below), so
-  a command this build does not have is left out rather than shipped as a row that
-  does nothing.
-* **Seven lists on a first run** — `Sculpt`, `Modeling`, `Add`, `Tools`, `Common`,
-  `Shade` (a pie) and `Sculpt Ops`, in that order. Every one of them is built
-  against the 3D-Coat that is running: the primitives, the sculpt and modelling
-  commands and the shading pie are curated lists of **3D-Coat's own command ids**,
-  `Tools` reads your `CustomTools` presets, `Common` takes its grouping from
-  3D-Coat's own main menu, and `Sculpt Ops` its names and its rows from 3D-Coat's
-  own definitions. An id this build does not define is dropped at build time
-  (`English.xml`, 3D-Coat's own id table, is the authority), so no shipped row is
-  ever a row that does nothing.
+* **Three lists on a first run** — `QuickTool`, `Add` and `Shade` (a pie), in that
+  order: the working set of the person who wrote this, and nothing else installed
+  by default. Every one of them is built against the 3D-Coat that is running: the
+  primitives and the quick tool list are curated lists of **3D-Coat's own command
+  ids**, and the shading pie takes its grouping from 3D-Coat's own names. An id this
+  build does not define is dropped at build time (`English.xml`, 3D-Coat's own id
+  table, is the authority), so no shipped row is ever a row that does nothing.
+* **More lists to build on request** — `Modeling`, `Tools` (your `CustomTools`
+  presets), `Common` (grouped like 3D-Coat's own main menu) and `Sculpt Ops` (71 of
+  3D-Coat's object commands - the ones on the VoxTree right-click menu - in seven
+  groups: Decimate, Density & Resample, Boolean, Merge & Clone, Hide/Show/Ghost,
+  Object Tools, Autopo & Retopo) are **not** installed for you; `+ New ▸ Built-in
+  lists` in the editor adds any of them, built for the 3D-Coat that is running.
+  The names are 3D-Coat's own, and every id is looked up before it becomes a row
+  (see below), so a command this build does not have is left out rather than shipped
+  as a row that does nothing.
 * **Independent** — no other extension is required, none is imported, and none of
   its code ships here. Everything CoatMenu ships lives under its own namespace,
   because `cExtensions` shares one interpreter: a generic top-level name would

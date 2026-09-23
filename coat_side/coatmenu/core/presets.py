@@ -84,7 +84,7 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # whole lists - see install_presets). The family (the part before the "/") is what
 # identifies a list we shipped once, under whatever name the user gave it.
 PRESET_MARKERS = {
-    "Sculpt": "sculpt/1",
+    "QuickTool": "quicktool/1",
     "Modeling": "modeling/1",
     "Add": "prims/2",
     "Tools": "tools/1",
@@ -94,13 +94,22 @@ PRESET_MARKERS = {
 }
 
 # The lists a fresh install gets, in the order 3DCoat's Scripts menu shows them.
+# This is one person's working set - the three lists the author actually uses. Ship
+# what is used, nothing else: a fresh install is not a demo of everything the
+# extension can build.
 DEFAULT_LISTS: tuple[str, ...] = (
-    "Sculpt",
-    "Modeling",
+    "QuickTool",
     "Add",
+    "Shade",
+)
+
+# Everything the editor's "+ New" can build, shipped set first. These are the same
+# curated lists; the ones past the shipped set are there for whoever wants them
+# (they are built on request, never installed by default).
+BUILTIN_LISTS: tuple[str, ...] = DEFAULT_LISTS + (
+    "Modeling",
     "Tools",
     "Common",
-    "Shade",
     "Sculpt Ops",
 )
 
@@ -147,7 +156,7 @@ def _list_from_rows(name: str, rows: list, mode: str = LIST) -> Menu:
                 preset=PRESET_MARKERS[name])
 
 
-# --- Sculpt / Modeling / Shade ------------------------------------------------
+# --- QuickTool / Modeling / Shade ---------------------------------------------
 # Written down in the config's own JSON shape, so a list edited in the panel can be
 # pasted straight back in here. Ids are 3DCoat's; labels are ours.
 #
@@ -155,7 +164,7 @@ def _list_from_rows(name: str, rows: list, mode: str = LIST) -> Menu:
 # ``VIEW_SPECULAR_COLOR_ONLY`` and ``VIEW_WIREFRAME``. (``VIEW_GLOSSONLY``,
 # ``VIEWSPECULARCOLORONLY`` and ``VIEWWIREFRAME`` - no underscores - are not in
 # 3DCoat's id table at all, so a row using them does nothing.)
-SCULPT_MENU_ROWS: list = [
+QUICKTOOL_MENU_ROWS: list = [
     {"header": "Object"},
     {"id": "BendVolume", "label": "Array/Bend Volume"},
     {"id": "TubeOrModels", "label": "Attach Tube or Models Array"},
@@ -198,14 +207,13 @@ SHADE_MENU_ROWS: list = [
     {"name": "Overlay", "expand": "inline", "position": "bottom-left", "items": [
         {"id": "$SHOW_AXIS", "label": "Axis"},
         {"id": "$VIEW_WIREFRAME", "label": "WireFrame"},
-        {"id": "$RenderSculptSelection", "label": "Selection"},
     ]},
 ]
 
 
-def sculpt_list(mode: str = LIST) -> Menu:
-    """The ``Sculpt`` list: the volume/curve commands reached for while sculpting."""
-    return _list_from_rows("Sculpt", SCULPT_MENU_ROWS, mode)
+def quicktool_list(mode: str = LIST) -> Menu:
+    """The ``QuickTool`` list: the volume/curve commands reached for while sculpting."""
+    return _list_from_rows("QuickTool", QUICKTOOL_MENU_ROWS, mode)
 
 
 def modeling_list(mode: str = LIST) -> Menu:
@@ -464,7 +472,7 @@ def common_list(mode: str = LIST) -> Menu:
 
 # --- installing the shipped lists ---------------------------------------------
 _BUILDERS = {
-    "Sculpt": sculpt_list,
+    "QuickTool": quicktool_list,
     "Modeling": modeling_list,
     "Add": primitives_list,
     "Tools": tools_list,
@@ -472,6 +480,16 @@ _BUILDERS = {
     "Shade": shade_list,
     "Sculpt Ops": sculpt_ops_list,
 }
+
+
+def _check_builders() -> None:
+    """A name in a shipped set with no builder is a silent no-op - never worth it."""
+    missing = [name for name in BUILTIN_LISTS if name not in _BUILDERS]
+    if missing:
+        raise RuntimeError(f"no builder for shipped list(s): {', '.join(missing)}")
+
+
+_check_builders()
 
 
 def default_lists() -> list[Menu]:

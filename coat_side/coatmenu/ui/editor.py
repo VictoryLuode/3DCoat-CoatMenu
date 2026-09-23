@@ -802,7 +802,7 @@ class CoatMenuEditor(QWidget):
         menu.addSeparator()
         heading = menu.addAction("Built-in lists")
         heading.setEnabled(False)
-        for name in presets.DEFAULT_LISTS:
+        for name in presets.BUILTIN_LISTS:
             in_use = self.preset_in_use(name)
             action = menu.addAction(f"    {name}" + ("    (in your menus)" if in_use else ""))
             action.setEnabled(not in_use)

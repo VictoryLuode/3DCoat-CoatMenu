@@ -127,8 +127,14 @@ check(config.remove_menu("Sculpt") is False,
 
 print("== starter config is the shipped set, built for this build ==")
 starter = starter_config(DOCS)
-check([lst.name for lst in starter.menus] == list(presets.DEFAULT_LISTS),
-      f"the first run gets the lists we ship ({[lst.name for lst in starter.menus]})")
+# Pinned on purpose: the shipped set is one person's working set, so changing it has
+# to be a deliberate edit here too (and it never touches an installed config).
+check([lst.name for lst in starter.menus] == ["QuickTool", "Add", "Shade"],
+      f"the first run gets exactly the shipped lists ({[lst.name for lst in starter.menus]})")
+check(list(presets.DEFAULT_LISTS) == ["QuickTool", "Add", "Shade"],
+      "DEFAULT_LISTS is those three, and nothing else is installed by default")
+check(all(name in presets.BUILTIN_LISTS for name in presets.DEFAULT_LISTS),
+      "everything shipped is also offered in the editor")
 check(all(lst.preset for lst in starter.menus),
       "each one carries its preset marker")
 check(any(item.kind == "command" for lst in starter.menus for item in lst.items),
@@ -499,7 +505,7 @@ print("== a shipped menu he deleted stays deleted ==")
 # deleted in the editor came back on the next install. Deleting one now records
 # the *family*, and an install leaves it alone.
 deleted = MenuConfig(menus=[
-    Menu(name="Sculpt", preset="sculpt/1"),
+    Menu(name="QuickTool", preset="quicktool/1"),
     Menu(name="My Own"),
     Menu(name="Add Prims", preset="prims/2"),
     Menu(name="Spare"),
@@ -511,8 +517,8 @@ check(deleted.remove_menu("My Own"), "a menu of his own can go as well")
 check(deleted.removed_presets == ["prims", "my own"],
       f"it is remembered by name - a key that is only ever checked against the "
       f"lists we ship, so it costs nothing ({deleted.removed_presets})")
-check(deleted.remove_menu("Sculpt"), "a shipped menu under his own name can go too")
-check("sculpt" in deleted.removed_presets,
+check(deleted.remove_menu("QuickTool"), "a shipped menu under his own name can go too")
+check("quicktool" in deleted.removed_presets,
       f"remembered by family, not by name ({deleted.removed_presets})")
 check(not deleted.remove_menu("Spare"), "the last menu still cannot be deleted")
 # A list he built himself with the same name as one we ship has no marker, so the
@@ -531,9 +537,9 @@ check("removed" in deleted.to_json(), "and is written to the file")
 check("removed" not in MenuConfig(menus=[Menu(name="Only")]).to_json(),
       "an untouched config stays as short as it was")
 _added = presets.install_presets(_reloaded)
-check("Add" not in _added and "Sculpt" not in _added,
+check("Add" not in _added and "QuickTool" not in _added,
       f"an install does not add a deleted list back ({_added})")
-check(_reloaded.find("Add") is None and _reloaded.find("Sculpt") is None,
+check(_reloaded.find("Add") is None and _reloaded.find("QuickTool") is None,
       "and they are really not in the config")
 
 print("== a config we cannot read is moved aside, never replaced ==")

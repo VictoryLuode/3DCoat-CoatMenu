@@ -112,8 +112,15 @@ check(manager.popup is not None and len(manager.popup._rows) >= 2,
 popup.hide_menu()
 
 print("== the overlay's rows come from the installed config ==")
-launcher = os.path.join(EXT, "actions", "menus", "CoatMenu_Sculpt.py")
-check(os.path.isfile(launcher), "per-list launcher generated")
+# Which list to click is read from the config the install just wrote, so this keeps
+# working when the shipped set changes - and still fails if a launcher is missing.
+from coatmenu.core import config as config_mod  # noqa: E402
+from coatmenu.core import menus_registry  # noqa: E402
+
+_installed = config_mod.MenuConfig.load(os.path.join(EXT, "data", "menus.json"))
+_first = _installed.menus[0].name
+launcher = menus_registry.entry_script_path(os.path.join(EXT, "actions", "menus"), _first)
+check(os.path.isfile(launcher), f"per-list launcher generated for '{_first}'")
 try:
     runpy.run_path(launcher)
     list_error = None
@@ -166,7 +173,7 @@ print("== the log tells the story ==")
 with open(LOG, encoding="utf-8") as fh:
     log_text = fh.read()
 check("menu item: show" in log_text, "click logged")
-check("menu item: list Sculpt" in log_text, "list click logged")
+check(f"menu item: list {_first}" in log_text, "list click logged")
 check("menu item: editor" in log_text, "editor click logged")
 check("IMPORT FAILED" not in log_text and "RUN FAILED" not in log_text,
       "no import/run failures logged")

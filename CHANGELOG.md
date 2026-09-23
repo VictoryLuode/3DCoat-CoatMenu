@@ -16,6 +16,16 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ### Changed
 
+- **The shipped set is three lists, and they are the author's own working set**:
+  `QuickTool`, `Add`, `Shade` (a pie). A first run is not a showcase of everything
+  the extension can build - a fresh install used to arrive with seven menus.
+  `Modeling`, `Tools`, `Common` and `Sculpt Ops` are still built on request
+  (`+ New ▸ Built-in lists`), but nothing but those three is installed for you.
+  `Sculpt` is gone as a name: it was the same rows as `QuickTool`, which is what it
+  is called now.
+- The `Shade` pie's three view rows are spelled the way 3D-Coat spells them
+  (`$VIEW_GLOSS_ONLY`, `$VIEW_SPECULAR_COLOR_ONLY`, `$VIEW_WIREFRAME`); without the
+  underscores they are not ids 3D-Coat defines at all, so those rows did nothing.
 - **`Sculpt Ops` is ours now** and contains no script of anyone else's: 71 of
   **3D-Coat's own object commands** (the ones on the VoxTree right-click menu,
   where decimate / resample / the live booleans / merge / ghosting live) in seven
