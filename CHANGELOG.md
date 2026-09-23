@@ -4,6 +4,15 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ## Unreleased
 
+### Added
+
+- **`tests/sync_defaults.py`** — the release step that keeps the shipped set honest:
+  it compares `presets.DEFAULT_LISTS` row by row against the menus the installed
+  extension is actually running, prints the differences with the ids this build does
+  not define called out, and can print the paste-ready `*_MENU_ROWS` block. It only
+  reports: the live copy is not automatically right (its Shade pie had three view
+  ids spelled without the underscores 3DCoat uses), so syncing stays a decision.
+
 ### Removed
 
 - **Another extension's code is gone.** CoatMenu used to ship a 430-file,
