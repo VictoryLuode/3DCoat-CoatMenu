@@ -105,10 +105,15 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
         paths.menu_xml_path(),
     )
     if register:
+        # Menus that are gone have to leave the *running* 3DCoat too: deleting the
+        # file only takes effect at the next start, and he should not have to
+        # restart to be rid of a menu he just deleted.
+        info["unregistered"] = drop_menu_items(info.get("extra_ids_removed", []))
         info["registered"] = register_menu_items(config)
     log(
         f"sync: {info['menus']} menu(s), wrote {len(info['scripts_written'])} launcher(s), "
         f"removed {len(info['scripts_removed'])}, "
+        f"cleaned {len(info.get('extra_items_removed', []))} stale entry file(s), "
         f"registered {info.get('registered', '-')}"
     )
     return info
@@ -117,6 +122,38 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 # 3DCoat menu registration
 # ---------------------------------------------------------------------------
+
+
+def _is_menu_item_inserted(coat, menu_id: str) -> bool:
+    """Whether 3DCoat currently lists this menu item (never raises)."""
+    try:
+        return bool(coat.ui.checkIfMenuItemInserted(menu_id))
+    except Exception:
+        return False
+
+
+def drop_menu_items(menu_ids: list[str]) -> int:
+    """Take menu items out of the running 3DCoat; returns how many went.
+
+    The files are pruned separately (``menus_registry.prune_persisted_menu_items``).
+    An id that is not in the menu is a no-op, so this is safe to call with ids
+    that were only ever written to disk.
+    """
+    if not menu_ids:
+        return 0
+    try:
+        import coat  # type: ignore
+    except Exception:
+        return 0
+    dropped = 0
+    for menu_id in menu_ids:
+        try:
+            coat.ui.removeCommandFromMenu(menu_id)
+            dropped += 1
+            log(f"removed menu item {menu_id}")
+        except Exception as exc:
+            log(f"menu item {menu_id} not removed: {exc}")
+    return dropped
 
 
 def register_menu_items(config: MenuConfig) -> int:
@@ -136,16 +173,28 @@ def register_menu_items(config: MenuConfig) -> int:
     inserted = 0
     # Drop entries left behind by earlier id schemes first, otherwise a menu shows
     # up twice in 3DCoat's Scripts list for the rest of the session.
-    for menu_id in legacy_hotkey_ids(config):
+    drop_menu_items([menu_id for menu_id in legacy_hotkey_ids(config)
+                     if _is_menu_item_inserted(coat, menu_id)])
+
+    # The three fixed entries are carried by ``ExtraMenuItems/CoatMenu.xml``, which
+    # 3DCoat reads whether or not this extension loads: they are *not* inserted at
+    # runtime. 3DCoat persists every insertion as its own file, and an id living in
+    # both that file and CoatMenu.xml is listed twice (which is exactly what used to
+    # happen). Their translation still goes in, so they show their readable name.
+    fixed_ids = [menu_id for menu_id, _label, _script in menu_entries(
+        config, paths.extension_root(), paths.entry_scripts_dir(), include="fixed")]
+    drop_menu_items([menu_id for menu_id in fixed_ids
+                     if _is_menu_item_inserted(coat, menu_id)])
+    for menu_id, label, _script in menu_entries(
+        config, paths.extension_root(), paths.entry_scripts_dir(), include="fixed"
+    ):
         try:
-            if coat.ui.checkIfMenuItemInserted(menu_id):
-                coat.ui.removeCommandFromMenu(menu_id)
-                log(f"removed legacy menu item {menu_id}")
+            coat.ui.addTranslation(menu_id, label)
         except Exception as exc:
-            log(f"legacy menu item {menu_id} not removed: {exc}")
+            log(f"translation for {menu_id} failed: {exc}")
 
     for menu_id, label, script in menu_entries(
-        config, paths.extension_root(), paths.entry_scripts_dir()
+        config, paths.extension_root(), paths.entry_scripts_dir(), include="menus"
     ):
         try:
             coat.ui.addTranslation(menu_id, label)

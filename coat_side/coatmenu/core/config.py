@@ -198,6 +198,11 @@ def _item_body(item: MenuItem):
     return cid
 
 
+def preset_family(marker: str) -> str:
+    """``prims/2`` -> ``prims``: which preset a marker belongs to, version aside."""
+    return str(marker or "").split("/")[0].strip().lower()
+
+
 def _clean_items(items: list[MenuItem], depth: int = 0) -> list[MenuItem]:
     out: list[MenuItem] = []
     for item in items:
@@ -219,6 +224,23 @@ class MenuConfig:
     """The whole user configuration."""
 
     menus: list[Menu] = field(default_factory=list)
+    # Presets the user deleted on purpose. Without this, the next install would put
+    # a deleted built-in menu straight back: a list it cannot find counts as
+    # "missing", and missing is what it adds. Remembered per *family*
+    # (``prims``), so renaming the menu does not defeat it.
+    removed_presets: list[str] = field(default_factory=list)
+
+    def remember_removed(self, family: str) -> None:
+        """Note that a shipped preset was deleted, so it is not added back."""
+        family = preset_family(family)
+        if family and family not in self.removed_presets:
+            self.removed_presets.append(family)
+
+    def forget_removed(self, family: str) -> None:
+        """Stop holding a deletion against a preset (he wants it back)."""
+        family = preset_family(family)
+        if family in self.removed_presets:
+            self.removed_presets.remove(family)
 
     # -- lookup ----------------------------------------------------------
 
@@ -266,7 +288,13 @@ class MenuConfig:
                               preset=str(raw.get("preset") or "")))
             if len(menus) >= MAX_LISTS:
                 break
-        return cls(menus=menus)
+        removed: list[str] = []
+        if isinstance(data, dict):
+            for entry in data.get("removed") or []:
+                family = preset_family(entry)
+                if family and family not in removed:
+                    removed.append(family)
+        return cls(menus=menus, removed_presets=removed)
 
     def to_json(self) -> dict:
         out: list[dict] = []
@@ -281,10 +309,15 @@ class MenuConfig:
                 # them without ever touching a menu of the same name built by hand.
                 data["preset"] = lst.preset
             out.append(data)
-        return {
+        payload: dict = {
             "version": CONFIG_VERSION,
             "menus": out,
         }
+        if self.removed_presets:
+            # Only written when there is something to remember: a deleted built-in
+            # menu must not come back on the next update.
+            payload["removed"] = list(self.removed_presets)
+        return payload
 
     @classmethod
     def load(cls, path: str) -> "MenuConfig":
@@ -316,6 +349,11 @@ class MenuConfig:
         if target is None or len(self.menus) <= 1:
             return False
         self.menus.remove(target)
+        # A menu we shipped, deleted on purpose: without remembering that, the next
+        # install sees a missing list and adds it straight back. The marker is the
+        # better key (it survives a rename); a menu of his own copy of a shipped
+        # list has no marker, and then the name is what we have.
+        self.remember_removed(target.preset or target.name)
         return True
 
     def set_mode(self, key: str, mode: str) -> bool:

@@ -34,7 +34,7 @@ written on.
 from __future__ import annotations
 
 from coatmenu.core import catalog
-from coatmenu.core.config import Menu, MenuConfig, item_from_json
+from coatmenu.core.config import Menu, MenuConfig, item_from_json, preset_family
 from coatmenu.core.menu_model import (
     COMMAND,
     LIST,
@@ -481,7 +481,7 @@ def default_lists() -> list[Menu]:
 
 def _preset_family(marker: str) -> str:
     """``prims/2`` -> ``prims``: which preset a marker belongs to, version aside."""
-    return str(marker or "").split("/")[0].strip().lower()
+    return preset_family(marker)
 
 
 def _by_marker(config: MenuConfig, marker: str):
@@ -520,6 +520,12 @@ def install_presets(config: MenuConfig, names: tuple[str, ...] = DEFAULT_LISTS) 
         if make is None:
             continue
         fresh = make()
+        if (preset_family(fresh.preset) in config.removed_presets
+                or fresh.name.strip().lower() in config.removed_presets):
+            # He deleted this one on purpose - the editor records that now. "Not
+            # found" is otherwise indistinguishable from "he never had it", and
+            # adding it back means his deletion gets undone by an update.
+            continue
         if config.find(name) is not None:
             # His list of that name - ours was renamed, or he built his own.
             continue

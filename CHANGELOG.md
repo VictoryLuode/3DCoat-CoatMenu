@@ -65,6 +65,19 @@ All notable changes to CoatMenu. Versions are the git tags.
   `coat.io.dataPath()` when 3D-Coat can say, and is *checked* for a `UserPrefs`
   folder rather than assumed - a user who moved it (or runs a portable copy) gets
   a warning instead of a silent install into a folder 3D-Coat never reads.
+- **A menu deleted in the editor is gone for good.** 3D-Coat writes its own
+  `ExtraMenuItems/<id>.xml` for every entry it is asked to insert and never removes
+  one, so the entry was read back at every start - the deleted menu stayed in the
+  Scripts list for good, and the three fixed entries were listed **twice** (they are
+  in `CoatMenu.xml` as well). An install and the extension's startup now delete the
+  copies whose menu is gone, take those ids out of the *running* 3D-Coat (no restart
+  needed), and the three fixed entries are no longer inserted at runtime at all. An
+  uninstall removes its leftovers too. The doctor report lists what is left.
+- **Deleting a built-in menu now sticks.** `install_presets` works by finding what
+  is *missing*, so a shipped list deleted on purpose was added straight back by the
+  next update - his deletion, undone by an install. The config remembers it (a
+  `removed` list, keyed by preset family, or by name for a list that has no marker),
+  and an install leaves those alone.
 
 ## v0.6.1 — 2026-09-20
 

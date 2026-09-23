@@ -237,15 +237,91 @@ def write_menu_xml(config: MenuConfig, extension_root: str, entry_scripts_dir: s
     return xml_path
 
 
+def _xml_value(text: str, tag: str) -> str:
+    """The text inside ``<tag>...</tag>``, or ``""`` when it is not there."""
+    start = text.find(f"<{tag}>")
+    if start < 0:
+        return ""
+    end = text.find(f"</{tag}>", start)
+    if end < 0:
+        return ""
+    return text[start + len(tag) + 2:end].strip()
+
+
+def persisted_menu_items(xml_path: str, extension_root: str) -> list[tuple[str, str]]:
+    """``(menu_id, path)`` for the item files 3DCoat writes beside our own.
+
+    3DCoat persists every runtime ``insertInMenu`` call as its own
+    ``ExtraMenuItems/<id>.xml``. Nothing removes one when the menu behind it is
+    deleted, so the entry is read back at every start and the menu never leaves
+    the Scripts list. Only files naming a command *inside this extension* are
+    returned - a neighbour's file in the same folder is not ours to touch.
+    """
+    folder = os.path.dirname(xml_path)
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return []
+    ours = os.path.normcase(os.path.abspath(extension_root))
+    found: list[tuple[str, str]] = []
+    for name in names:
+        if name == os.path.basename(xml_path) or not name.endswith(".xml"):
+            continue
+        text = _read(os.path.join(folder, name))
+        script = _xml_value(text, "Command")
+        if script.lower().startswith("script:"):
+            script = script[len("script:"):]
+        if not script or not os.path.normcase(os.path.abspath(script)).startswith(ours):
+            continue                 # written for something that is not ours
+        found.append((_xml_value(text, "MenuItem") or name[:-4],
+                      os.path.join(folder, name)))
+    return found
+
+
+def prune_persisted_menu_items(config: MenuConfig, extension_root: str,
+                               entry_scripts_dir: str,
+                               xml_path: str) -> tuple[list[str], list[str]]:
+    """Delete 3DCoat's own item files for menus that are no longer in the config.
+
+    A menu deleted in the editor loses its config row and its launcher, but the
+    file 3DCoat wrote for its entry stayed - so the entry came back on every start
+    and the menu could never be got rid of. The three fixed entries were listed
+    twice for the same reason (``CoatMenu.xml`` carries them *and* 3DCoat wrote a
+    file for the insertion). Returns ``(stale_ids, removed_paths)``: the ids that
+    also have to come out of the *running* menu, and the files that were deleted.
+    """
+    live = {menu_id for menu_id, _l, _s in menu_entries(
+        config, extension_root, entry_scripts_dir, include="menus")}
+    fixed = {menu_id for menu_id, _l, _s in menu_entries(
+        config, extension_root, entry_scripts_dir, include="fixed")}
+    stale: list[str] = []
+    removed: list[str] = []
+    for menu_id, path in persisted_menu_items(xml_path, extension_root):
+        if menu_id in live:
+            continue
+        try:
+            os.remove(path)
+        except OSError:
+            continue
+        removed.append(path)
+        if menu_id not in fixed:     # the fixed three are carried by CoatMenu.xml
+            stale.append(menu_id)
+    return stale, removed
+
+
 def sync(config: MenuConfig, extension_root: str, entry_scripts_dir: str, xml_path: str) -> dict:
     """Bring the launcher scripts and the menu XML in line with ``config``."""
     written, removed = write_entry_scripts(config, entry_scripts_dir)
     write_menu_xml(config, extension_root, entry_scripts_dir, xml_path)
+    stale_ids, items_removed = prune_persisted_menu_items(
+        config, extension_root, entry_scripts_dir, xml_path)
     return {
         "menus": len(config.menus),
         "scripts_written": written,
         "scripts_removed": removed,
         "menu_xml": xml_path,
+        "extra_items_removed": items_removed,
+        "extra_ids_removed": stale_ids,
     }
 
 

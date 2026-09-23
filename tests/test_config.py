@@ -221,6 +221,72 @@ with open(amp_xml, encoding="utf-8") as fh:
 check("&amp;" in amp_text and "R&D" not in amp_text,
       "the '&' is written as an entity, not raw")
 
+print("== the item files 3DCoat itself writes are cleaned up ==")
+# 3DCoat persists every runtime insertion as its own ExtraMenuItems/<id>.xml and
+# never removes one. That is why a menu deleted in the editor kept coming back in
+# the Scripts list, and why the three fixed entries were listed twice (CoatMenu.xml
+# carries them as well).
+gone_root = tempfile.mkdtemp(prefix="coatmenu-items-")
+gone_ext = os.path.join(gone_root, "CoatMenu")
+gone_entry = os.path.join(gone_ext, "actions", "menus")
+gone_xml = os.path.join(gone_root, "ExtraMenuItems", "CoatMenu.xml")
+os.makedirs(os.path.join(gone_root, "ExtraMenuItems"), exist_ok=True)
+_ITEM = ("<ClassArray.ExtraMenuItem>\n\t<ExtraMenuItem>\n\t\t<MenuPath>Scripts"
+         "</MenuPath>\n\t\t<MenuItem>{mid}</MenuItem>\n\t\t<inRoom></inRoom>\n"
+         "\t\t<inSection></inSection>\n\t\t<Command>script:{script}</Command>\n"
+         "\t</ExtraMenuItem>\n</ClassArray.ExtraMenuItem>\n")
+
+
+def _item_file(name: str, mid: str, script: str) -> str:
+    """One of 3DCoat's files, written the way 3DCoat writes it (native paths)."""
+    path = os.path.join(gone_root, "ExtraMenuItems", name)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(_ITEM.format(mid=mid, script=script.replace("/", "\\")))
+    return path
+
+
+live_item = _item_file("CoatMenu_Keep.xml", "CoatMenu_Keep",
+                       os.path.join(gone_entry, "CoatMenu_Keep.py"))
+dead_item = _item_file("CoatMenu_Gone.xml", "CoatMenu_Gone",
+                       os.path.join(gone_entry, "CoatMenu_Gone.py"))
+fixed_item = _item_file("CoatMenu_Show.xml", "CoatMenu_Show",
+                        os.path.join(gone_ext, "actions", "CoatMenu_Show.py"))
+foreign_item = _item_file("CoatMenu_Neighbour.xml", "CoatMenu_Neighbour",
+                          "C:/Other Extension/actions/menus/Thing.py")
+
+gone_info = registry.sync(MenuConfig(menus=[Menu(name="Keep")]), gone_ext,
+                          gone_entry, gone_xml)
+check(not os.path.exists(dead_item), "a deleted menu's item file is gone")
+check(os.path.exists(live_item), "a live menu's item file stays")
+check(not os.path.exists(fixed_item),
+      "and the fixed three are not doubled up by 3DCoat's own copy of them")
+check(os.path.exists(foreign_item),
+      "a file naming another extension is left alone")
+check(gone_info["extra_ids_removed"] == ["CoatMenu_Gone"],
+      f"the stale id is reported ({gone_info['extra_ids_removed']})")
+check("CoatMenu_Show" not in gone_info["extra_ids_removed"],
+      "the fixed entry is only removed on disk - CoatMenu.xml still carries it")
+check(len(gone_info["extra_items_removed"]) == 2,
+      f"both files are reported as removed ({gone_info['extra_items_removed']})")
+
+print("== the three fixed entries are never inserted at runtime ==")
+from coatmenu.core import menus as menus_service  # noqa: E402
+
+reg_cfg = MenuConfig(menus=[Menu(name="Keep"), Menu(name="Other")])
+_before = set(FAKE.menu_items)
+menus_service.register_menu_items(reg_cfg)
+_new_items = sorted(set(FAKE.menu_items) - _before)
+check(_new_items == ["CoatMenu_Keep", "CoatMenu_Other"],
+      f"only the one-per-menu entries are inserted ({_new_items})")
+check(FAKE.translations.get("CoatMenu_Show") == "Show CoatMenu",
+      f"the fixed entries still get their readable name "
+      f"({FAKE.translations.get('CoatMenu_Show')})")
+check(FAKE.translations.get("CoatMenu_Keep") == "CoatMenu_Keep",
+      f"and so do the menus ({FAKE.translations.get('CoatMenu_Keep')})")
+check(menus_service.drop_menu_items(["CoatMenu_Keep"]) == 1,
+      "an inserted entry can be taken out of the running menu again")
+check("CoatMenu_Keep" not in FAKE.menu_items, "and it is really gone")
+
 print("== stale launchers are cleaned up ==")
 cfg2 = MenuConfig(menus=[Menu(name="Sculpt")])
 info = registry.sync(cfg2, ext, entry_dir, xml_path)
@@ -427,6 +493,48 @@ _names = [m.name for m in mine.menus]
 check("My Stuff" in _names, "a hand-built menu is never touched")
 check([name for name in presets.DEFAULT_LISTS if name in _names] == list(presets.DEFAULT_LISTS),
       f"and every shipped list still installs ({_names})")
+
+print("== a shipped menu he deleted stays deleted ==")
+# The bug: "missing" is how install_presets finds what to add, so a built-in menu
+# deleted in the editor came back on the next install. Deleting one now records
+# the *family*, and an install leaves it alone.
+deleted = MenuConfig(menus=[
+    Menu(name="Sculpt", preset="sculpt/1"),
+    Menu(name="My Own"),
+    Menu(name="Add Prims", preset="prims/2"),
+    Menu(name="Spare"),
+])
+check(deleted.remove_menu("Add Prims"), "a shipped menu can be deleted")
+check(deleted.removed_presets == ["prims"],
+      f"and the deletion is remembered ({deleted.removed_presets})")
+check(deleted.remove_menu("My Own"), "a menu of his own can go as well")
+check(deleted.removed_presets == ["prims", "my own"],
+      f"it is remembered by name - a key that is only ever checked against the "
+      f"lists we ship, so it costs nothing ({deleted.removed_presets})")
+check(deleted.remove_menu("Sculpt"), "a shipped menu under his own name can go too")
+check("sculpt" in deleted.removed_presets,
+      f"remembered by family, not by name ({deleted.removed_presets})")
+check(not deleted.remove_menu("Spare"), "the last menu still cannot be deleted")
+# A list he built himself with the same name as one we ship has no marker, so the
+# name is the only key there is - it still has to stick.
+nameless = MenuConfig(menus=[Menu(name="Shade"), Menu(name="Other")])
+nameless.remove_menu("Shade")
+check("shade" in nameless.removed_presets,
+      f"a marker-less menu is remembered by name ({nameless.removed_presets})")
+check("Shade" not in presets.install_presets(nameless),
+      "and the shipped list of that name is not added back")
+
+_reloaded = MenuConfig.from_json(deleted.to_json())
+check(_reloaded.removed_presets == deleted.removed_presets,
+      f"the memory survives a save and load ({_reloaded.removed_presets})")
+check("removed" in deleted.to_json(), "and is written to the file")
+check("removed" not in MenuConfig(menus=[Menu(name="Only")]).to_json(),
+      "an untouched config stays as short as it was")
+_added = presets.install_presets(_reloaded)
+check("Add" not in _added and "Sculpt" not in _added,
+      f"an install does not add a deleted list back ({_added})")
+check(_reloaded.find("Add") is None and _reloaded.find("Sculpt") is None,
+      "and they are really not in the config")
 
 print("== a config we cannot read is moved aside, never replaced ==")
 # The panel-side half of the same rule: a starter written over his file is data

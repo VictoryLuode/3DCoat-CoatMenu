@@ -544,8 +544,19 @@ def uninstall(documents: str) -> int:
             pass
 
     if os.path.isdir(p["ext"]):
+        # 3DCoat writes its own item file next to CoatMenu.xml for every menu entry
+        # it registers, and reads them back at every start. Leave them behind and
+        # the Scripts menu keeps listing CoatMenu entries for a menu that is gone.
+        leftovers = [path for _menu_id, path in menus_registry.persisted_menu_items(
+            p["menu_xml"], p["ext"])]
         shutil.rmtree(p["ext"], ignore_errors=True)
         removed.append(p["ext"])
+        for path in leftovers:
+            try:
+                os.remove(path)
+                removed.append(path)
+            except OSError:
+                pass
     if os.path.exists(p["menu_xml"]):
         os.remove(p["menu_xml"])
         removed.append(p["menu_xml"])

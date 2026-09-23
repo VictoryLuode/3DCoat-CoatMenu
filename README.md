@@ -114,16 +114,20 @@ extension builds on this machine)*
 * **Diagnostics built in** — the editor shows each menu's hotkey next to its name
   and flags two menus fighting over one key; `Scripts ▸ CoatMenu ▸
   CoatMenu_Doctor` writes a full report (paths, startup state, catalog sizes, rows
-  and keys per menu, clashes, a tool-switch probe, log tail) to `data/doctor.txt`.
+  and keys per menu, clashes, a tool-switch probe, leftover menu item files, log
+  tail) to `data/doctor.txt`.
 * **Never touches your hotkeys file** — `Options_Hotkeys.xml` is opened read-only,
   never written. The file is easy to corrupt and 3D-Coat itself has done it before.
 * **Your menus are yours** — an update only ever adds a menu that is **missing**.
   Nothing already in your file is renamed, reordered, edited or dropped (a menu we
-  shipped counts as yours the moment it is in there), and a `menus.json` that cannot
+  shipped counts as yours the moment it is in there), a `menus.json` that cannot
   be parsed is left alone with a dated copy beside it instead of being replaced by a
-  starter. Deleting things is limited to what an install wrote: `coatmenu/`,
+  starter, and **a built-in list you delete stays deleted**: the config remembers
+  the deletion, so the next update does not treat it as missing and add it back.
+  Deleting things is limited to what an install wrote: `coatmenu/`,
   `actions/`, plus the retired top-level folders (`core/`, `ui/`, and `ported/` from
-  the version that shipped another extension's sculpt actions there).
+  the version that shipped another extension's sculpt actions there). The entries
+  3D-Coat itself writes for menus that are gone are cleaned up with them.
 
 ## Install
 
@@ -215,6 +219,11 @@ deleted.
   one-per-menu entries are registered at runtime with `coat.ui.insertInMenu`, so a
   menu built in the editor is usable without a restart. Writing them in both places
   would list every menu twice.
+* 3D-Coat writes its **own** `ExtraMenuItems/<id>.xml` for every entry it is asked
+  to insert, and never removes one - so a menu deleted in the editor used to stay in
+  the Scripts list forever. Launching the extension (or running an install) deletes
+  the copies whose menu is gone and takes those ids out of the running 3D-Coat; the
+  three fixed entries are only ever in `CoatMenu.xml`, never inserted as well.
 * Your menus live in `<ext>/data/menus.json`.
 * The bundled lists are built from **3D-Coat's own data** at the moment they are
   made — its `cTemplates` menu files, its `English.xml` id table, your
