@@ -25,20 +25,10 @@ A pie with a submenu (rest on a slot for a moment and the child panel unfolds),
 and 3D-Coat's own primitives flattened onto the menu — built-in shapes right
 there, the FFD shapes folded into a submenu:
 
-![CoatMenu pie with a submenu](docs/preview-pie-submenu.png)
-![CoatMenu Prims](docs/preview-prims.png)
 
 The editor — every menu is a row on the left, the command catalog on the right:
+<img width="3714" height="2126" alt="3DCoatGL64_vzPlod3tjD" src="https://github.com/user-attachments/assets/05f8e230-a95b-4fbf-986a-4f873c058b37" />
 
-![CoatMenu editor](docs/preview-editor.png)
-
-…with a live preview that shows a menu exactly as it will open, un-saved edits
-included:
-
-![CoatMenu live preview](docs/preview-editor-live.png)
-
-*(previews rendered offscreen from real 3D-Coat data — the same menus the
-extension builds on this machine)*
 
 ## Highlights
 
