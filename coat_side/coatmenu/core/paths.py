@@ -16,7 +16,15 @@ def extension_root() -> str:
     """``<ext>`` - the folder holding CoatMenu.py, coatmenu/, actions/.
 
     (``coatmenu/core/paths.py`` -> coatmenu/core -> coatmenu -> <ext>.)
+
+    ``COATMENU_EXTENSION_DIR`` overrides it. The tests and the fake-3DCoat harness
+    import these modules straight out of the repository, and everything derived from
+    here (``actions/menus/``, ``data/``) is *written* to - without the override a test
+    that opens a menu leaves its launcher in the checkout.
     """
+    override = os.environ.get("COATMENU_EXTENSION_DIR")
+    if override:
+        return override
     return os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )

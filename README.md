@@ -140,7 +140,27 @@ extension builds on this machine)*
 install). The installer itself only needs Python 3.8+, and it runs on 3D-Coat's own
 interpreter when that can be found.
 
-### Option 1 — the package (no terminal)
+### Option 1 — the package file (two clicks, nothing to run)
+
+1. Download `CoatMenu-<version>.3dcpack` from Releases.
+2. In 3D-Coat: **Addons ▸ Install Extension** (older builds: **File ▸ Install
+   extension**) and pick that file. 3D-Coat unpacks it into
+   `Documents\3DCoat\UserPrefs\Scripts\cExtensions\CoatMenu\` and adds its own
+   debug scaffolding (`.env`, `.vscode/`) the way it does for every extension.
+3. **Windows ▸ Panels ▸ Extensions** → find `CoatMenu` → **Start**, or tick
+   **Auto-Launch** to have it load with 3D-Coat from then on. A package can only add
+   or replace *files*, so it cannot write that load line itself — the checkbox is
+   3D-Coat's own switch for it.
+4. Restart 3D-Coat once (the `Scripts ▸ CoatMenu` entries come from a menu file the
+   extension writes on its first load).
+5. Open **Scripts ▸ CoatMenu ▸ Show CoatMenu**.
+
+This is the route with no archive to unzip, no Python and no `.cmd` for SmartScreen
+to hold up. It is also the route that leaves everything else to you: no pruning of
+what a previous version left behind, and no backup of your lists before an update.
+Updating a copy that Option 2 installed? Use Option 2 for that update.
+
+### Option 2 — the release zip and `install.cmd`
 
 1. Download `CoatMenu-v<version>.zip` from Releases and unzip it anywhere.
 2. Double-click `install\install.cmd` — it runs on 3D-Coat's own Python (any
@@ -170,7 +190,7 @@ Nothing here hard-codes a path:
 | 3D-Coat's own Python | any `python-*` folder in its data folder; every candidate has to run before it is used |
 | The extension itself | from its own location (inferred from `paths.py`) |
 
-### Option 2 — from a checkout
+### Option 3 — from a checkout
 
 1. Clone this repository (or unzip the release archive), then run the installer from
    the unzipped folder:
@@ -268,11 +288,12 @@ Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
 | `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
 | `test_install.py` | install/reinstall/uninstall into a throwaway tree — including that your own menus, folders and scripts survive an update, the retired `ported/` tree is cleaned up whole, and a config it cannot read is left byte-for-byte alone |
 | `test_installed_copy.py` | the copy actually installed under `Documents/3DCoat` |
+| `test_pack.py` | the `.3dcpack` artifact: it carries exactly the file set an install copies (no config, no menu XML, no generated launchers), stays inside the extension's own folder, and extracting it reproduces the installed tree |
 | `test_verify.py` | whole-tree health: every module imports, every referenced name resolves, the built-in menus build, and the installer runs |
 
 `tests/render_preview.py` renders the overlay and editor against the real data on
-the machine and writes the PNGs used above. `tools/make_release.py` builds the
-release zip.
+the machine and writes the PNGs used above. `tools/make_release.py` builds both
+release artifacts (the zip and the `.3dcpack`).
 
 ## License
 

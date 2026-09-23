@@ -2,10 +2,23 @@
 
 All notable changes to CoatMenu. Versions are the git tags.
 
-## Unreleased
+## v0.7.0 — 2026-09-23
 
 ### Added
 
+- **A `.3dcpack` release artifact** (`install/build_pack.py`, built by
+  `tools/make_release.py` with the zip). 3D-Coat installs one from *Addons ▸ Install
+  Extension*: no archive to unzip, no Python, no unsigned `.cmd` for SmartScreen to
+  hold up. A pack is a zip of `UserPrefs/...` paths, so it carries the extension's
+  code and nothing else — the launchers, the `ExtraMenuItems` XML (absolute paths can
+  only be written on the machine that runs it) and `data/menus.json` are written by
+  the extension itself on first load, and `tests/test_pack.py` pins the pack's file
+  set to exactly the one an install copies. Two things the format cannot do, both
+  now documented instead of guessed at: it cannot append the `startup.txt` line that
+  loads an extension (it only adds or replaces files — that is 3D-Coat's own
+  Auto-Launch checkbox, once), and it cannot prune what an older version left
+  behind. Both routes are in the README, and the on-machine install was verified
+  against a renamed copy so the real install was never touched.
 - **`tests/sync_defaults.py`** — the release step that keeps the shipped set honest:
   it compares `presets.DEFAULT_LISTS` row by row against the menus the installed
   extension is actually running, prints the differences with the ids this build does
@@ -15,6 +28,16 @@ All notable changes to CoatMenu. Versions are the git tags.
 
 ### Fixed
 
+- **Nothing generated ships any more, and the tests no longer dirty the checkout.**
+  `coat_side/actions/menus/` holds launcher scripts built from *this* user's config,
+  and both the installer and the release zip copied whatever happened to be sitting
+  in that folder — a stray launcher for a menu nobody has went into every install and
+  into the archive. The shipped set excludes it now (the folder is written at install
+  and at run time) and `tests/test_pack.py` reads the shipped set directly. The
+  launchers got in there because opening a menu inside a test ran the config through
+  the sync that writes them, and the extension root was always the checkout:
+  `paths.extension_root()` takes `COATMENU_EXTENSION_DIR` now, so a test writes to a
+  throwaway folder, and the popup test asserts the checkout is untouched afterwards.
 - **Two menus whose names slugify alike are two working menus again.** A menu's id
   (launcher file, command id, hotkey id) came from the plain slug, while the
   launcher file alone used the de-duplicated one: the second menu's launcher asked
@@ -91,10 +114,6 @@ All notable changes to CoatMenu. Versions are the git tags.
   `UserPrefs/Models/SculptModels/*.obj`, which no 3D-Coat install has - the five
   rows could never have worked. The idea of picking primitives from a radial menu
   came from the extensions that came before this one - the implementation is ours.
-- **The menus you get on a first run are the set the author ships**: `Sculpt`,
-  `Modeling`, `Add`, `Tools`, `Common`, `Shade` (a pie) and `Sculpt Ops`, in that
-  order, each built against the 3D-Coat that is running. A freshly deleted
-  `menus.json` comes back as that set; an existing file is untouched, as before.
 - **Every curated row is now checked against 3D-Coat's own id table**
   (`data/Languages/<lang>.xml`). A list still builds when the table cannot be read,
   but when it can, an id this build does not define never reaches the menu.

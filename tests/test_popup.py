@@ -538,7 +538,14 @@ import json  # noqa: E402
 from coatmenu.core import show as show_mod  # noqa: E402
 
 clash_dir = tempfile.mkdtemp(prefix="coatmenu-clash-data-")
+clash_ext = tempfile.mkdtemp(prefix="coatmenu-clash-ext-")
 os.environ["COATMENU_DATA_DIR"] = clash_dir
+# Opening a menu runs the config through the sync that writes the launchers, so the
+# extension root has to point away from the checkout too - otherwise this test (and
+# every suite run) leaves a launcher for a menu nobody has in `coat_side/`.
+os.environ["COATMENU_EXTENSION_DIR"] = clash_ext
+launcher_dir = os.path.join(COAT_SIDE, "actions", "menus")
+before_launchers = sorted(os.listdir(launcher_dir)) if os.path.isdir(launcher_dir) else []
 with open(os.path.join(clash_dir, "menus.json"), "w", encoding="utf-8") as fh:
     json.dump({"version": 1, "menus": [
         {"name": "Cut & Fill", "items": [{"id": "Resample", "label": "first-menu"}]},
@@ -552,6 +559,12 @@ check(clash_popup is not None
       and "second-menu" in [row[1].label for row in clash_popup._rows],
       "with the second menu's own rows")
 popup.hide_menu()
+after_launchers = sorted(os.listdir(launcher_dir)) if os.path.isdir(launcher_dir) else []
+check(after_launchers == before_launchers,
+      f"and the checkout is untouched ({sorted(set(after_launchers) - set(before_launchers))})")
+check(os.path.isdir(os.path.join(clash_ext, "actions", "menus")),
+      "the launchers it did write went to the throwaway extension folder")
+os.environ.pop("COATMENU_EXTENSION_DIR", None)
 
 print("== a menu that hangs off the screen is pulled back on ==")
 # A cursor can sit where no screen is - the gap in an L-shaped desktop, or a display

@@ -1,13 +1,23 @@
-"""Build the release zip.
+"""Build the release artifacts.
 
     python tools/make_release.py            # version from __init__.py
     python tools/make_release.py 0.5.3      # override the version
 
-``CoatMenu-v<version>.zip`` is the whole story: unzip it and run
+Two artifacts land in ``dist/``:
+
+``CoatMenu-v<version>.zip`` - the whole story: unzip it and run
 ``install/install.cmd`` (which uses 3D-Coat's own Python, so nothing needs
-installing first). That is the most direct route 3D-Coat offers - a .3dcpack was
-tried and dropped: it lands the files but still needs the extension ticked in
-Windows > Panels > Extensions, so it was more steps, not fewer.
+installing first). This is the route that also prunes what a previous version left
+behind, backs the user's lists up before an update, and writes the ``startup.txt``
+line that loads the extension from then on.
+
+``CoatMenu-<version>.3dcpack`` - installed from 3D-Coat itself (``Addons ▸ Install
+Extension``): no archive to unzip, no Python, no unsigned ``.cmd`` for SmartScreen
+to hold up. Because a pack can only add or replace *files*, the extension has to be
+switched on once by hand in ``Windows ▸ Panels ▸ Extensions`` (Start, or tick
+Auto-Launch) - that manual tick is why an earlier version of this script dropped the
+pack. It is back because the tick is one checkbox, once, and it is the only route
+that never runs a downloaded script; both are shipped, documented in README.md.
 
 Run it from anywhere; paths are resolved from this file's location.
 """
@@ -57,6 +67,12 @@ def _add_tree(zf: zipfile.ZipFile, source: str, prefix: str) -> int:
     added = 0
     for base, dirs, files in os.walk(source):
         dirs[:] = [d for d in dirs if wanted(d)]
+        # `actions/menus/` is written from the *user's* config at install and at run
+        # time; whatever is in the checkout is a leftover from a test run. It is
+        # already excluded from what an install copies (install._iter_source_files),
+        # so it must not ride along in the archive either.
+        if os.path.relpath(base, source).replace("\\", "/").startswith("actions/menus"):
+            continue
         for name in sorted(files):
             if not wanted(name):
                 continue
@@ -88,6 +104,14 @@ def main() -> int:
     target, added = build_zip(tag)
     size = os.path.getsize(target) / 1024
     print(f"{target}  ({added} files, {size:.0f} KB)")
+
+    sys.path.insert(0, os.path.join(ROOT, "install"))
+    import build_pack
+    pack = build_pack.build(os.path.join(DIST, f"{EXTENSION_NAME}-{tag}.3dcpack"),
+                            version=tag)
+    with zipfile.ZipFile(pack) as archive:
+        entries = len(archive.namelist())
+    print(f"{pack}  ({entries} entries, {os.path.getsize(pack) / 1024:.0f} KB)")
     return 0
 
 
