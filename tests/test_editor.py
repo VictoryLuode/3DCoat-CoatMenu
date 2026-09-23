@@ -573,6 +573,33 @@ check(len(ed6._config.menus) == _before + 1, "and nothing was added for it")
 check(ed6.preset_in_use("Shade") and not ed6.preset_in_use("Common"),
       "the in-use check follows the config")
 
+print("== renaming a menu says what happened to its key ==")
+# A menu's hotkey id is built from its name, and 3DCoat keys its bindings by that
+# id, so a rename leaves the old key behind - and we never write 3DCoat's hotkey
+# file. The editor has to say it rather than lose the key quietly.
+from coatmenu.core import catalog as catalog_mod  # noqa: E402
+
+hk_path = catalog_mod.hotkeys_path()
+os.makedirs(os.path.dirname(hk_path), exist_ok=True)
+with open(hk_path, "w", encoding="utf-8") as fh:
+    fh.write('<AppOptions><HotKeys>\n'
+             '\t<OneHotKey><ID>CoatMenu_Sculpt</ID><Room>Voxels</Room><Code>Q</Code>'
+             '<Shift>true</Shift></OneHotKey>\n'
+             '</HotKeys></AppOptions>\n')
+ed7 = CoatMenuEditor(MenuConfig(menus=[Menu(name="Sculpt"), Menu(name="Other")]))
+ed7.reload_menus()          # what showing the panel does
+check(ed7._bindings.for_menu("Sculpt") == "Shift+Q",
+      f"the key is read for the menu ({ed7._bindings.for_menu('Sculpt')})")
+ed7._new_name.setText("Sculpting")
+ed7.rename_menu()
+check(ed7._config.find("Sculpting") is not None, "the rename happened")
+check("Shift+Q" in ed7._status.text() and "no longer" in ed7._status.text(),
+      f"and the status says which key it leaves behind ({ed7._status.text()})")
+ed7._new_name.setText("Sculpting Two")
+ed7.rename_menu()
+check("no longer" not in ed7._status.text(),
+      f"a menu with no key gets no note ({ed7._status.text()})")
+
 print()
 if failures:
     print(f"EDITOR FAILED ({len(failures)}): " + "; ".join(failures))

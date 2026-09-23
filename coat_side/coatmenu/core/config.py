@@ -96,7 +96,13 @@ class Menu:
 
     @property
     def hotkey_id(self) -> str:
-        """Id registered in 3DCoat's menu (bindable in Preferences > Hotkeys)."""
+        """Id registered in 3DCoat's menu (bindable in Preferences > Hotkeys).
+
+        The plain form, for a name that does not collide. The id a menu is
+        *actually* known by - and the one the launcher file is named after - comes
+        from ``menus_registry.menu_ids()``, which makes two names that slugify
+        alike distinct; use that when resolving a menu from a key or an id.
+        """
         return f"CoatMenu_{self.slug}"
 
 

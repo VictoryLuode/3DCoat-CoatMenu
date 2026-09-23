@@ -818,11 +818,20 @@ class CoatMenuEditor(QWidget):
         if not new_name:
             self.set_status("Type the new name in the field, then Rename")
             return
+        # A menu's id (and so its hotkey id) is built from its name, and 3DCoat's
+        # bindings are keyed by that id - so a rename leaves a key behind. We never
+        # write 3DCoat's hotkey file, so say it instead of silently losing the key.
+        bindings = getattr(self, "_bindings", None)
+        old_key = bindings.for_menu(target.name) if bindings else ""
         self._config.rename_menu(target.name, new_name)
         self._new_name.clear()
         self.reload_menus()
         self._mark_dirty()
-        self.set_status(f"Renamed to '{self.current_menu.name}'")
+        note = ""
+        if old_key:
+            note = (f" - its id changed, so {old_key} no longer fires it "
+                    f"(assign it again in 3D-Coat's Preferences > Hotkeys)")
+        self.set_status(f"Renamed to '{self.current_menu.name}'{note}")
 
     def remove_menu(self) -> None:
         target = self.current_menu

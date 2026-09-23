@@ -529,6 +529,30 @@ check(pinned._slot_angle(2) == 2 * 360.0 / 3,
       f"an Auto row still spreads evenly ({pinned._slot_angle(2):.1f} deg)")
 pinned.dismiss()
 
+print("== a launcher opens the menu it names ==")
+# Two names that slugify the same: the second one's launcher calls
+# show_list('<its own slug>'), and that has to reach the second menu - matching the
+# plain slug handed back the first one, or nothing at all.
+import json  # noqa: E402
+
+from coatmenu.core import show as show_mod  # noqa: E402
+
+clash_dir = tempfile.mkdtemp(prefix="coatmenu-clash-data-")
+os.environ["COATMENU_DATA_DIR"] = clash_dir
+with open(os.path.join(clash_dir, "menus.json"), "w", encoding="utf-8") as fh:
+    json.dump({"version": 1, "menus": [
+        {"name": "Cut & Fill", "items": [{"id": "Resample", "label": "first-menu"}]},
+        {"name": "Cut__Fill", "items": [{"id": "Bevel", "label": "second-menu"}]},
+    ]}, fh)
+show_mod.show_list("Cut_Fill-2")
+clash_popup = popup.get_manager().popup
+check(clash_popup is not None and clash_popup._title == "Cut__Fill",
+      f"the second menu opens, not the first ({getattr(clash_popup, '_title', None)})")
+check(clash_popup is not None
+      and "second-menu" in [row[1].label for row in clash_popup._rows],
+      "with the second menu's own rows")
+popup.hide_menu()
+
 print()
 if failures:
     print(f"POPUP FAILED ({len(failures)}): " + "; ".join(failures))

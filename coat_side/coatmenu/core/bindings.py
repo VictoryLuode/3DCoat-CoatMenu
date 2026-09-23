@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from coatmenu.core import menus_registry
 from coatmenu.core.config import MenuConfig
 from coatmenu.core.hotkeys import code_to_vk, read_bindings
 
@@ -58,7 +59,7 @@ class Bindings:
 
 def describe(config: MenuConfig, path: str | None = None) -> Bindings:
     """Read the hotkey file once, then work out both the keys and the clashes."""
-    wanted = {lst.hotkey_id: lst.name for lst in config.menus}
+    wanted = {menu_id: lst.name for menu_id, lst in menus_registry.menu_ids(config)}
     by_combo: dict[tuple, list[str]] = defaultdict(list)
     keys: dict[str, str] = {}
 

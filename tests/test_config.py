@@ -74,6 +74,27 @@ check(slugify("Sculpt 硬表面") != slugify("硬表面 Sculpt"),
       "names that only match outside ascii stay apart")
 check(Menu(name="Sub D").hotkey_id == "CoatMenu_Sub_D", "hotkey id is namespaced")
 
+print("== two names that slugify alike still get one menu each ==")
+# The reported symptom: the *second* menu could not be opened. Its launcher calls
+# show_list('<slug>'), and the lookup matched Menu.slug - the same string for both
+# names - so it opened the first menu, or nothing at all. The id a menu is known by
+# (launcher file, command id, hotkey id) now comes from one place: menu_ids().
+clash = MenuConfig(menus=[Menu(name="Cut & Fill"), Menu(name="Cut__Fill"),
+                          Menu(name="Shade")])
+_slugs = [slug for slug, _ in registry.menu_slugs(clash)]
+check(_slugs == ["Cut_Fill", "Cut_Fill-2", "Shade"], f"launcher slugs stay apart ({_slugs})")
+_ids = [menu_id for menu_id, _ in registry.menu_ids(clash)]
+check(_ids == ["CoatMenu_Cut_Fill", "CoatMenu_Cut_Fill-2", "CoatMenu_Shade"],
+      f"and the ids 3DCoat knows do too ({_ids})")
+check(registry.find_menu(clash, "Cut_Fill-2") is clash.menus[1],
+      "the second menu's own slug finds the second menu")
+check(registry.find_menu(clash, "CoatMenu_Cut_Fill-2") is clash.menus[1],
+      "its command id finds it as well")
+check(registry.find_menu(clash, "Cut_Fill") is clash.menus[0], "the first stays the first")
+check(registry.find_menu(clash, "Shade") is clash.menus[2], "a plain name still resolves")
+check(registry.find_menu(clash, "") is None and registry.find_menu(clash, "nope") is None,
+      "nothing resolves to nothing")
+
 print("== item forms ==")
 check(item_from_json("Resample").cid == "Resample", "bare string is a command")
 check(item_from_json({"id": "Bevel", "label": "Bevel tool"}).label == "Bevel tool", "id + label")
@@ -182,6 +203,20 @@ check(len(menu_rows) == len(cfg.menus),
       f"the API side gets one entry per menu ({len(menu_rows)})")
 check(menu_rows[0][0] == "CoatMenu_Sculpt", "with the id 3DCoat knows it by")
 check(menu_rows[0][2] == sculpt_script, "and its launcher script")
+
+# The end of the same bug: the second of two names that slugify alike gets a
+# launcher of its own, and that launcher reaches *that* menu.
+clash_ext = tempfile.mkdtemp(prefix="coatmenu-clash-ext-")
+clash_entry = os.path.join(clash_ext, "actions", "menus")
+registry.sync(clash, clash_ext, clash_entry, os.path.join(clash_ext, "CoatMenu.xml"))
+second_launcher = os.path.join(clash_entry, "CoatMenu_Cut_Fill-2.py")
+check(os.path.isfile(second_launcher), "the second menu gets a launcher file of its own")
+with open(second_launcher, encoding="utf-8") as fh:
+    second_source = fh.read()
+check("show_list('Cut_Fill-2'" in second_source,
+      "and that launcher opens the second menu, not the first")
+check(registry.find_menu(clash, "Cut_Fill-2") is clash.menus[1],
+      "which is what the lookup hands back")
 
 print("== Scripts menu entries are prefixed ==")
 entries = registry.menu_entries(cfg, ext, entry_dir)
@@ -440,6 +475,21 @@ check(len(seen.conflicts) == 1 and "Sculpt" in seen.conflicts[0],
       f"two lists on one key are flagged ({seen.conflicts})")
 check(bindings_mod.key_label("key_00") == "", "the unbound placeholder has no label")
 check(bindings_mod.key_label("ENTER") == "Enter", "named keys get readable labels")
+
+# Two menus whose names slugify alike must not share one key entry: the lookup is
+# keyed by the same unique id the launcher file and the hotkey use (menu_ids).
+clash_hotkeys = os.path.join(tempfile.mkdtemp(prefix="coatmenu-clash-"),
+                            "Options_Hotkeys.xml")
+with open(clash_hotkeys, "w", encoding="utf-8") as fh:
+    fh.write(
+        "<AppOptions><HotKeys>\n"
+        "\t<OneHotKey><ID>CoatMenu_Cut_Fill</ID><Room>Voxels</Room><Code>Q</Code></OneHotKey>\n"
+        "\t<OneHotKey><ID>CoatMenu_Cut_Fill-2</ID><Room>Voxels</Room><Code>W</Code></OneHotKey>\n"
+        "</HotKeys></AppOptions>\n"
+    )
+clash_keys = bindings_mod.describe(clash, clash_hotkeys)
+check(clash_keys.for_menu("Cut & Fill") == "Q" and clash_keys.for_menu("Cut__Fill") == "W",
+      f"each of the two clashing menus reads its own key ({clash_keys.keys})")
 
 text = doctor.report(bind_cfg)
 check("CoatMenu doctor" in text, "the doctor writes a titled report")

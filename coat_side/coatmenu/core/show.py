@@ -14,7 +14,8 @@ import os
 from coatmenu.core import menus, paths
 from coatmenu.core.config import MenuConfig
 from coatmenu.core.hotkeys import find_trigger_vk
-from coatmenu.core.menus_registry import MAIN_MENU_ID, MAIN_MENU_LABEL, menu_entries
+from coatmenu.core.menus_registry import (MAIN_MENU_ID, MAIN_MENU_LABEL, find_menu,
+                                          menu_entries, menu_ids)
 from coatmenu.core.log import log
 from coatmenu.core.menu_model import MenuItem, header, separator, submenu
 from coatmenu.ui import popup
@@ -93,12 +94,14 @@ def show_list(key: str, script_path: str = "") -> None:
     """Show one configured list flat (called by its generated launcher)."""
     try:
         config = _config()
-        target = config.find(key)
+        target = find_menu(config, key)
         if target is None:
             log(f"show_list: unknown list {key!r} - showing the index instead")
             show_main_menu(script_path)
             return
-        candidates = [target.hotkey_id]
+        # The id 3DCoat knows it by - the same one its launcher file is named after.
+        candidates = [menu_id for menu_id, lst in menu_ids(config) if lst is target]
+        candidates += [target.hotkey_id]
         if script_path:
             candidates.append("execute:" + script_path)
         vk = find_trigger_vk(candidates)

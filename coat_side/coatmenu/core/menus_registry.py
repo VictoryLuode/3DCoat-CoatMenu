@@ -146,6 +146,35 @@ def menu_slugs(config: MenuConfig) -> list[tuple[str, Menu]]:
     return out
 
 
+def menu_ids(config: MenuConfig) -> list[tuple[str, Menu]]:
+    """``(command id, menu)`` - what 3DCoat knows each menu by, and it is unique.
+
+    One source of truth for the id: the launcher file name, the entry 3DCoat
+    registers, the hotkey id and the key lookup all come from here. Two names that
+    slugify alike (``Cut & Fill`` next to ``Cut__Fill``) get distinct ids; sharing
+    one would mean sharing a hotkey binding and an entry.
+    """
+    return [(f"{LAUNCHER_PREFIX}{slug}", lst) for slug, lst in menu_slugs(config)]
+
+
+def find_menu(config: MenuConfig, key: str):
+    """The menu a launcher, a command id or a name refers to.
+
+    ``config.find`` matches ``Menu.slug``, which is not the unique one: for two
+    names that slugify alike it is the *same* string for both, so the second
+    menu's launcher (``show_list('Cut_Fill-2')``) would fall through to the wrong
+    menu - or to none. The unique id wins here, then the plain lookup.
+    """
+    wanted = str(key or "").strip().lower()
+    if not wanted:
+        return None
+    prefix = LAUNCHER_PREFIX.lower()
+    for menu_id, menu in menu_ids(config):
+        if wanted in (menu_id.lower(), menu_id.lower().replace(prefix, "", 1)):
+            return menu
+    return config.find(key)
+
+
 def write_entry_scripts(config: MenuConfig, entry_scripts_dir: str) -> tuple[list[str], list[str]]:
     """(re)write one launcher per menu; delete launchers for menus that are gone.
 
@@ -212,8 +241,9 @@ def menu_entries(config: MenuConfig, extension_root: str, entry_scripts_dir: str
     ]
     if include == "fixed":
         return rows
-    for slug, lst in menu_slugs(config):
-        rows.append((f"CoatMenu_{slug}", entry_label(lst.name),
+    for menu_id, lst in menu_ids(config):
+        slug = menu_id[len(LAUNCHER_PREFIX):]      # the unique one, not lst.slug
+        rows.append((menu_id, entry_label(lst.name),
                      entry_script_path(entry_scripts_dir, slug)))
     return rows
 

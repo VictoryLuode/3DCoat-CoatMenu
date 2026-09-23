@@ -13,6 +13,20 @@ All notable changes to CoatMenu. Versions are the git tags.
   reports: the live copy is not automatically right (its Shade pie had three view
   ids spelled without the underscores 3DCoat uses), so syncing stays a decision.
 
+### Fixed
+
+- **Two menus whose names slugify alike are two working menus again.** A menu's id
+  (launcher file, command id, hotkey id) came from the plain slug, while the
+  launcher file alone used the de-duplicated one: the second menu's launcher asked
+  for `Cut_Fill-2`, nothing resolved it, and that menu could not be opened at all -
+  it showed the index instead. The two also shared one command id, and the key
+  lookup saw only one of them. `menus_registry.menu_ids()` is now the single source
+  of the id, and `find_menu()` resolves a launcher, an id or a name through it.
+- **Renaming a menu says what it does to that menu's key.** A menu's hotkey id is
+  built from its name and 3D-Coat keys its bindings by that id, so a rename leaves
+  the old binding pointing at nothing. We never write 3D-Coat's hotkey file, so the
+  editor names the key that will stop firing instead of losing it quietly.
+
 ### Removed
 
 - **Another extension's code is gone.** CoatMenu used to ship a 430-file,
