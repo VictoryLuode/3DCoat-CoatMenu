@@ -29,8 +29,34 @@ The editor — every menu is a row on the left, the command catalog on the right
 
 ## Highlights
 
-**Menus at the cursor, on a hotkey** — rows or a Blender-style pie, built from
-3D-Coat's own commands, tools and scripts in an editor with a live preview.
+* **At the cursor** — a frameless, always-on-top overlay that never takes focus from
+  3D-Coat.
+* **Blender-style interaction** — the menu **stays** after you release the key: `↑`/`↓`
+  + `Enter` drive it, `1..9` fire the N-th entry, `Esc` steps back one level.
+* **Keys are 3D-Coat's business** — each menu is its own entry in `Scripts ▸ CoatMenu`;
+  hover it and press `END`. CoatMenu only *reads* the hotkey file.
+* **Rows *or* a pie, per menu** — a list hangs from the cursor, a pie is centred on it,
+  its buttons round and evenly spaced, slots from straight up, clockwise.
+* **`Expand` and `Position` per row** — a group's children stack in the slot or open a
+  panel (Auto / Inline / Panel); a pie row can be pinned to a compass point.
+* **Multi-step rows** — one row can fire several 3D-Coat commands in order, which is how
+  primitives work; the bundled `Add` menu is built from that.
+* **Nested submenus** — unfold on hover, with a grace timer (a short dwell in a pie);
+  `Promote` turns one into a menu of its own.
+* **Three lists on a first run** — `QuickTool`, `Add` and `Shade` (a pie); `+ New ▸
+  Built-in lists` adds `Modeling`, `Tools`, `Common` or `Sculpt Ops`.
+* **Editor** — rows from 3D-Coat's own commands (**900+**), your `CustomTools` and your
+  scripts; drag to reorder, `Add all`, undo/redo, import/export.
+* **Nothing ships that does nothing** — every id is checked against the 3D-Coat you are
+  running, so a command your build does not have is left out.
+* **Independent** — no other extension is required and none of its code ships here:
+  `cExtensions` shares one interpreter, so everything keeps its own namespace.
+* **Your menus are yours** — an update only adds a menu that is **missing**; nothing in
+  your file is renamed, reordered or dropped.
+* **Never touches your hotkeys file** — `Options_Hotkeys.xml` is opened read-only; it is
+  easy to corrupt and 3D-Coat itself has done it before.
+* **Diagnostics built in** — the editor shows each menu's key and flags two sharing one;
+  `CoatMenu_Doctor` writes a report to `data/doctor.txt`.
 
 ## Install
 
@@ -168,30 +194,6 @@ deleted.
 
 A screen-edge menu belt was considered and dropped — the overlay-at-the-cursor
 idea covers the same ground with less to hit by accident.
-
-## Tests
-
-```
-bash tests/run_tests.sh
-```
-
-Runs offscreen (no 3D-Coat needed) with 3D-Coat's bundled Python. Suites:
-
-| Suite | Covers |
-|---|---|
-| `test_catalog.py` | command/menu/hotkey/script parsing, readable names, key-code mapping |
-| `test_config.py` | menu model, JSON round trip (including `expand` / `position`), launcher + menu-XML generation, stale cleanup |
-| `test_popup.py` | layout, hit testing, hover, click-to-run, release-to-run, `Esc`, submenus, pie geometry (drawn = hit), centring, slot direction and pinned positions, forced inline/panel |
-| `test_editor.py` | view↔model round trip, menu ops, catalog sources, Add all, undo/redo, save & reload, the `Expand` and `Position` columns, dragged-in groups keeping their children |
-| `test_extension.py` | registration, per-frame hooks, one-frame module-cache clear |
-| `test_install.py` | install/reinstall/uninstall into a throwaway tree — including that your own menus, folders and scripts survive an update, the retired `ported/` tree is cleaned up whole, and a config it cannot read is left byte-for-byte alone |
-| `test_installed_copy.py` | the copy actually installed under `Documents/3DCoat` |
-| `test_pack.py` | the `.3dcpack` artifact: it carries exactly the file set an install copies (no config, no menu XML, no generated launchers), stays inside the extension's own folder, and extracting it reproduces the installed tree |
-| `test_verify.py` | whole-tree health: every module imports, every referenced name resolves, the built-in menus build, and the installer runs |
-
-`tests/render_preview.py` renders the overlay and editor against the real data on
-the machine and writes the PNGs used above. `tools/make_release.py` builds both
-release artifacts (the zip and the `.3dcpack`).
 
 ## License
 
