@@ -262,39 +262,3 @@ print("wrote preview-row-menu.png")
 editor.close_preview()
 editor.close_editor()
 
-# 10. the Tools list: the user's own presets, grouped like 3DCoat's panel
-from coatmenu.core import presets  # noqa: E402
-
-tools = presets.tools_list()
-manager.show_menu(tools.items, anchor=QPoint(120, 90), title=tools.name)
-tools_widget = manager.popup
-app.processEvents()
-compose(os.path.join(OUT_DIR, "preview-tools.png"), [tools_widget])
-branch = tools_widget._first_branch()
-if branch >= 0:
-    tools_widget._hover = branch
-    tools_widget._open_child(branch)
-    app.processEvents()
-    compose(os.path.join(OUT_DIR, "preview-tools-sub.png"),
-            [tools_widget, tools_widget._child])
-tools_widget.dismiss()
-app.processEvents()
-print(f"tools preview: {len(tools.items)} group(s), {sum(len(i.children) for i in tools.items)} tools")
-
-# 13. the Common list - everyday commands, grouped like 3DCoat's main menu
-common = presets.common_list()
-manager.show_menu(common.items, anchor=QPoint(120, 90), title=common.name)
-common_widget = manager.popup
-app.processEvents()
-compose(os.path.join(OUT_DIR, "preview-common.png"), [common_widget])
-common_branch = common_widget._first_branch()
-if common_branch >= 0:
-    common_widget._hover = common_branch
-    common_widget._open_child(common_branch)
-    app.processEvents()
-    compose(os.path.join(OUT_DIR, "preview-common-sub.png"),
-            [common_widget, common_widget._child])
-common_widget.dismiss()
-app.processEvents()
-print(f"common preview: {len(common.items)} group(s), "
-      f"{sum(len(i.children) for i in common.items)} commands")

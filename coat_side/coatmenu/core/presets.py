@@ -1,19 +1,14 @@
 """
 CoatMenu - the lists we ship on a first run.
 
-The shipped set is one person's own set - ``Sculpt``, ``Modeling``, ``Add``,
-``Tools``, ``Common``, ``Shade`` and ``Sculpt Ops`` - in that order. What each of
-them holds is decided **at the moment the list is built**, against the build of
-3DCoat that is running, so a list can never hold a row that does nothing:
+The shipped set is one person's working set - ``QuickTool``, ``Add`` and ``Shade``
+(a pie) - in that order, and it is everything we ship: there is no second, optional
+set of lists to browse. What each of them holds is decided **at the moment the list
+is built**, against the build of 3DCoat that is running, so a list can never hold a
+row that does nothing:
 
-* ``Common`` - the everyday commands, grouped the way 3DCoat's main menu groups
-  them (read from ``cTemplates``).
-* ``Tools`` - the tool presets in your ``CustomTools``, grouped by the section
-  3DCoat's own panel puts them in.
-* ``Sculpt Ops`` - 3DCoat's own object commands (the ones on the VoxTree
-  right-click menu), sorted into groups we chose.
-* ``Sculpt`` / ``Modeling`` / ``Shade`` - curated lists of 3DCoat's own commands
-  (see the data below).
+* ``QuickTool`` / ``Shade`` - curated lists of 3DCoat's own commands (see the data
+  below).
 
 ``Add`` is the one list whose rows fire a *sequence* of commands:
 
@@ -85,12 +80,8 @@ FFD_PRIMITIVES: list[tuple[str, str]] = [
 # identifies a list we shipped once, under whatever name the user gave it.
 PRESET_MARKERS = {
     "QuickTool": "quicktool/1",
-    "Modeling": "modeling/1",
     "Add": "prims/2",
-    "Tools": "tools/1",
-    "Common": "common/1",
     "Shade": "shade/1",
-    "Sculpt Ops": "sculptops/1",
 }
 
 # The lists a fresh install gets, in the order 3DCoat's Scripts menu shows them.
@@ -103,15 +94,9 @@ DEFAULT_LISTS: tuple[str, ...] = (
     "Shade",
 )
 
-# Everything the editor's "+ New" can build, shipped set first. These are the same
-# curated lists; the ones past the shipped set are there for whoever wants them
-# (they are built on request, never installed by default).
-BUILTIN_LISTS: tuple[str, ...] = DEFAULT_LISTS + (
-    "Modeling",
-    "Tools",
-    "Common",
-    "Sculpt Ops",
-)
+# What the editor's "+ New" can build: the lists a fresh install gets, and nothing
+# else. They are listed so a list you deleted can be put back.
+BUILTIN_LISTS: tuple[str, ...] = DEFAULT_LISTS
 
 
 def _universe() -> set[str]:
@@ -150,13 +135,22 @@ def _drop_unknown(items: list[MenuItem], universe: set[str]) -> list[MenuItem]:
 
 
 def _list_from_rows(name: str, rows: list, mode: str = LIST) -> Menu:
-    """Build one curated list: parse the rows, then drop what this build lacks."""
+    """Build one curated list: parse the rows, then drop what this build lacks.
+
+    When an id table we *could* read leaves nothing behind, the list says so instead
+    of coming back empty: a menu that opens with no rows at all looks broken, and
+    this is the one case where that is our doing rather than the user's.  (With no id
+    table to check against, ``_drop_unknown`` keeps the rows - see there.)
+    """
     items = [item for item in (item_from_json(raw) for raw in rows) if item is not None]
-    return Menu(name=name, items=_drop_unknown(items, _universe()), mode=mode,
-                preset=PRESET_MARKERS[name])
+    universe = _universe()
+    kept = _drop_unknown(items, universe)
+    if not kept and universe:
+        kept = [header(f"{name}: none of its commands exist in this build")]
+    return Menu(name=name, items=kept, mode=mode, preset=PRESET_MARKERS[name])
 
 
-# --- QuickTool / Modeling / Shade ---------------------------------------------
+# --- QuickTool / Shade -------------------------------------------------------
 # Written down in the config's own JSON shape, so a list edited in the panel can be
 # pasted straight back in here. Ids are 3DCoat's; labels are ours.
 #
@@ -182,15 +176,6 @@ QUICKTOOL_MENU_ROWS: list = [
     {"separator": True},
     {"header": "Scena"},
     {"id": "DefineScaleCorrespondence", "label": "Scene Scale Master"},
-]
-
-MODELING_MENU_ROWS: list = [
-    "ApplyTopoSubdiv",
-    "Bevel",
-    {"id": "RtWeldingVertexs", "label": "WeldingVertexs"},
-    {"id": "SculptMesh", "label": "Display In Sculpt"},
-    "Subdivide1",
-    "Subdivide2",
 ]
 
 SHADE_MENU_ROWS: list = [
@@ -219,11 +204,6 @@ SHADE_MENU_ROWS: list = [
 def quicktool_list(mode: str = LIST) -> Menu:
     """The ``QuickTool`` list: the volume/curve commands reached for while sculpting."""
     return _list_from_rows("QuickTool", QUICKTOOL_MENU_ROWS, mode)
-
-
-def modeling_list(mode: str = LIST) -> Menu:
-    """The ``Modeling`` list: subdivision and retopo-side commands."""
-    return _list_from_rows("Modeling", MODELING_MENU_ROWS, mode)
 
 
 def shade_list(mode: str = PIE) -> Menu:
@@ -275,215 +255,11 @@ def builtin_row(label: str, param: str) -> MenuItem:
     return sequence(label, [NEUTRALISE, PRIM_TOOL, f"$VoxelSculptTool::{param}"])
 
 
-# --- Sculpt Ops: 3DCoat's own object commands, in groups we chose -------------
-# Ids only. Every one of them is looked up in 3DCoat's own id table when the list
-# is built (see `sculpt_ops_groups`), and one this build does not define is
-# skipped - so the list can never contain a row that does nothing. Groups that
-# come back empty are dropped as well.
-SCULPT_OPS: list[tuple[str, list[str]]] = [
-    ("Decimate", [
-        "Decimate",
-        "Decimate2X",
-        "Decimate4X",
-        "Decimate8X",
-        "Decimate16X",
-        "Reduce2X",
-        "Reduce4X",
-        "Reduce8X",
-    ]),
-    ("Density & Resample", [
-        "IncDencity2X",
-        "DecDencity2X",
-        "Resample",
-        "RESAMPLE4SCREEN_TOOL",
-        "ToUniformSpace",
-        "ToGlobalSpace",
-        "ToUniformSpaceAll",
-        "ShowDensityNearVolumes",
-    ]),
-    ("Boolean", [
-        "LiveUnion",
-        "LiveSubtraction",
-        "LiveIntersection",
-        "NormalSculptLayer",
-        "CollapseBoolTree",
-        "BooleanRules",
-        "SoftBooleansForVolumes",
-        "SubtractFrom",
-        "IntersectWith",
-        "CopySubtractFrom",
-        "RemoveIntersectionWith",
-    ]),
-    ("Merge & Clone", [
-        "MergeVisible",
-        "MergeSubtree",
-        "MergeSelected",
-        "MergeTo",
-        "MoveTo",
-        "PlainMergeVisible",
-        "PlainMergeSubtree",
-        "PlainMergeSelected",
-        "CloneVoxTree",
-        "CloneInstance",
-        "CloneSymm",
-        "InstanceToParentInstances",
-    ]),
-    ("Hide, Show & Ghost", [
-        "Toggle_ghosting",
-        "Isolate_ghosting",
-        "Toggle_vox_visibility",
-        "Invert_vox_visibility",
-        "HideButCurrent",
-        "UnhideAll",
-        "ShowAll",
-        "ShowSubtree",
-        "InvertHide",
-        "DeleteHidden",
-        "SeparateHidden",
-    ]),
-    ("Object Tools", [
-        "SmoothObject",
-        "CleanSurface",
-        "CloseHoles",
-        "CloseSurfaceHoles",
-        "Decompose",
-        "DecomposeFrozen",
-        "Shell",
-        "MakeVoxHull",
-        "CreateSurfaceShell",
-        "FlipNormals",
-        "ExtrudeVO",
-        "AddVoxTree",
-    ]),
-    ("Autopo & Retopo", [
-        "Quadrangulate",
-        "QuadrangulateAndMerge",
-        "QuadrangulateAndMergeDP",
-        "QuadrangulateAndMergePtex",
-        "OldStyleQuads",
-        "GetObjectFromRetopoRoom",
-        "DecimateToRetopo",
-        "DecimateAllToRetopo",
-        "CustomRetopers",
-    ]),
-]
-
-
-def sculpt_ops_groups() -> list[tuple[str, list[MenuItem]]]:
-    """(group label, rows) for the object commands 3DCoat itself defines.
-
-    The labels come from 3DCoat's own definitions, never from us, and an id that
-    is not there is left out: a curated list plus a lookup is what keeps this list
-    honest on a build whose commands differ from the one it was written on.
-    """
-    universe = _universe()
-    known = {entry.cid.lstrip("$").lower(): entry
-             for entry in catalog.read_menu_commands()}
-    groups: list[tuple[str, list[MenuItem]]] = []
-    for label, ids in SCULPT_OPS:
-        rows: list[MenuItem] = []
-        for cid in ids:
-            entry = known.get(cid.lstrip("$").lower())
-            if entry is None and not _known(universe, cid):
-                continue
-            rows.append(MenuItem(label=(entry.label if entry and entry.label else cid),
-                                 kind=COMMAND,
-                                 cid=(entry.cmd_string if entry is not None
-                                      else "$" + cid.lstrip("$"))))
-        if rows:
-            groups.append((label, rows))
-    return groups
-
-
-def sculpt_ops_list(mode: str = LIST) -> Menu:
-    """The ``Sculpt Ops`` list: 3DCoat's own object commands, one submenu per group.
-
-    These are the entries 3DCoat puts on the VoxTree right-click menu - decimate,
-    resample, the live booleans, merge, ghosting - grouped so a pie can reach them
-    without a trip to the VoxTree.
-    """
-    items: list[MenuItem] = []
-    for name, rows in sculpt_ops_groups():
-        items.append(submenu(f"{name}  ({len(rows)})", rows))
-    if not items:
-        items.append(header("3DCoat's own object commands were not found"))
-    return Menu(name="Sculpt Ops", items=items, mode=mode,
-                preset=PRESET_MARKERS["Sculpt Ops"])
-
-
-# --- Tools -------------------------------------------------------------------
-def tool_rows() -> list[tuple[str, list[MenuItem]]]:
-    """(panel section, rows) exactly as 3DCoat groups its own tool panel."""
-    groups: dict[str, list[MenuItem]] = {}
-    for entry in catalog.read_my_tools():
-        # Tools 3DCoat's own panel definitions do not put in a section (CAD/model
-        # tools mostly) still need a heading.
-        groups.setdefault(entry.hint or "General", []).append(
-            MenuItem(label=entry.label, kind=COMMAND, cid=entry.cmd_string))
-    return list(groups.items())
-
-
-def tools_list(mode: str = LIST) -> Menu:
-    """The ``Tools`` list: your tool presets, grouped like 3DCoat's own panel.
-
-    A hundred tools flat in one menu would be unusable, so each of 3DCoat's panel
-    sections becomes a submenu - the section names are 3DCoat's own.
-    """
-    items: list[MenuItem] = []
-    for name, rows in tool_rows():
-        items.append(submenu(f"{name}  ({len(rows)})", rows))
-    if not items:
-        items.append(header("no CustomTools presets found"))
-    return Menu(name="Tools", items=items, mode=mode,
-                preset=PRESET_MARKERS["Tools"])
-
-
-# --- Common ------------------------------------------------------------------
-# The main menus whose commands get reached for constantly. Using 3DCoat's own
-# grouping keeps "common" 3DCoat's opinion rather than ours.
-COMMON_MENUS = ("Edit", "View", "Freeze", "Symmetry", "Hide", "Layers")
-
-
-def common_groups(menus: tuple[str, ...] = COMMON_MENUS) -> list[tuple[str, list[MenuItem]]]:
-    """(menu name, rows) for the everyday commands, in 3DCoat's own order."""
-    wanted = {name.lower() for name in menus}
-    found: dict[str, list[MenuItem]] = {}
-    for entry in catalog.read_all_commands():
-        hint = entry.hint or ""
-        if not hint.startswith("MainMenu/"):
-            continue
-        name = hint.split("/", 1)[1]
-        if name.lower() not in wanted:
-            continue
-        found.setdefault(name, []).append(
-            MenuItem(label=entry.label, kind=COMMAND, cid=entry.cmd_string))
-    return [(name, found[name]) for name in menus if name in found]
-
-
-def common_list(mode: str = LIST) -> Menu:
-    """The ``Common`` list: everyday commands, grouped as 3DCoat groups its menus.
-
-    Undo/Redo and the transform commands live here, along with view shading,
-    freeze, symmetry and hide - the things reached for between sculpt strokes.
-    """
-    items: list[MenuItem] = []
-    for name, rows in common_groups():
-        items.append(submenu(f"{name}  ({len(rows)})", rows))
-    if not items:
-        items.append(header("no main-menu commands found"))
-    return Menu(name="Common", items=items, mode=mode,
-                preset=PRESET_MARKERS["Common"])
-
-
 # --- installing the shipped lists ---------------------------------------------
 _BUILDERS = {
     "QuickTool": quicktool_list,
-    "Modeling": modeling_list,
     "Add": primitives_list,
-    "Tools": tools_list,
-    "Common": common_list,
     "Shade": shade_list,
-    "Sculpt Ops": sculpt_ops_list,
 }
 
 

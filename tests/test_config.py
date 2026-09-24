@@ -408,7 +408,7 @@ check(_menu.preset == "prims/1", "not even the marker is rewritten")
 
 # A list that really is missing is still added - that changes nothing that exists.
 _partly = MenuConfig(menus=[Menu(name="Add", preset="prims/2", items=[])])
-check(presets.install_presets(_partly, names=("Add", "Tools")) == ["Tools"],
+check(presets.install_presets(_partly, names=("Add", "Shade")) == ["Shade"],
       "only a genuinely missing list is installed")
 check(_partly.find("Add").items == [], "and the one that exists is untouched")
 check(len(_partly.menus) == 2, f"the missing one landed ({[m.name for m in _partly.menus]})")
@@ -418,10 +418,10 @@ check(presets.install_presets(handmade, names=("Add",)) == [],
       "a hand-built list with the same name is left alone")
 check(len(handmade.find("Add").items) == 1, "and keeps its own rows")
 
-tools_cfg = MenuConfig()
-check(presets.install_presets(tools_cfg, names=("Tools",)) == ["Tools"],
-      "the Tools preset (your CustomTools) installs alongside Add")
-check(tools_cfg.find("Tools").preset == "tools/1", "with a marker of its own")
+shade_cfg = MenuConfig()
+check(presets.install_presets(shade_cfg, names=("Shade",)) == ["Shade"],
+      "a single shipped list can be installed on its own")
+check(shade_cfg.find("Shade").preset == "shade/1", "with a marker of its own")
 
 round_trip = MenuConfig.from_json(preset_cfg.to_json())
 back = round_trip.find("Add").items[0]

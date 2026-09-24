@@ -92,7 +92,7 @@ check([menu.name for menu in shipped] == list(P.DEFAULT_LISTS),
       f"the shipped set is the one we mean ({[m.name for m in shipped]})")
 for menu in shipped:
     check(bool(menu.items), f"{menu.name} -> {len(menu.items)} row(s)")
-check(P.build("Common") is not None and P.build("Nope") is None,
+check(P.build("Shade") is not None and P.build("Nope") is None,
       "one shipped list can be built on its own (and an unknown name gives nothing)")
 check(not hasattr(P, "presets_list"), "presets_list is gone")
 check(not hasattr(P, "preset_rows"), "preset_rows is gone")

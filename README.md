@@ -43,8 +43,8 @@ The editor — every menu is a row on the left, the command catalog on the right
   primitives work; the bundled `Add` menu is built from that.
 * **Nested submenus** — unfold on hover, with a grace timer (a short dwell in a pie);
   `Promote` turns one into a menu of its own.
-* **Three lists on a first run** — `QuickTool`, `Add` and `Shade` (a pie); `+ New ▸
-  Built-in lists` adds `Modeling`, `Tools`, `Common` or `Sculpt Ops`.
+* **Three lists on a first run** — `QuickTool`, `Add` and `Shade` (a pie), and nothing
+  else: `+ New ▸ Built-in lists` is how one comes back after you delete it.
 * **Editor** — rows from 3D-Coat's own commands (**900+**), your `CustomTools` and your
   scripts; drag to reorder, `Add all`, undo/redo, import/export.
 * **Nothing ships that does nothing** — every id is checked against the 3D-Coat you are

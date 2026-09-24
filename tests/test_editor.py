@@ -541,7 +541,7 @@ print("== a deleted built-in list can be put back ==")
 # Deleting a shipped list is remembered so an install does not add it again, which
 # makes the editor the only way back: "+ New" carries the built-in lists.
 ed6 = CoatMenuEditor(MenuConfig(menus=[Menu(name="Shade"), Menu(name="Only")],
-                                removed_presets=["tools"]))
+                                removed_presets=["quicktool"]))
 ed6.reload_menus()
 _actions = ed6._new_menu.actions()
 _texts = [a.text().strip() for a in _actions]
@@ -556,21 +556,21 @@ def _action(label: str):
 _shade_action = next((a for a in _actions if a.text().strip().startswith("Shade")), None)
 check(_shade_action is not None and not _shade_action.isEnabled(),
       "a built-in already in the config is not offered again")
-_tools_action = _action("Tools")
-check(_tools_action is not None and _tools_action.isEnabled(),
+_put_back = _action("QuickTool")
+check(_put_back is not None and _put_back.isEnabled(),
       "a deleted one is offered again")
 
 _before = len(ed6._config.menus)
-ed6.add_builtin_menu("Tools")
+ed6.add_builtin_menu("QuickTool")
 check(len(ed6._config.menus) == _before + 1, "choosing it adds the list")
-check("tools" not in ed6._config.removed_presets,
+check("quicktool" not in ed6._config.removed_presets,
       f"and clears the remembered deletion ({ed6._config.removed_presets})")
-check(ed6._config.find("Tools") is not None, "the menu really is in the config")
+check(ed6._config.find("QuickTool") is not None, "the menu really is in the config")
 ed6.add_builtin_menu("Not A Built-in")
 check("not a built-in" in ed6._status.text(),
       f"an unknown name is refused ({ed6._status.text()})")
 check(len(ed6._config.menus) == _before + 1, "and nothing was added for it")
-check(ed6.preset_in_use("Shade") and not ed6.preset_in_use("Common"),
+check(ed6.preset_in_use("Shade") and not ed6.preset_in_use("Add"),
       "the in-use check follows the config")
 
 print("== renaming a menu says what happened to its key ==")

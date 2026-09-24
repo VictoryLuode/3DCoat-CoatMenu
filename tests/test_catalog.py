@@ -83,7 +83,7 @@ with open(os.path.join(CMAKE, "sculptTools.py"), "w", encoding="utf-8") as fh:
         '    coat.tools_item("[extension]MagnifyLayers")  # Magnify SL\n'
         '    coat.tools_item("[extension]BendVolume")  # Array/Bend Volume\n'
     )
-# The VoxTree right-click menu - where the Sculpt Ops preset gets its rows, and
+# The VoxTree right-click menu - one of the sources the catalog reads, and
 # the place a build may differ from the one that preset was written on.
 with open(os.path.join(CMAKE, "voxTreeRmb.py"), "w", encoding="utf-8") as fh:
     fh.write(
@@ -245,45 +245,6 @@ check(by_name["SomePersonalTool"].hint == "Other",
 
 from coatmenu.core import presets  # noqa: E402
 
-tools_preset = presets.tools_list()
-check([i.label for i in tools_preset.items] == ["Clay/Draw  (1)", "Layers  (2)", "Other  (1)"],
-      f"the Tools list groups them like 3DCoat's panel "
-      f"({[i.label for i in tools_preset.items]})")
-check(any(child.cid == "$[extension]BendVolume" for child in tools_preset.items[1].children),
-      "rows inside a group are runnable tool ids")
-
-print("== the Common list (everyday commands, 3DCoat's own grouping) ==")
-groups = presets.common_groups()
-check([name for name, _ in groups] == ["Edit"],
-      f"only the menus we ask for ({[name for name, _ in groups]})")
-check([i.label for i in groups[0][1]] == ["Move along the X-axis", "Undo"],
-      f"named like the catalog ({[i.label for i in groups[0][1]]})")
-common = presets.common_list()
-check([i.label for i in common.items] == ["Edit  (2)"], "and it becomes one submenu per menu")
-check(common.preset == "common/1", "with its own marker")
-
-print("== the Sculpt Ops list (3DCoat's own commands, filtered at build time) ==")
-ops_groups = presets.sculpt_ops_groups()
-check([name for name, _rows in ops_groups] == ["Decimate", "Density & Resample", "Boolean"],
-      f"only the groups this build defines survive ({[n for n, _r in ops_groups]})")
-check([row.label for _n, rows in ops_groups for row in rows] == ["Decimate", "Resample", "Live union"],
-      f"rows are named the way 3DCoat names them "
-      f"({[r.label for _n, rows in ops_groups for r in rows]})")
-check(all(row.cid.startswith("$") for _n, rows in ops_groups for row in rows),
-      "a row runs the command id, not a label")
-
-ops = presets.sculpt_ops_list()
-check([i.label for i in ops.items] == ["Decimate  (1)", "Density & Resample  (1)", "Boolean  (1)"],
-      f"each group becomes one submenu ({[i.label for i in ops.items]})")
-check(ops.preset == "sculptops/1", "with its own marker")
-check(ops.name == "Sculpt Ops", "and its own name")
-
-curated = [cid for _label, ids in presets.SCULPT_OPS for cid in ids]
-shown = {row.cid.lstrip("$") for _n, rows in ops_groups for row in rows}
-check(len(curated) - len(shown) > 60,
-      f"an id this build does not define is skipped, never shipped as a dead row "
-      f"({len(shown)} of {len(curated)} shown)")
-
 # A build whose id table we can read, but which knows none of these commands: say
 # so in the list rather than offer rows that cannot resolve.
 real_ids = catalog.known_command_ids
@@ -291,7 +252,7 @@ real_reader = catalog.read_menu_commands
 catalog.read_menu_commands = lambda *a, **k: []
 catalog.known_command_ids = lambda: {"SOMETHING_ELSE"}
 try:
-    empty = presets.sculpt_ops_list()
+    empty = presets.shade_list()
 finally:
     catalog.read_menu_commands = real_reader
     catalog.known_command_ids = real_ids
@@ -303,10 +264,10 @@ check(len(empty.items) == 1 and empty.items[0].kind == "header",
 # English.xml merely moved.
 catalog.known_command_ids = lambda: set()
 try:
-    unverifiable = presets.sculpt_ops_list()
+    unverifiable = presets.shade_list()
 finally:
     catalog.known_command_ids = real_ids
-check(len(unverifiable.items) == len(presets.SCULPT_OPS),
+check(len(unverifiable.items) == len(presets.SHADE_MENU_ROWS),
       f"without an id table the rows are kept, not dropped "
       f"({len(unverifiable.items)} groups)")
 
