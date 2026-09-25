@@ -567,7 +567,10 @@ def uninstall(documents: str) -> int:
     p = paths(documents)
     removed: list[str] = []
 
-    # Keep the user's menus - an uninstall should not throw away their work.
+    # Keep the user's menus - an uninstall should not throw away their work. If that
+    # copy cannot be made, nothing at all is removed: the folder about to go is the
+    # only place his hand-built lists exist, so a failed backup must stop the run
+    # instead of being swallowed.
     config_path = os.path.join(p["ext"], "data", "menus.json")
     if os.path.exists(config_path):
         backup = _menus_backup_path(documents)
@@ -575,8 +578,13 @@ def uninstall(documents: str) -> int:
             os.makedirs(os.path.dirname(backup), exist_ok=True)
             shutil.copy2(config_path, backup)
             removed.append(f"your lists were backed up to {backup}")
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"error: could not back up the menus before removing: {exc}", file=sys.stderr)
+            print(f"       nothing was removed - {config_path} is still there",
+                  file=sys.stderr)
+            print("       fix the problem (disk full? folder permissions?) and run --uninstall again",
+                  file=sys.stderr)
+            return 1
 
     if os.path.isdir(p["ext"]):
         # 3DCoat writes its own item file next to CoatMenu.xml for every menu entry

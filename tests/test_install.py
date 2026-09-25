@@ -283,6 +283,53 @@ check(shipped and all(not rel.startswith("actions/menus/") for rel in shipped),
 check(any(rel == "CoatMenu.py" for rel in shipped), "and the entry point still is")
 check(all(not rel.endswith(".pyc") for rel in shipped), "nor any compiled leftovers")
 
+print("== an uninstall that cannot back up the menus removes nothing ==")
+# The backup is the only copy of his lists once the folder goes, so a failure there
+# has to stop the run. It used to be swallowed - the folder was removed anyway and
+# the lists went with it.
+DOCS3 = tempfile.mkdtemp(prefix="coatmenu-backupfail-")
+SCRIPTS3 = os.path.join(DOCS3, "3DCoat", "UserPrefs", "Scripts")
+STARTUP3 = os.path.join(SCRIPTS3, "cExtensions", "startup.txt")
+os.makedirs(os.path.join(SCRIPTS3, "cExtensions"), exist_ok=True)
+with open(STARTUP3, "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("debugger\nQT\nLKS\n")
+ext3 = os.path.join(SCRIPTS3, "cExtensions", "CoatMenu")
+config3 = os.path.join(ext3, "data", "menus.json")
+BACKUP3 = os.path.join(DOCS3, "3DCoat", "CoatMenu-menus-backup.json")
+
+result = subprocess.run([sys.executable, INSTALL, "--documents", DOCS3],
+                        capture_output=True, text=True)
+check(result.returncode == 0, f"install into a third tree exits 0 ({result.stderr.strip()})")
+check(os.path.isfile(config3), "and materialises a menus.json")
+
+menus_before = open(config3, encoding="utf-8").read()
+startup_before = open(STARTUP3, encoding="utf-8").read()
+real_copy2 = installer.shutil.copy2
+
+
+def _out_of_space(*_args, **_kwargs):
+    raise OSError(28, "No space left on device")
+
+
+installer.shutil.copy2 = _out_of_space
+try:
+    code = installer.uninstall(DOCS3)
+finally:
+    installer.shutil.copy2 = real_copy2
+
+check(code != 0, f"uninstall reports failure instead of 0 ({code})")
+check(os.path.isdir(ext3), "the extension folder is left in place")
+check(open(config3, encoding="utf-8").read() == menus_before, "with the user's menus untouched")
+check(open(STARTUP3, encoding="utf-8").read() == startup_before, "and our startup.txt line still there")
+
+# ...and once the copy works again the very same call does remove everything.
+result = subprocess.run([sys.executable, INSTALL, "--documents", DOCS3, "--uninstall"],
+                        capture_output=True, text=True)
+check(result.returncode == 0, f"a retry after the problem is gone exits 0 ({result.stderr.strip()})")
+check(not os.path.isdir(ext3), "and removes the folder")
+check(os.path.isfile(BACKUP3) and open(BACKUP3, encoding="utf-8").read() == menus_before,
+      "with the lists parked in a backup beside the 3DCoat folder")
+
 print()
 if failures:
     print(f"INSTALL FAILED ({len(failures)}): " + "; ".join(failures))
