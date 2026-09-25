@@ -350,7 +350,7 @@ def _load_or_create_config(ext_dir: str, documents: str) -> tuple[MenuConfig, st
             path = legacy
     if os.path.exists(path):
         config = MenuConfig.load(path)
-        if config.menus:
+        if config.menus or config.dropped_entries:
             return config, None
     # An uninstall keeps the user's lists in a backup; installing again puts them
     # back instead of quietly starting over from the built-in set. Never over a
@@ -406,8 +406,8 @@ def install(documents: str) -> int:
     # Built-in presets land once - a *missing* list is added, never an existing
     # one touched, and never into a config we cannot read (that one is left
     # exactly alone; see `broken`).
-    added_presets = [] if broken else presets.install_presets(config)
-    rewrite = (not broken and
+    added_presets = [] if broken or config.dropped_entries else presets.install_presets(config)
+    rewrite = (not broken and not config.dropped_entries and
                (added_presets or not os.path.exists(config_path) or _uses_old_key(config_path)))
     for candidate in (config_path, legacy_path):
         if rewrite and os.path.exists(candidate):
@@ -444,6 +444,9 @@ def install(documents: str) -> int:
         if quarantine:
             print(f"                   a copy is at {quarantine}")
         print("                   fix or move the file, then run install again")
+    elif config.dropped_entries:
+        print("  ! truncated    : menus.json has menus or rows omitted while loading")
+        print("                   left as it is - no presets were added and nothing was rewritten")
     if stale:
         print(f"  stale removed  : {', '.join(stale)}")
     if leftovers:

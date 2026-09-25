@@ -169,6 +169,30 @@ check([lst.name for lst in loaded.menus] == [lst.name for lst in starter.menus],
 check(MenuConfig.load(os.path.join(os.path.dirname(cfg_path), "missing.json")).menus,
       "missing file falls back to the starter config")
 
+print("== a capped config cannot be saved over ==")
+for label, menus in (
+    ("rows", [{"name": "Mine", "items": [f"Command{i}" for i in range(201)]}]),
+    ("nested rows", [{"name": "Mine", "items": [
+        {"name": "Submenu", "items": [f"Command{i}" for i in range(201)]}]}]),
+    ("menus", [{"name": f"Mine {i}", "items": []} for i in range(41)]),
+):
+    original = json.dumps({"version": 1, "menus": menus})
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        fh.write(original)
+    capped = MenuConfig.load(cfg_path)
+    check(capped.dropped_entries, f"too many {label} are marked as omitted")
+    for source, candidate in (("loaded", capped),
+                              ("rebuilt", MenuConfig.from_json(capped.to_json()))):
+        try:
+            candidate.save(cfg_path)
+        except ValueError:
+            rejected = True
+        else:
+            rejected = False
+        check(rejected, f"too many {label} cannot be saved from a {source} config")
+    with open(cfg_path, encoding="utf-8") as fh:
+        check(fh.read() == original, f"too many {label} stay on disk")
+
 print("== launcher scripts + menu xml ==")
 ext = tempfile.mkdtemp(prefix="coatmenu-ext-")
 entry_dir = os.path.join(ext, "actions", "menus")

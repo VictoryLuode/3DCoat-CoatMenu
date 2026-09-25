@@ -220,6 +220,17 @@ def _clean_items(items: list[MenuItem], depth: int = 0) -> list[MenuItem]:
     return out
 
 
+def _items_were_dropped(raw_items, items: list[MenuItem]) -> bool:
+    """Detect rows omitted by parsing or the per-level cap, including submenus."""
+    if len(raw_items) != len(items):
+        return True
+    return any(
+        _items_were_dropped(raw.get("items") or [], item.children)
+        for raw, item in zip(raw_items, items)
+        if isinstance(raw, dict) and "name" in raw
+    )
+
+
 # ---------------------------------------------------------------------------
 # config
 # ---------------------------------------------------------------------------
@@ -235,6 +246,7 @@ class MenuConfig:
     # "missing", and missing is what it adds. Remembered per *family*
     # (``prims``), so renaming the menu does not defeat it.
     removed_presets: list[str] = field(default_factory=list)
+    dropped_entries: bool = field(default=False, repr=False, compare=False)
 
     def remember_removed(self, family: str) -> None:
         """Note that a shipped preset was deleted, so it is not added back."""
@@ -275,6 +287,7 @@ class MenuConfig:
     @classmethod
     def from_json(cls, data) -> "MenuConfig":
         menus: list[Menu] = []
+        dropped_entries = False
         if isinstance(data, dict):
             # "menus" is the current key; "lists" is what the file used before the
             # terminology pass and is still read so an existing file keeps working.
@@ -289,18 +302,21 @@ class MenuConfig:
             name = str(raw.get("name") or "").strip()
             if not name:
                 continue
-            items = _clean_items([i for i in (item_from_json(r) for r in raw.get("items") or []) if i])
+            raw_items = raw.get("items") or []
+            items = _clean_items([i for i in (item_from_json(r) for r in raw_items) if i])
+            dropped_entries |= _items_were_dropped(raw_items, items)
             menus.append(Menu(name=name, items=items, mode=str(raw.get("mode") or "list"),
                               preset=str(raw.get("preset") or "")))
             if len(menus) >= MAX_LISTS:
                 break
+        dropped_entries |= len(raw_menus) != len(menus)
         removed: list[str] = []
         if isinstance(data, dict):
             for entry in data.get("removed") or []:
                 family = preset_family(entry)
                 if family and family not in removed:
                     removed.append(family)
-        return cls(menus=menus, removed_presets=removed)
+        return cls(menus=menus, removed_presets=removed, dropped_entries=dropped_entries)
 
     def to_json(self) -> dict:
         out: list[dict] = []
@@ -337,6 +353,16 @@ class MenuConfig:
             return starter_config()
 
     def save(self, path: str) -> None:
+        if self.dropped_entries:
+            raise ValueError("Cannot save menus.json: loading truncated or discarded existing menus or rows")
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    existing = json.load(fh)
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise ValueError("Cannot save menus.json: existing file is unreadable") from exc
+            if self.from_json(existing).dropped_entries:
+                raise ValueError("Cannot save menus.json: existing file has truncated or discarded menus or rows")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8", newline="\n") as fh:

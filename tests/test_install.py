@@ -160,6 +160,21 @@ check(names.count("Prims") == 1 and row_ids(after["menus"][names.index("Prims")]
 check(any(m.get("preset") for m in after["menus"]),
       "while a preset that is actually missing still installs")
 
+print("== an update never writes back a capped menu config ==")
+for menus in (
+    [{"name": "My Rows", "items": [f"MyCommand{i}" for i in range(201)]}],
+    [{"name": f"My Menu {i}", "items": ["MyCommand"]} for i in range(41)],
+):
+    original = json.dumps({"version": 1, "menus": menus}, indent=2)
+    with open(config_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(original)
+    result = run()
+    label = "rows" if len(menus) == 1 else "menus"
+    check(result.returncode == 0, f"install exits 0 with too many {label}")
+    with open(config_path, encoding="utf-8") as fh:
+        check(fh.read() == original, f"too many {label} leave menus.json untouched")
+    check("truncat" in result.stdout.lower(), f"too many {label} produce a truncation warning")
+
 print("== a menus file we cannot read is never written over ==")
 bad_text = '{"version": 1, "menus": [ {oops\n'
 with open(config_path, "w", encoding="utf-8", newline="\n") as fh:
