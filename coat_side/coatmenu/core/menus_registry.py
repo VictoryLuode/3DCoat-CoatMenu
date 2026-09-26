@@ -121,6 +121,21 @@ def _posix(path: str) -> str:
     return str(path).replace("\\", "/")
 
 
+def _comment_safe(name: str) -> str:
+    """A menu name as it can appear inside the generated launcher's docstring.
+
+    The name is the user's data and the docstring is a file we then run, so
+    anything that could end the docstring, start a line of its own or escape
+    what follows is out - a name like ``Evil\"\"\"\\nimport os`` used to close the
+    docstring and leave the rest of itself to be read as code. What survives is
+    the readable part, which is all this line is for.
+    """
+    text = str(name)
+    for bad in ('"""', '"', "\\", "\r", "\n"):
+        text = text.replace(bad, " " if bad in "\r\n" else "'")
+    return text.strip() or "?"
+
+
 def entry_script_path(entry_scripts_dir: str, slug: str) -> str:
     """Where a menu's launcher lives - prefixed, so the Scripts menu groups them."""
     return os.path.join(entry_scripts_dir, f"{LAUNCHER_PREFIX}{slug}.py")
@@ -191,7 +206,7 @@ def write_entry_scripts(config: MenuConfig, entry_scripts_dir: str) -> tuple[lis
 
     for slug, lst in pairs:
         path = entry_script_path(entry_scripts_dir, slug)
-        content = _ENTRY_SCRIPT.format(name=lst.name, slug=slug)
+        content = _ENTRY_SCRIPT.format(name=_comment_safe(lst.name), slug=slug)
         if _read(path) != content:
             with open(path, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(content)
@@ -337,6 +352,24 @@ def prune_persisted_menu_items(config: MenuConfig, extension_root: str,
         if menu_id not in fixed:     # the fixed three are carried by CoatMenu.xml
             stale.append(menu_id)
     return stale, removed
+
+
+def stale_menu_ids(config: MenuConfig, seen_ids: list[str]) -> list[str]:
+    """The ids 3DCoat still carries that are ours and that no menu uses any more.
+
+    A menu's entry is keyed by its id, and 3DCoat keeps every entry it has ever been
+    given - in its hotkey file, which CoatMenu only ever reads. So the dead ones are
+    found by comparing what the file holds against the ids we have now: leftovers
+    from the earlier ``CoatMenu_List_<Name>`` scheme, and the id of a menu that has
+    since been deleted or renamed. They sit in the Scripts list doing nothing, which
+    is why the running 3DCoat gets them taken out (``menus.drop_menu_items``) and why
+    the doctor reports them.
+    """
+    live = {menu_id for menu_id, _menu in menu_ids(config)}
+    live.update({MAIN_MENU_ID, EDITOR_MENU_ID, DOCTOR_MENU_ID})
+    return sorted({str(entry_id) for entry_id in seen_ids
+                   if str(entry_id).startswith(LAUNCHER_PREFIX)
+                   and str(entry_id) not in live})
 
 
 def sync(config: MenuConfig, extension_root: str, entry_scripts_dir: str, xml_path: str) -> dict:

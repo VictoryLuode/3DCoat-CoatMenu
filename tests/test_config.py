@@ -267,6 +267,39 @@ registry.write_entry_scripts(cjk, cjk_dir)
 check(len([n for n in os.listdir(cjk_dir) if n.endswith(".py")]) == 2,
       f"both launcher files are written ({sorted(os.listdir(cjk_dir))})")
 
+print("== a menu name cannot break the generated launcher ==")
+# The name is data, and it lands inside a generated file. One carrying a docstring
+# terminator used to close the docstring and leave the rest of the name to be read
+# as code - the launcher is ours to write, not someone else's to program.
+import ast  # noqa: E402
+
+nasty = 'Evil"""\nimport os\nos.remove("C:/boom")\n#'
+nasty_dir = tempfile.mkdtemp(prefix="coatmenu-nasty-")
+nasty_cfg = MenuConfig(menus=[Menu(name=nasty)])
+registry.write_entry_scripts(nasty_cfg, nasty_dir)
+nasty_files = [n for n in os.listdir(nasty_dir) if n.endswith(".py")]
+check(len(nasty_files) == 1, f"the launcher is still written ({nasty_files})")
+nasty_path = os.path.join(nasty_dir, nasty_files[0])
+with open(nasty_path, encoding="utf-8") as fh:
+    nasty_source = fh.read()
+nasty_slug = registry.menu_slugs(nasty_cfg)[0][0]
+check(f"show_list({nasty_slug!r}" in nasty_source, "the call still names its own menu")
+try:
+    nasty_tree = ast.parse(nasty_source)
+    nasty_parses = True
+except SyntaxError:
+    nasty_tree, nasty_parses = None, False
+check(nasty_parses, "the launcher is still valid Python, whatever the name says")
+if nasty_tree is not None:
+    nasty_doc = ast.get_docstring(nasty_tree) or ""
+    check(nasty_doc.startswith("CoatMenu list launcher"),
+          "the header is still there - and still a docstring")
+    check("Evil" in nasty_doc and "import os" in nasty_doc,
+          "the readable part of the name is in there, as text")
+    check("remove" not in {node.attr for node in ast.walk(nasty_tree)
+                            if isinstance(node, ast.Attribute)},
+          "and nothing in the file calls a method the name smuggled in")
+
 print("== a path with '&' does not break the file 3DCoat reads ==")
 # 3DCoat refuses a file whose XML is malformed, and '&' in a path (an account
 # called "Ben & Jerry", a folder called "R&D") is what made ours malformed.
@@ -514,6 +547,55 @@ with open(clash_hotkeys, "w", encoding="utf-8") as fh:
 clash_keys = bindings_mod.describe(clash, clash_hotkeys)
 check(clash_keys.for_menu("Cut & Fill") == "Q" and clash_keys.for_menu("Cut__Fill") == "W",
       f"each of the two clashing menus reads its own key ({clash_keys.keys})")
+
+# The report has to say what 3DCoat's Scripts list holds *right now*: a menu made in
+# the editor is registered at once but only turns up in that list after 3DCoat
+# rebuilds it (a restart, or Stop/Start in Windows > Panels > Extensions), and that
+# is a different thing from an entry that never got registered at all.
+def _line(text: str, prefix: str) -> str:
+    return next((row for row in text.split("\n") if row.startswith(prefix)), "")
+
+
+from coatmenu.core import menus as menus_mod  # noqa: E402
+
+not_yet = _line(doctor.report(bind_cfg), "  menu items")
+check("3DCoat has 0 of 3" in not_yet, f"nothing registered yet reads as 0 of 3 ({not_yet})")
+check("CoatMenu_" in not_yet and "restart" in not_yet,
+      f"it names what is missing, and what to do about it ({not_yet})")
+
+menus_mod.register_menu_items(bind_cfg)
+registered = _line(doctor.report(bind_cfg), "  menu items")
+check("3DCoat has 3 of 3" in registered, f"after registering, all three are known ({registered})")
+check("missing" not in registered, "and nothing is reported missing")
+
+FAKE.ui.removeCommandFromMenu("CoatMenu_Paint")
+one_gone = _line(doctor.report(bind_cfg), "  menu items")
+check("3DCoat has 2 of 3" in one_gone and "CoatMenu_Paint" in one_gone,
+      f"an entry 3DCoat dropped is named ({one_gone})")
+
+# Ids 3DCoat still carries that no menu uses any more (earlier id schemes, or a menu
+# since deleted) are worth seeing, and the file they sit in is not ours to write.
+check(_line(doctor.report(bind_cfg), "  old ids") == "  old ids       : none",
+      f"ids our menus still use are not 'old' ({_line(doctor.report(bind_cfg), '  old ids')})")
+slim = MenuConfig(menus=[Menu(name="Sculpt")])
+old_line = _line(doctor.report(slim), "  old ids")
+check("CoatMenu_Paint" in old_line and "CoatMenu_Prims" in old_line,
+      f"the ids the gone menus left behind are listed ({old_line})")
+
+# A dead entry 3DCoat still carries is taken out of the *running* 3DCoat when the
+# menus are registered - and only from there: the hotkey file is 3DCoat's, and a
+# menu id living in it is what makes the entry come back on the next start.
+with open(hotkeys_file, "a", encoding="utf-8") as fh:
+    fh.write("<OneHotKey><ID>CoatMenu_Ghost</ID><Room>Voxels</Room>"
+             "<Code>key_00</Code></OneHotKey>\n")
+FAKE.ui.insertInMenu("Scripts", "CoatMenu_Ghost", "C:/ghost.py")
+check("CoatMenu_Ghost" in FAKE.menu_items, "a dead entry sits in 3DCoat")
+menus_mod.register_menu_items(bind_cfg)
+check("CoatMenu_Ghost" not in FAKE.menu_items,
+      f"registering the menus takes it out ({sorted(FAKE.menu_items)})")
+with open(hotkeys_file, encoding="utf-8") as fh:
+    check("CoatMenu_Ghost" in fh.read(),
+          "and 3DCoat's own hotkey file is left exactly as it was")
 
 text = doctor.report(bind_cfg)
 check("CoatMenu doctor" in text, "the doctor writes a titled report")

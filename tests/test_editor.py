@@ -183,6 +183,11 @@ print("== save writes config, launchers and menu xml ==")
 editor.save()
 config_path = paths.config_path()
 check(os.path.isfile(config_path), f"config written ({config_path})")
+# A new menu's entry is registered at once, but 3DCoat only rebuilds its Scripts
+# list at startup - a save that added one has to say so, or the menu looks like it
+# never appeared.
+check("restart" in editor._status.text() or "Stop/Start" in editor._status.text(),
+      f"a save that registered new entries says they need a restart ({editor._status.text()!r})")
 with open(config_path, encoding="utf-8") as fh:
     saved = json.load(fh)
 check([lst["name"] for lst in saved["menus"]] == ["Sculpt", "Paint"], "both lists saved")

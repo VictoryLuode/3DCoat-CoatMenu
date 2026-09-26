@@ -14,8 +14,9 @@ import time
 
 from coatmenu import __version__
 from coatmenu.core import bindings as bindings_mod
-from coatmenu.core import catalog, menus, paths
-from coatmenu.core.config import config_readable, unreadable_copies
+from coatmenu.core import catalog, menus, menus_registry, paths
+from coatmenu.core.config import MenuConfig, config_readable, unreadable_copies
+from coatmenu.core.hotkeys import read_bindings
 from coatmenu.core.log import log, log_path
 
 REPORT_NAME = "doctor.txt"
@@ -101,6 +102,59 @@ def config_line() -> str:
     return "ok"
 
 
+def _menu_items_line(config: MenuConfig) -> str:
+    """What 3DCoat's Scripts list knows about our per-menu entries, right now.
+
+    Each menu's own entry is inserted through 3DCoat's menu API, and 3DCoat only
+    rebuilds its Scripts list at startup - which is why a menu created in the
+    editor can be missing from the list until 3DCoat is restarted (or CoatMenu is
+    Stopped and Started in Windows > Panels > Extensions). This line is how that
+    gets told apart from an entry that never got registered at all.
+    """
+    ids = [menu_id for menu_id, _label, _script in menus_registry.menu_entries(
+        config, paths.extension_root(), paths.entry_scripts_dir(), include="menus")]
+    if not ids:
+        return "  menu items    : (no menus)"
+    try:
+        import coat  # type: ignore
+        check = coat.ui.checkIfMenuItemInserted
+    except Exception:
+        return "  menu items    : ? (this 3DCoat cannot be asked)"
+    missing: list[str] = []
+    unknown: list[str] = []
+    for menu_id in ids:
+        try:
+            if not check(menu_id):
+                missing.append(menu_id)
+        except Exception:
+            unknown.append(menu_id)
+    line = f"  menu items    : 3DCoat has {len(ids) - len(missing) - len(unknown)} of {len(ids)}"
+    if missing:
+        line += (f" (missing: {', '.join(missing)}) - a menu created in the editor shows "
+                 "up in Scripts after a restart, or Stop/Start in Windows > Panels > "
+                 "Extensions")
+    if unknown:
+        line += f" (could not ask about: {', '.join(unknown)})"
+    return line
+
+
+def _old_ids_line(config: MenuConfig) -> str:
+    """Our ids 3DCoat still carries that no menu uses any more - reported, not removed.
+
+    These come from earlier id schemes (``CoatMenu_List_<Name>``, or the plain
+    ``CoatMenu_<Name>`` of a menu that has since been deleted or renamed). They can
+    sit in the Scripts list as entries that do nothing. The file they live in is
+    3DCoat's hotkey file, which CoatMenu never writes - so this is a report, and the
+    cleanup happens in 3DCoat (or by taking them out of the running menu).
+    """
+    try:
+        seen = [str(entry.get("id") or "") for entry in read_bindings()]
+    except Exception:
+        return "  old ids       : ? (hotkey file unreadable)"
+    stale = menus_registry.stale_menu_ids(config, seen)
+    return f"  old ids       : {', '.join(stale) if stale else 'none'}"
+
+
 def report(config=None) -> str:
     """The whole picture, as plain text."""
     cfg = config if config is not None else menus.get_config()
@@ -130,6 +184,8 @@ def report(config=None) -> str:
             f"  key={binds.for_menu(lst.name) or 'unbound'}"
         )
     out.append(f"  hotkey clashes: {'; '.join(binds.conflicts) or 'none'}")
+    out.append(_menu_items_line(cfg))
+    out.append(_old_ids_line(cfg))
     out.append("  keys          : bind them in 3DCoat - hover the entry in "
                "Scripts > CoatMenu and press END")
     # Leftovers from the old insertInMenu path would list every menu twice.

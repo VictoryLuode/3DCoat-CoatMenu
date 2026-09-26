@@ -30,6 +30,9 @@ CLAUDE.md
 # on this machine, with local state and paths in them. Same rule as AGENTS.md.
 docs/handoffs/
 
+# agent plans and working notes for this machine - same rule again.
+.hermes/
+
 
 # MSYS temp files (created in the working tree by shell tools)
 .msys*

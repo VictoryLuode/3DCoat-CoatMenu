@@ -100,7 +100,9 @@ Updating a copy that Option 2 installed? Use Option 2 for that update.
 
 **Hover over the menu entry in `Scripts ▸ CoatMenu` and press `END`**, then press
 the combination you want. That is 3D-Coat's own way of assigning a hotkey (its
-hint text reads *"'END' - Define Hotkey"*) and it writes the binding itself.
+hint text reads *"'END' - Define Hotkey"*) and it writes the binding itself. A menu
+you just added only reaches that list once 3D-Coat rebuilds it (restart, or
+Stop/Start the extension) - an entry can be bound once it is listed there.
 CoatMenu only ever *reads* `Options_Hotkeys.xml`, to know which key opened a menu.
 
 ### Where 3D-Coat lives does not matter
@@ -165,8 +167,11 @@ deleted.
   file and one file cannot know which menu it belongs to. The three fixed entries
   (Show CoatMenu / Edit menus / Diagnostics) live in
   `Scripts/ExtraMenuItems/CoatMenu.xml`, which 3D-Coat reads at startup; the
-  one-per-menu entries are registered at runtime with `coat.ui.insertInMenu`, so a
-  menu built in the editor is usable without a restart. Writing them in both places
+  one-per-menu entries are registered at runtime with `coat.ui.insertInMenu`, and
+  3D-Coat builds its `Scripts` list at startup - so a menu added in the editor is
+  registered straight away and appears in that list after a restart (or **Stop** /
+  **Start** in **Windows ▸ Panels ▸ Extensions**, which is quicker). The editor's
+  save line says which of the two just happened. Writing the entries in both places
   would list every menu twice.
 * 3D-Coat writes its **own** `ExtraMenuItems/<id>.xml` for every entry it is asked
   to insert, and never removes one - so a menu deleted in the editor used to stay in

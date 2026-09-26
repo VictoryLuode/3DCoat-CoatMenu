@@ -5,8 +5,9 @@ Single owner of the in-memory config and of the two things that keep 3DCoat's
 menus in sync with it:
 
 * generated launcher scripts + ``ExtraMenuItems/CoatMenu.xml`` (loaded at startup)
-* runtime ``coat.ui.insertInMenu`` calls (visible immediately, so a list added in
-  the editor is usable without restarting 3DCoat)
+* runtime ``coat.ui.insertInMenu`` calls - the entry is in 3DCoat straight away, but
+  3DCoat builds its ``Scripts`` list at startup, so a list added in the editor shows
+  up in that list after a restart (or Stop/Start in Windows > Panels > Extensions)
 """
 from __future__ import annotations
 
@@ -19,10 +20,12 @@ from coatmenu.core.config import (
     config_readable,
     starter_config,
 )
+from coatmenu.core.hotkeys import read_bindings
 from coatmenu.core.menus_registry import (
     MAIN_MENU_ID,
     legacy_hotkey_ids,
     menu_entries,
+    stale_menu_ids,
     sync,
 )
 from coatmenu.core.log import log
@@ -124,6 +127,18 @@ def sync_config(config: MenuConfig, register: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _ids_3dcoat_knows() -> list[str]:
+    """Every id 3DCoat's hotkey file holds - read-only, that file is 3DCoat's.
+
+    It is how the dead entries are found (``menus_registry.stale_menu_ids``): an
+    entry stays in that file for good, so a menu deleted long ago is still in it.
+    """
+    try:
+        return [str(entry.get("id") or "") for entry in read_bindings()]
+    except Exception:
+        return []
+
+
 def _is_menu_item_inserted(coat, menu_id: str) -> bool:
     """Whether 3DCoat currently lists this menu item (never raises)."""
     try:
@@ -171,9 +186,12 @@ def register_menu_items(config: MenuConfig) -> int:
         return 0
 
     inserted = 0
-    # Drop entries left behind by earlier id schemes first, otherwise a menu shows
-    # up twice in 3DCoat's Scripts list for the rest of the session.
-    drop_menu_items([menu_id for menu_id in legacy_hotkey_ids(config)
+    # Dead entries first: the ids earlier versions registered for these menus, and
+    # the ids of menus that have since been deleted or renamed. 3DCoat keeps every
+    # entry it was ever given (in a file we only read), so without this they sit in
+    # the Scripts list for the rest of the session doing nothing.
+    stale = stale_menu_ids(config, _ids_3dcoat_knows() + legacy_hotkey_ids(config))
+    drop_menu_items([menu_id for menu_id in stale
                      if _is_menu_item_inserted(coat, menu_id)])
 
     # The three fixed entries are carried by ``ExtraMenuItems/CoatMenu.xml``, which

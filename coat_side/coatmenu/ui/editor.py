@@ -1365,8 +1365,15 @@ class CoatMenuEditor(QWidget):
             if self._preview is not None:
                 # Keep the preview honest: the rows may have just changed.
                 self.preview_menu()
+            note = ""
+            if info["registered"]:
+                # The entry goes in straight away, but 3DCoat builds its Scripts list
+                # at startup: without this note a new menu looks like it vanished.
+                note = (" - restart 3D-Coat, or Stop/Start CoatMenu in Windows > Panels "
+                        "> Extensions, to see it in Scripts")
             self.set_status(
-                f"Saved: {info['menus']} menu(s), {info['registered']} menu item(s) registered"
+                f"Saved: {info['menus']} menu(s), {info['registered']} menu item(s) "
+                f"registered{note}"
             )
             log(f"editor: saved ({info})")
         except Exception as exc:
