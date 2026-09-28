@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 764 800" width="764" height="800" role="img" aria-label="CoatMenu">
+  <title>CoatMenu</title>
+  <!-- A menu list with the pointer over it. Every number here was measured off the
+       icon this was drawn from (panel 716x716 r62, rows at y 349/457/581/694/810,
+       the pointer outline traced point by point), shifted into this artboard by
+       (-269,-260). Editing a number by hand breaks that match.
+
+       Colours are 3D-Coat's own app icon (its Windows display.ico): blue field
+       #0054B4 with a yellow #FCCC00 silhouette. The panel keeps a darker core so
+       the mark still reads as a panel rather than a flat blue square. -->
+  <rect x="0" y="0" width="716" height="716" rx="62" fill="#0054B4"/>
+  <rect x="7" y="7" width="702" height="702" rx="55" fill="#003C80"/>
+  <g fill="#DCE6F5">
+    <rect x="76" y="89" width="453" height="71" rx="16"/>
+    <rect x="76" y="321" width="453" height="71" rx="16"/>
+    <rect x="76" y="434" width="453" height="74" rx="16"/>
+    <rect x="76" y="550" width="453" height="74" rx="16"/>
+  </g>
+  <rect x="76" y="197" width="565" height="80" rx="16" fill="#FCCC00"/>
+  <path d="M569 495 L719 624 L763 666 L681 670 L732 768 L681 798 L627 696 L568 755 Z" fill="#FCCC00"/>
+</svg>

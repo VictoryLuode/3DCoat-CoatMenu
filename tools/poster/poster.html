@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CoatMenu poster</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { width:1920px; height:1080px; overflow:hidden; }
+
+  .poster {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    font-family:"Segoe UI", "Segoe UI Variable Text", sans-serif;
+    color:#eceef1;
+    background:
+      radial-gradient(1300px 900px at 66% -6%, rgba(58,106,160,.46), rgba(58,106,160,0) 62%),
+      radial-gradient(900px 620px at 2% 104%, rgba(144,202,249,.12), rgba(144,202,249,0) 58%),
+      radial-gradient(760px 500px at 46% 44%, rgba(90,140,200,.10), rgba(90,140,200,0) 70%),
+      linear-gradient(168deg, #23252a 0%, #17181c 46%, #0d0e11 100%);
+  }
+
+  /* faint radial-menu texture behind the panels */
+  .ring { position:absolute; right:-180px; top:-300px; width:1040px; height:1040px; opacity:.11; }
+  .ring-c { fill:none; stroke:#90caf9; }
+  .ring-t { stroke:#90caf9; stroke-width:6; stroke-linecap:round; }
+
+  /* ---------- header ---------- */
+  .brand { position:absolute; left:84px; top:58px; display:flex; align-items:center; gap:28px; }
+  .brand img { width:78px; height:82px; display:block; }
+  .wordmark { font-size:66px; font-weight:600; letter-spacing:-1.2px; line-height:1; padding-bottom:8px; }
+  .tagline { position:absolute; left:84px; top:180px; font-size:26px; color:#a2a9b1; letter-spacing:.2px; }
+  .tagline b { color:#d7dde3; font-weight:600; }
+
+  .chip {
+    position:absolute; right:84px; top:90px;
+    font-size:18px; letter-spacing:2.6px; text-transform:uppercase; color:#a2a9b1;
+    border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:11px 20px 10px;
+  }
+
+  /* ---------- screenshots ---------- */
+  .panel {
+    position:absolute; overflow:hidden; border-radius:12px;
+    border:1px solid rgba(255,255,255,.13);
+    box-shadow:0 38px 80px rgba(0,0,0,.72), 0 1px 0 rgba(255,255,255,.06) inset;
+    background:#191a1d;
+  }
+  .panel img { width:100%; height:100%; object-fit:cover; display:block; }
+
+  #hero   { left:84px;   top:300px; width:1008px; height:560px; }
+  #pie    { left:1120px; top:300px; width:716px;  height:268px; }
+  #editor { left:1120px; top:592px; width:716px;  height:268px; }
+
+  /* ---------- footer ---------- */
+  .chips { position:absolute; left:84px; top:896px; display:flex; align-items:center; gap:16px;
+           font-size:23px; color:#aab1b9; }
+  .chips i { display:block; width:5px; height:5px; border-radius:50%; background:#646b73; }
+  .url { position:absolute; left:84px; top:950px; font-size:26px; font-weight:500; color:#90caf9;
+         letter-spacing:.3px; }
+
+  .author { position:absolute; right:84px; top:932px; text-align:right; }
+  .author img { width:134px; display:block; opacity:.36; margin:0 0 12px auto; }
+  .author span { font-size:15px; letter-spacing:4.4px; color:#888f97; }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <svg class="ring" viewBox="0 0 1000 1000">
+    <circle class="ring-c" cx="500" cy="500" r="360" stroke-width="2.5"/>
+    <circle class="ring-c" cx="500" cy="500" r="210" stroke-width="1.5"/>
+    <g class="ring-t">
+      <line x1="500" y1="104" x2="500" y2="140"/>
+      <line x1="780" y1="220" x2="755" y2="246"/>
+      <line x1="896" y1="500" x2="860" y2="500"/>
+      <line x1="780" y1="780" x2="755" y2="754"/>
+      <line x1="500" y1="896" x2="500" y2="860"/>
+      <line x1="220" y1="780" x2="246" y2="754"/>
+      <line x1="104" y1="500" x2="140" y2="500"/>
+      <line x1="220" y1="220" x2="246" y2="246"/>
+    </g>
+  </svg>
+
+  <div class="brand">
+    <img src="../../docs/coatmenu-logo.svg" alt="">
+    <div class="wordmark">CoatMenu</div>
+  </div>
+
+  <div class="tagline">Custom action menus for <b>3D-Coat</b> &mdash; build them, then reach them from a hotkey at the cursor.</div>
+
+  <div class="chip">3D-Coat extension</div>
+
+  <div class="panel" id="hero"><img src="panels/hero.png" alt=""></div>
+  <div class="panel" id="pie"><img src="panels/pie.png" alt=""></div>
+  <div class="panel" id="editor"><img src="panels/editor.png" alt=""></div>
+
+  <div class="chips">
+    <span>Rows or a pie, per menu</span><i></i>
+    <span>Nested submenus</span><i></i>
+    <span>Your own hotkey</span><i></i>
+    <span>No Python to install</span>
+  </div>
+
+  <div class="url">github.com/VictoryLuode/3DCoat-CoatMenu</div>
+
+  <div class="author">
+    <img src="vil-logo.svg" alt="">
+    <span>VICTORY LUODE</span>
+  </div>
+
+</div>
+</body>
+</html>

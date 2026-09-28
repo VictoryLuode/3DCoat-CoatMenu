@@ -1,6 +1,15 @@
-# CoatMenu
+[![License: GPL-3.0](https://img.shields.io/static/v1?label=License&message=GPL-3.0&color=blue)](LICENSE)
+[![3D-Coat](https://img.shields.io/static/v1?label=3D-Coat&message=2025&color=3aa5dc)](https://3dcoat.com)
+[![YouTube](https://img.shields.io/static/v1?label=YouTube&message=@VictoryLuode&color=red&logo=youtube&logoColor=white)](https://www.youtube.com/@VictoryLuode)
+[![ArtStation](https://img.shields.io/static/v1?label=ArtStation&message=victoryluode&color=0077b5&logo=artstation&logoColor=white)](https://www.artstation.com/victoryluode)
+[![X](https://img.shields.io/static/v1?label=X&message=@victoryluode&color=black&logo=x&logoColor=white)](https://x.com/victoryluode)
+[![Website](https://img.shields.io/static/v1?label=Website&message=victoryluode.com&color=ff5200)](https://www.victoryluode.com)
+
+<h1><img src="docs/coatmenu-logo.png" width="60" alt=""> CoatMenu</h1>
 
 > Custom pop-up action menus for **3D-Coat** — at the cursor, from a hotkey.
+
+![CoatMenu: a menu popped up at the cursor, and one opened as a radial pie](docs/coatmenu-poster.jpg)
 
 CoatMenu is inspired by [Krita **MenuBelt**](https://github.com/VictoryLuode/Krita-Menubelt),
 the menu plug-in I built for Krita earlier: you build your own menus out of 3D-Coat

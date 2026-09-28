@@ -14,6 +14,10 @@ desktop.ini
 # build output (python tools/make_release.py)
 dist/
 
+# poster build output (python tools/make_poster.py) — the screenshot panels are
+# cut out of docs/demo-*.jpg at render time, and the wrapper html is scratch
+tools/poster/panels/
+
 # generated at install / editor-save time, never committed
 coat_side/actions/menus/
 

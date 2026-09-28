@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CoatMenu social preview</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { width:1280px; height:640px; overflow:hidden; }
+
+  .card {
+    position:relative; width:1280px; height:640px; overflow:hidden;
+    font-family:"Segoe UI", "Segoe UI Variable Text", sans-serif;
+    color:#eceef1;
+    background:
+      radial-gradient(900px 620px at 62% -10%, rgba(58,106,160,.46), rgba(58,106,160,0) 62%),
+      radial-gradient(620px 460px at 0% 108%, rgba(144,202,249,.12), rgba(144,202,249,0) 58%),
+      linear-gradient(168deg, #23252a 0%, #17181c 46%, #0d0e11 100%);
+  }
+
+  /* faint radial-menu texture */
+  .ring { position:absolute; left:-180px; top:-220px; width:760px; height:760px; opacity:.09; }
+  .ring circle { fill:none; stroke:#90caf9; }
+
+  .brand { position:absolute; left:72px; top:104px; display:flex; align-items:center; gap:18px; }
+  .brand img { width:52px; height:54px; display:block; }
+  .wordmark { font-size:46px; font-weight:600; letter-spacing:-0.9px; line-height:1; }
+
+  .tagline {
+    position:absolute; left:72px; top:200px; width:524px;
+    font-size:23px; line-height:1.5; color:#a2a9b1; letter-spacing:.2px;
+  }
+  .tagline b { color:#d7dde3; font-weight:600; }
+
+  .chips { position:absolute; left:72px; top:296px; display:flex; flex-wrap:wrap; gap:9px; width:500px; }
+  .chip {
+    font-size:16px; color:#b6bcc4; border:1px solid rgba(255,255,255,.16);
+    background:rgba(255,255,255,.035); border-radius:999px; padding:7px 15px;
+  }
+
+  .meta { position:absolute; left:72px; top:436px; font-size:16px; color:#767d85; letter-spacing:.4px; }
+  .url { position:absolute; left:72px; top:472px; font-size:21px; font-weight:500; color:#90caf9; letter-spacing:.3px; }
+  .url .dim { color:#6f767e; }
+
+  /* the screenshot, bleeding into the right edge */
+  .shot {
+    position:absolute; left:620px; top:96px; width:588px; height:480px;
+    border:1px solid rgba(255,255,255,.13); border-radius:10px; overflow:hidden;
+    box-shadow:0 26px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .shot img { width:100%; height:100%; object-fit:cover; object-position:62% 62%; display:block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <svg class="ring" viewBox="0 0 760 760">
+    <circle cx="380" cy="380" r="300" stroke-width="1.5"/>
+    <circle cx="380" cy="380" r="212" stroke-width="1"/>
+    <circle cx="380" cy="380" r="124" stroke-width="1" stroke-dasharray="4 10"/>
+  </svg>
+
+  <div class="brand">
+    <img src="../../docs/coatmenu-logo.svg" alt="">
+    <span class="wordmark">CoatMenu</span>
+  </div>
+
+  <div class="tagline">
+    Custom pop-up action menus for <b>3D-Coat</b> — at the cursor,
+    from a hotkey you set yourself.
+  </div>
+
+  <div class="chips">
+    <span class="chip">Rows or a pie</span>
+    <span class="chip">Nested submenus</span>
+    <span class="chip">Your own hotkey</span>
+    <span class="chip">Multi-step rows</span>
+  </div>
+
+  <div class="meta">GPL-3.0 · 3D-Coat 2025 · Windows</div>
+  <div class="url">github.com/<span class="dim">VictoryLuode/</span>3DCoat-CoatMenu</div>
+
+  <div class="shot"><img src="panels/social.png" alt=""></div>
+</div>
+</body>
+</html>
