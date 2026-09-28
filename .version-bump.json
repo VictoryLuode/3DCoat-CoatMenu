@@ -1,0 +1,15 @@
+{
+  "_comment": "release.sh 的唯一配置：本仓的版本落点、CHANGELOG、打包命令、产物。改这里，不改 release.sh。",
+  "changelog": "CHANGELOG.md",
+  "title_prefix": "CoatMenu",
+  "package": "",
+  "artifacts": "",
+  "summary_placeholder": "TODO: what changed, in the user's words",
+  "targets": [
+    {
+      "path": "coat_side/coatmenu/__init__.py",
+      "kind": "py_version",
+      "_why": "必须保持单行字符串字面量：install/build_pack.py 用 line.startswith(\"__version__\") 扫它"
+    }
+  ]
+}
